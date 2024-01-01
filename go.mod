@@ -8,10 +8,10 @@ require (
 	github.com/hashicorp/go-version v1.6.0
 	github.com/kardianos/osext v0.0.0-20190222173326-2bc1f35cddc0
 	github.com/koron/go-ssdp v0.0.3
-	golang.org/x/text v0.3.7
+	golang.org/x/text v0.3.8
 )
 
 require (
 	golang.org/x/net v0.0.0-20220517181318-183a9ca12b87 // indirect
-	golang.org/x/sys v0.0.0-20220519141025-dcacdad47464 // indirect
+	golang.org/x/sys v0.0.0-20220722155257-8c9f86f7a55f // indirect
 )
