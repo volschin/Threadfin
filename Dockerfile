@@ -74,7 +74,7 @@ RUN apt-get update \
  && apt-get update \
  && apt-get install --no-install-recommends --no-install-suggests -y \
    mesa-va-drivers \
-   jellyfin-ffmpeg5 \
+   jellyfin-ffmpeg6 \
    openssl \
    locales \
 # Intel VAAPI Tone mapping dependencies:
