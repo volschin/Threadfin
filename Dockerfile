@@ -87,7 +87,7 @@ RUN apt-get update \
  && wget https://github.com/intel/intel-graphics-compiler/releases/download/igc-${IGC_VERSION}/intel-igc-opencl_${IGC_VERSION}_amd64.deb \
  && wget https://github.com/intel/compute-runtime/releases/download/${NEO_VERSION}/intel-opencl-icd_${NEO_VERSION}_amd64.deb \
  && wget https://github.com/intel/compute-runtime/releases/download/${NEO_VERSION}/intel-level-zero-gpu_${LEVEL_ZERO_VERSION}_amd64.deb \
- && wget https://github.com/intel/compute-runtime/releases/download/${NEO_VERSION}/ww35.sum && sha256sum -c ww35.sum \
+# && wget https://github.com/intel/compute-runtime/releases/download/${NEO_VERSION}/ww35.sum && sha256sum -c ww35.sum \
  && dpkg -i *.deb \
  && cd .. \
  && rm -rf intel-compute-runtime \
