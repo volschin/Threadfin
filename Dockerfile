@@ -22,17 +22,28 @@ ARG BUILD_DATE
 ARG VCS_REF
 ARG THREADFIN_PORT=34400
 ARG THREADFIN_VERSION
+# https://askubuntu.com/questions/972516/debian-frontend-environment-variable
+ARG DEBIAN_FRONTEND="noninteractive"
+# http://stackoverflow.com/questions/48162574/ddg#49462622
+ARG APT_KEY_DONT_WARN_ON_DANGEROUS_USAGE=DontWarn
+# https://github.com/NVIDIA/nvidia-docker/wiki/Installation-(Native-GPU-Support)
+ENV NVIDIA_DRIVER_CAPABILITIES="compute,video,utility"
+
+# https://github.com/intel/compute-runtime/releases
+ARG GMMLIB_VERSION=22.0.2
+ARG IGC_VERSION=1.0.10395
+ARG NEO_VERSION=22.08.22549
+ARG LEVEL_ZERO_VERSION=1.3.22549
 
 LABEL org.label-schema.build-date="{$BUILD_DATE}" \
       org.label-schema.name="Threadfin" \
       org.label-schema.description="Dockerized Threadfin" \
-      org.label-schema.url="https://hub.docker.com/r/fyb3roptik/threadfin/" \
+      org.label-schema.url="https://hub.docker.com/r/volschin/threadfin/" \
       org.label-schema.vcs-ref="{$VCS_REF}" \
       org.label-schema.vcs-url="https://github.com/Threadfin/Threadfin" \
       org.label-schema.vendor="Threadfin" \
       org.label-schema.version="{$THREADFIN_VERSION}" \
-      org.label-schema.schema-version="1.0" \
-      DISCORD_URL="https://discord.gg/bEPPNP2VG8"
+      org.label-schema.schema-version="1.0"
 
 ENV THREADFIN_BIN=/home/threadfin/bin
 ENV THREADFIN_CONF=/home/threadfin/conf
@@ -53,32 +64,60 @@ ENV PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:$THREADFIN
 # Set working directory
 WORKDIR $THREADFIN_HOME
 
-RUN apt-get update && apt-get upgrade -y
-RUN apt-get install -y ca-certificates curl ffmpeg vlc
+# Install dependencies:
+# mesa-va-drivers: needed for AMD VAAPI. Mesa >= 20.1 is required for HEVC transcoding.
+# curl: healthcheck
+RUN apt-get update \
+ && apt-get install --no-install-recommends --no-install-suggests -y ca-certificates gnupg wget curl vlc \
+ && wget -O - https://repo.jellyfin.org/jellyfin_team.gpg.key | apt-key add - \
+ && echo "deb [arch=$( dpkg --print-architecture )] https://repo.jellyfin.org/$( awk -F'=' '/^ID=/{ print $NF }' /etc/os-release ) $( awk -F'=' '/^VERSION_CODENAME=/{ print $NF }' /etc/os-release ) main" | tee /etc/apt/sources.list.d/jellyfin.list \
+ && apt-get update \
+ && apt-get install --no-install-recommends --no-install-suggests -y \
+   mesa-va-drivers \
+   jellyfin-ffmpeg5 \
+   openssl \
+   locales \
+# Intel VAAPI Tone mapping dependencies:
+# Prefer NEO to Beignet since the latter one doesn't support Comet Lake or newer for now.
+# Do not use the intel-opencl-icd package from repo since they will not build with RELEASE_WITH_REGKEYS enabled.
+ && mkdir intel-compute-runtime \
+ && cd intel-compute-runtime \
+ && wget https://github.com/intel/compute-runtime/releases/download/${NEO_VERSION}/intel-gmmlib_${GMMLIB_VERSION}_amd64.deb \
+ && wget https://github.com/intel/intel-graphics-compiler/releases/download/igc-${IGC_VERSION}/intel-igc-core_${IGC_VERSION}_amd64.deb \
+ && wget https://github.com/intel/intel-graphics-compiler/releases/download/igc-${IGC_VERSION}/intel-igc-opencl_${IGC_VERSION}_amd64.deb \
+ && wget https://github.com/intel/compute-runtime/releases/download/${NEO_VERSION}/intel-opencl-icd_${NEO_VERSION}_amd64.deb \
+ && wget https://github.com/intel/compute-runtime/releases/download/${NEO_VERSION}/intel-level-zero-gpu_${LEVEL_ZERO_VERSION}_amd64.deb \
+ && dpkg -i *.deb \
+ && cd .. \
+ && rm -rf intel-compute-runtime \
+ && apt-get remove gnupg wget -y \
+ && apt-get clean autoclean -y \
+ && apt-get autoremove -y \
+ && rm -rf /var/lib/apt/lists/* \
+ && mkdir -p /cache /config /media \
+ && chmod 777 /cache /config /media \
+ && sed -i -e 's/# en_US.UTF-8 UTF-8/en_US.UTF-8 UTF-8/' /etc/locale.gen && locale-gen \
+ && sed -i 's/geteuid/getppid/' /usr/bin/vlc
 
-RUN DEBIAN_FRONTEND=noninteractive TZ="America/New_York" apt-get -y install tzdata
+# ENV DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=1
+ENV LC_ALL en_US.UTF-8
+ENV LANG en_US.UTF-8
+ENV LANGUAGE en_US:en
 
 RUN mkdir -p $THREADFIN_BIN
-
 # Copy built binary from builder image
 COPY --chown=${THREADFIN_UID} --from=builder [ "/src/threadfin", "${THREADFIN_BIN}/" ]
 
-# Set binary permissions
-RUN chmod +rx $THREADFIN_BIN/threadfin
-RUN mkdir $THREADFIN_HOME/cache
+# Set binary permissions and create working directories for Threadfin
+RUN chmod +rx $THREADFIN_BIN/threadfin \
+  && mkdir $THREADFIN_HOME/cache \
+  && mkdir $THREADFIN_CONF \
+  && chmod a+rwX $THREADFIN_CONF \
+  && mkdir $THREADFIN_TEMP \
+  && chmod a+rwX $THREADFIN_TEMP
 
-# Create working directories for Threadfin
-RUN mkdir $THREADFIN_CONF
-RUN chmod a+rwX $THREADFIN_CONF
-RUN mkdir $THREADFIN_TEMP
-RUN chmod a+rwX $THREADFIN_TEMP
-
-# For VLC
-RUN sed -i 's/geteuid/getppid/' /usr/bin/vlc
-
-# Configure container volume mappings
-VOLUME $THREADFIN_CONF
-VOLUME $THREADFIN_TEMP
+# volume mappings
+VOLUME $THREADFIN_CONF $THREADFIN_TEMP
 
 EXPOSE $THREADFIN_PORT
 
