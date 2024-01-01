@@ -56,15 +56,14 @@ jobs:
           platforms: linux/amd64,linux/arm64,linux/arm/v7,linux/arm/v8
           tags: ${{ secrets.DOCKERHUB_USERNAME }}/threadfin:latest,${{ secrets.DOCKERHUB_USERNAME }}/threadfin:${{  github.ref_name }}
 
-      - name: Docker Nvidia Build and Push
+      - name: Docker Build and Push
         uses: docker/build-push-action@v4
         with:
           context: .
-          build-args: NVIDIA=1
           push: true
           no-cache: true
           platforms: linux/amd64,linux/arm64,linux/arm/v7,linux/arm/v8
-          tags: ${{ secrets.DOCKERHUB_USERNAME }}/threadfin:latest-nvidia,${{ secrets.DOCKERHUB_USERNAME }}/threadfin:${{  github.ref_name }}-nvidia
+          tags: ${{ secrets.DOCKERHUB_USERNAME }}/threadfin:latest,${{ secrets.DOCKERHUB_USERNAME }}/threadfin:${{  github.ref_name }}
 
       - name: Release
         uses: "marvinpinto/action-automatic-releases@latest"
