@@ -15,7 +15,7 @@ RUN go build threadfin.go
 
 # Second stage. Creating an image
 # -----------------------------------------------------------------------------
-FROM ubuntu:23.10
+FROM ubuntu:mantic-20231128
 
 ARG BUILD_DATE
 ARG VCS_REF
