@@ -13,9 +13,11 @@ github.com/hashicorp/go-version
 # github.com/kardianos/osext v0.0.0-20190222173326-2bc1f35cddc0
 ## explicit
 github.com/kardianos/osext
-# github.com/koron/go-ssdp v0.0.3
-## explicit; go 1.17
+# github.com/koron/go-ssdp v0.0.4
+## explicit; go 1.19
 github.com/koron/go-ssdp
+github.com/koron/go-ssdp/internal/multicast
+github.com/koron/go-ssdp/internal/ssdplog
 # golang.org/x/net v0.17.0
 ## explicit; go 1.17
 golang.org/x/net/bpf
