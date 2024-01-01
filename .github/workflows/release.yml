@@ -21,11 +21,11 @@ jobs:
       - name: Set up and Build
         uses: actions/setup-go@v5
         with:
-          go-version: 1.18
+          go-version: 'oldstable'
         id: go
       - name: Build Binaries
         run: |
-         go mod tidy && go mod vendor
+         go version && go mod tidy && go mod vendor
          echo "Building Linux"
          env GOOS=linux GOARCH=arm64 go build -o dist/Threadfin_linux_arm64
          env GOOS=linux GOARCH=amd64 go build -o dist/Threadfin_linux_amd64
