@@ -15,7 +15,7 @@ RUN go build threadfin.go
 
 # Second stage. Creating an image
 # -----------------------------------------------------------------------------
-FROM ubuntu:22.04
+FROM ubuntu:23.10
 
 ARG BUILD_DATE
 ARG VCS_REF
@@ -69,8 +69,8 @@ WORKDIR $THREADFIN_HOME
 RUN apt-get update \
  && apt-get install --no-install-recommends --no-install-suggests -y ca-certificates gnupg wget curl vlc \
  && wget -O - https://repo.jellyfin.org/jellyfin_team.gpg.key | apt-key add - \
-# Pinned to jammy until noble is supported
- && echo "deb [arch=$( dpkg --print-architecture )] https://repo.jellyfin.org/$( awk -F'=' '/^ID=/{ print $NF }' /etc/os-release ) jammy main" | tee /etc/apt/sources.list.d/jellyfin.list \
+# Pinned to mantic until noble is supported
+ && echo "deb [arch=$( dpkg --print-architecture )] https://repo.jellyfin.org/$( awk -F'=' '/^ID=/{ print $NF }' /etc/os-release ) mantic main" | tee /etc/apt/sources.list.d/jellyfin.list \
  && apt-get update \
  && apt-get install --no-install-recommends --no-install-suggests -y \
    mesa-va-drivers \
