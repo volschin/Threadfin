@@ -15,7 +15,7 @@ RUN go build threadfin.go
 
 # Second stage. Creating an image
 # -----------------------------------------------------------------------------
-FROM ubuntu:24.04}
+FROM ubuntu:24.04
 
 ARG BUILD_DATE
 ARG VCS_REF
