@@ -29,10 +29,10 @@ ARG APT_KEY_DONT_WARN_ON_DANGEROUS_USAGE=DontWarn
 ENV NVIDIA_DRIVER_CAPABILITIES="compute,video,utility"
 
 # https://github.com/intel/compute-runtime/releases
-ARG GMMLIB_VERSION=22.0.2
-ARG IGC_VERSION=1.0.10395
-ARG NEO_VERSION=22.08.22549
-ARG LEVEL_ZERO_VERSION=1.3.22549
+ARG GMMLIB_VERSION=22.3.16
+ARG IGC_VERSION=1.0.15136
+ARG NEO_VERSION=23.35.27191.9
+ARG LEVEL_ZERO_VERSION=1.3.27191.9
 
 LABEL org.label-schema.build-date="{$BUILD_DATE}" \
       org.label-schema.name="Threadfin" \
@@ -87,6 +87,7 @@ RUN apt-get update \
  && wget https://github.com/intel/intel-graphics-compiler/releases/download/igc-${IGC_VERSION}/intel-igc-opencl_${IGC_VERSION}_amd64.deb \
  && wget https://github.com/intel/compute-runtime/releases/download/${NEO_VERSION}/intel-opencl-icd_${NEO_VERSION}_amd64.deb \
  && wget https://github.com/intel/compute-runtime/releases/download/${NEO_VERSION}/intel-level-zero-gpu_${LEVEL_ZERO_VERSION}_amd64.deb \
+ && wget https://github.com/intel/compute-runtime/releases/download/${NEO_VERSION}/ww35.sum && sha256sum -c ww35.sum \
  && dpkg -i *.deb \
  && cd .. \
  && rm -rf intel-compute-runtime \
