@@ -67,7 +67,7 @@ RUN apt-get update \
  && echo "deb [arch=$( dpkg --print-architecture )] https://repo.jellyfin.org/$( awk -F'=' '/^ID=/{ print $NF }' /etc/os-release ) mantic main" | tee /etc/apt/sources.list.d/jellyfin.list \
  && apt-get update \
  && apt-get install --no-install-recommends --no-install-suggests -qqy \
-   mesa-va-drivers \
+#   mesa-va-drivers \
    jellyfin-ffmpeg6 \
    openssl \
    locales \
