@@ -60,13 +60,13 @@ WORKDIR $THREADFIN_HOME
 # Install dependencies:
 # mesa-va-drivers: needed for AMD VAAPI. Mesa >= 20.1 is required for HEVC transcoding.
 # curl: healthcheck
-RUN apt-get update \
- && apt-get install --no-install-recommends --no-install-suggests -y ca-certificates gnupg wget curl vlc \
+RUN apt-get -qqy update \
+ && apt-get -qqy install --no-install-recommends --no-install-suggests ca-certificates gnupg wget curl vlc \
  && wget -O - https://repo.jellyfin.org/jellyfin_team.gpg.key | apt-key add - \
 # Pinned to mantic until noble is supported
  && echo "deb [arch=$( dpkg --print-architecture )] https://repo.jellyfin.org/$( awk -F'=' '/^ID=/{ print $NF }' /etc/os-release ) mantic main" | tee /etc/apt/sources.list.d/jellyfin.list \
- && apt-get update \
- && apt-get install --no-install-recommends --no-install-suggests -qqy \
+ && apt-get -qqy update \
+ && apt-get -qqy install --no-install-recommends --no-install-suggests \
 #   mesa-va-drivers \
    jellyfin-ffmpeg6 \
    openssl \
@@ -85,9 +85,9 @@ RUN apt-get update \
  && dpkg -i *.deb \
  && cd .. \
  && rm -rf intel-compute-runtime \
- && apt-get remove gnupg wget -y \
- && apt-get autoremove -y \
- && apt-get clean autoclean -y \
+ && apt-get -qqy remove gnupg wget \
+ && apt-get -qqy autoremove \
+ && apt-get -qqy clean autoclean \
  && rm -rf /var/lib/apt/lists/* \
  && mkdir -p /cache /config /media \
  && chmod 777 /cache /config /media \
