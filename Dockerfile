@@ -15,8 +15,6 @@ ARG BUILD_DATE
 ARG VCS_REF
 ARG THREADFIN_PORT=34400
 ARG THREADFIN_VERSION
-# https://askubuntu.com/questions/972516/debian-frontend-environment-variable
-ARG DEBIAN_FRONTEND="noninteractive"
 # http://stackoverflow.com/questions/48162574/ddg#49462622
 ARG APT_KEY_DONT_WARN_ON_DANGEROUS_USAGE=DontWarn
 # https://github.com/NVIDIA/nvidia-docker/wiki/Installation-(Native-GPU-Support)
@@ -53,6 +51,8 @@ ENV THREADFIN_LOG=/var/log/threadfin.log
 
 # Add binary to PATH
 ENV PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:$THREADFIN_BIN
+# https://askubuntu.com/questions/972516/debian-frontend-environment-variable
+ENV DEBIAN_FRONTEND=noninteractive
 
 # Set working directory
 WORKDIR $THREADFIN_HOME
@@ -66,7 +66,7 @@ RUN apt-get update \
 # Pinned to mantic until noble is supported
  && echo "deb [arch=$( dpkg --print-architecture )] https://repo.jellyfin.org/$( awk -F'=' '/^ID=/{ print $NF }' /etc/os-release ) mantic main" | tee /etc/apt/sources.list.d/jellyfin.list \
  && apt-get update \
- && apt-get install --no-install-recommends --no-install-suggests -y \
+ && apt-get install --no-install-recommends --no-install-suggests -qqy \
    mesa-va-drivers \
    jellyfin-ffmpeg6 \
    openssl \
@@ -76,30 +76,30 @@ RUN apt-get update \
 # Do not use the intel-opencl-icd package from repo since they will not build with RELEASE_WITH_REGKEYS enabled.
  && mkdir intel-compute-runtime \
  && cd intel-compute-runtime \
- && wget https://github.com/intel/compute-runtime/releases/download/${NEO_VERSION}/libigdgmm12_${GMMLIB_VERSION}_amd64.deb \
- && wget https://github.com/intel/intel-graphics-compiler/releases/download/igc-${IGC_VERSION}/intel-igc-core_${IGC_VERSION}_amd64.deb \
- && wget https://github.com/intel/intel-graphics-compiler/releases/download/igc-${IGC_VERSION}/intel-igc-opencl_${IGC_VERSION}_amd64.deb \
- && wget https://github.com/intel/compute-runtime/releases/download/${NEO_VERSION}/intel-opencl-icd_${NEO_VERSION}_amd64.deb \
- && wget https://github.com/intel/compute-runtime/releases/download/${NEO_VERSION}/intel-level-zero-gpu_${LEVEL_ZERO_VERSION}_amd64.deb \
+ && wget -q https://github.com/intel/compute-runtime/releases/download/${NEO_VERSION}/libigdgmm12_${GMMLIB_VERSION}_amd64.deb \
+ && wget -q https://github.com/intel/intel-graphics-compiler/releases/download/igc-${IGC_VERSION}/intel-igc-core_${IGC_VERSION}_amd64.deb \
+ && wget -q https://github.com/intel/intel-graphics-compiler/releases/download/igc-${IGC_VERSION}/intel-igc-opencl_${IGC_VERSION}_amd64.deb \
+ && wget -q https://github.com/intel/compute-runtime/releases/download/${NEO_VERSION}/intel-opencl-icd_${NEO_VERSION}_amd64.deb \
+ && wget -q https://github.com/intel/compute-runtime/releases/download/${NEO_VERSION}/intel-level-zero-gpu_${LEVEL_ZERO_VERSION}_amd64.deb \
 # && wget https://github.com/intel/compute-runtime/releases/download/${NEO_VERSION}/ww35.sum && sha256sum -c ww35.sum \
  && dpkg -i *.deb \
  && cd .. \
  && rm -rf intel-compute-runtime \
  && apt-get remove gnupg wget -y \
- && apt-get clean autoclean -y \
  && apt-get autoremove -y \
+ && apt-get clean autoclean -y \
  && rm -rf /var/lib/apt/lists/* \
  && mkdir -p /cache /config /media \
  && chmod 777 /cache /config /media \
  && sed -i -e 's/# en_US.UTF-8 UTF-8/en_US.UTF-8 UTF-8/' /etc/locale.gen && locale-gen \
- && sed -i 's/geteuid/getppid/' /usr/bin/vlc
+ && sed -i 's/geteuid/getppid/' /usr/bin/vlc \
+ && mkdir -p $THREADFIN_BIN
 
 # ENV DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=1
 ENV LC_ALL en_US.UTF-8
 ENV LANG en_US.UTF-8
 ENV LANGUAGE en_US:en
 
-RUN mkdir -p $THREADFIN_BIN
 # Copy built binary from builder image
 COPY --chown=${THREADFIN_UID} --from=builder [ "/src/threadfin", "${THREADFIN_BIN}/" ]
 
@@ -113,7 +113,6 @@ RUN chmod +rx $THREADFIN_BIN/threadfin \
 
 # volume mappings
 VOLUME $THREADFIN_CONF $THREADFIN_TEMP
-
 EXPOSE $THREADFIN_PORT
 
 # Run the Threadfin executable
