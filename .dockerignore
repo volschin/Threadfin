@@ -2,4 +2,6 @@
 .dockerignore
 Dockerfile
 CONTRIBUTORS.md
+README-DEV.md
 README.md
+renovate.json
