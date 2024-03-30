@@ -62,7 +62,8 @@ RUN apt-get -qqy update \
  && apt-get -qqy install --no-install-recommends --no-install-suggests \
    ca-certificates \
 #   gnupg wget \
-   curl vlc ffmpeg \
+   curl vlc \
+#   ffmpeg \
    openssl \
    locales \
 # && wget -O - https://repo.jellyfin.org/jellyfin_team.gpg.key | apt-key add - \
