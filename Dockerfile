@@ -9,7 +9,7 @@ RUN go build threadfin.go
 
 # Second stage. Creating an image
 # -----------------------------------------------------------------------------
-FROM ubuntu:23.10
+FROM ubuntu:24.04
 
 ARG BUILD_DATE
 ARG VCS_REF
@@ -17,8 +17,6 @@ ARG THREADFIN_PORT=34400
 ARG THREADFIN_VERSION
 # http://stackoverflow.com/questions/48162574/ddg#49462622
 ARG APT_KEY_DONT_WARN_ON_DANGEROUS_USAGE=DontWarn
-# https://github.com/NVIDIA/nvidia-docker/wiki/Installation-(Native-GPU-Support)
-ENV NVIDIA_DRIVER_CAPABILITIES="compute,video,utility"
 
 # https://github.com/intel/compute-runtime/releases
 ARG GMMLIB_VERSION=22.3.17
@@ -61,16 +59,19 @@ WORKDIR $THREADFIN_HOME
 # mesa-va-drivers: needed for AMD VAAPI. Mesa >= 20.1 is required for HEVC transcoding.
 # curl: healthcheck
 RUN apt-get -qqy update \
- && apt-get -qqy install --no-install-recommends --no-install-suggests ca-certificates gnupg wget curl vlc \
- && wget -O - https://repo.jellyfin.org/jellyfin_team.gpg.key | apt-key add - \
-# Pinned to mantic until noble is supported
- && echo "deb [arch=$( dpkg --print-architecture )] https://repo.jellyfin.org/$( awk -F'=' '/^ID=/{ print $NF }' /etc/os-release ) mantic main" | tee /etc/apt/sources.list.d/jellyfin.list \
- && apt-get -qqy update \
  && apt-get -qqy install --no-install-recommends --no-install-suggests \
-#   mesa-va-drivers \
-   jellyfin-ffmpeg6 \
+   ca-certificates \
+#   gnupg wget \
+   curl vlc ffmpeg \
    openssl \
    locales \
+# && wget -O - https://repo.jellyfin.org/jellyfin_team.gpg.key | apt-key add - \
+# Pinned to mantic until noble is supported
+# && echo "deb [arch=$( dpkg --print-architecture )] https://repo.jellyfin.org/$( awk -F'=' '/^ID=/{ print $NF }' /etc/os-release ) mantic main" | tee /etc/apt/sources.list.d/jellyfin.list \
+# && apt-get -qqy update \
+# && apt-get -qqy install --no-install-recommends --no-install-suggests \
+#   mesa-va-drivers \
+#   jellyfin-ffmpeg6 \
 # Intel VAAPI Tone mapping dependencies:
 # Prefer NEO to Beignet since the latter one doesn't support Comet Lake or newer for now.
 # Do not use the intel-opencl-icd package from repo since they will not build with RELEASE_WITH_REGKEYS enabled.
@@ -85,7 +86,7 @@ RUN apt-get -qqy update \
 # && dpkg -i *.deb \
 # && cd .. \
 # && rm -rf intel-compute-runtime \
- && apt-get -qqy remove gnupg wget \
+# && apt-get -qqy remove gnupg wget \
  && apt-get -qqy autoremove \
  && apt-get -qqy clean autoclean \
  && rm -rf /var/lib/apt/lists/* \
