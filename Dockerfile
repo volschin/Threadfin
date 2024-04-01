@@ -64,16 +64,9 @@ RUN apt-get -qqy update \
 #   gnupg wget \
    curl \
 #   vlc \
-   ffmpeg \
+#   ffmpeg \
    openssl \
    locales \
-# && wget -O - https://repo.jellyfin.org/jellyfin_team.gpg.key | apt-key add - \
-# Pinned to mantic until noble is supported
-# && echo "deb [arch=$( dpkg --print-architecture )] https://repo.jellyfin.org/$( awk -F'=' '/^ID=/{ print $NF }' /etc/os-release ) mantic main" | tee /etc/apt/sources.list.d/jellyfin.list \
-# && apt-get -qqy update \
-# && apt-get -qqy install --no-install-recommends --no-install-suggests \
-#   mesa-va-drivers \
-#   jellyfin-ffmpeg6 \
 # Intel VAAPI Tone mapping dependencies:
 # Prefer NEO to Beignet since the latter one doesn't support Comet Lake or newer for now.
 # Do not use the intel-opencl-icd package from repo since they will not build with RELEASE_WITH_REGKEYS enabled.
@@ -105,7 +98,7 @@ ENV LANGUAGE en_US:en
 
 # Copy built binary from builder image
 COPY --chown=${THREADFIN_UID} --from=builder [ "/src/threadfin", "${THREADFIN_BIN}/" ]
-
+COPY --from=ghcr.io/volschin/ffmpeg-static:main [ "/download/ffmpeg", "/usr/bin/" ]
 # Set binary permissions and create working directories for Threadfin
 RUN chmod +rx $THREADFIN_BIN/threadfin \
   && mkdir $THREADFIN_HOME/cache \
@@ -115,8 +108,8 @@ RUN chmod +rx $THREADFIN_BIN/threadfin \
   && chmod a+rwX $THREADFIN_TEMP
 
 # volume mappings
-VOLUME $THREADFIN_CONF $THREADFIN_TEMP
+VOLUME [ "$THREADFIN_CONF", "$THREADFIN_TEMP" ]
 EXPOSE $THREADFIN_PORT
 
 # Run the Threadfin executable
-ENTRYPOINT ${THREADFIN_BIN}/threadfin -port=${THREADFIN_PORT} -config=${THREADFIN_CONF} -debug=${THREADFIN_DEBUG}
+ENTRYPOINT [ "${THREADFIN_BIN}/threadfin", "-port=${THREADFIN_PORT}", "-config=${THREADFIN_CONF}", "-debug=${THREADFIN_DEBUG}" ]
