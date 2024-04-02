@@ -1,6 +1,6 @@
 # First stage. Building a binary
 # -----------------------------------------------------------------------------
-FROM golang:1.22 AS builder
+FROM golang:1.22-alpine AS builder
 
 COPY . /src
 WORKDIR /src
