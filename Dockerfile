@@ -18,12 +18,6 @@ ARG THREADFIN_VERSION
 # http://stackoverflow.com/questions/48162574/ddg#49462622
 ARG APT_KEY_DONT_WARN_ON_DANGEROUS_USAGE=DontWarn
 
-# https://github.com/intel/compute-runtime/releases
-ARG GMMLIB_VERSION=22.3.17
-ARG IGC_VERSION=1.0.16238.4
-ARG NEO_VERSION=24.09.28717.12
-ARG LEVEL_ZERO_VERSION=1.3.28717.12
-
 LABEL org.label-schema.build-date="{$BUILD_DATE}" \
       org.label-schema.name="Threadfin" \
       org.label-schema.description="Dockerized Threadfin" \
@@ -100,4 +94,5 @@ VOLUME [ "$THREADFIN_CONF", "$THREADFIN_TEMP" ]
 EXPOSE $THREADFIN_PORT
 
 # Run the Threadfin executable
-ENTRYPOINT [ "${THREADFIN_BIN}/threadfin", "-port=${THREADFIN_PORT}", "-config=${THREADFIN_CONF}", "-debug=${THREADFIN_DEBUG}" ]
+#ENTRYPOINT [ "${THREADFIN_BIN}/threadfin", "-port=${THREADFIN_PORT}", "-config=${THREADFIN_CONF}", "-debug=${THREADFIN_DEBUG}" ]
+ENTRYPOINT ${THREADFIN_BIN}/threadfin -port=${THREADFIN_PORT} -config=${THREADFIN_CONF} -debug=${THREADFIN_DEBUG}
