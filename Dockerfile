@@ -56,7 +56,7 @@ RUN apt-get -qqy update \
  && apt-get -qqy install --no-install-recommends --no-install-suggests \
    ca-certificates \
    curl \
-#   vlc \
+   vlc \
    openssl \
    locales \
 
