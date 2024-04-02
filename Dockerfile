@@ -79,7 +79,7 @@ ENV LANGUAGE en_US:en
 
 # Copy built binary from builder image
 COPY --chown=${THREADFIN_UID} --from=builder ["/src/threadfin", "${THREADFIN_BIN}/"]
-COPY --from=ghcr.io/volschin/ffmpeg-static:main ["/download/ffmpeg", "/usr/bin/"]
+COPY --from=ghcr.io/volschin/ffmpeg-static:main ["/download/ffmpeg", "${THREADFIN_BIN}/"]
 #COPY --from=ghcr.io/linuxserver/mods:jellyfin-opencl-intel ["/opencl-intel", "/opencl-intel"]
 # Set binary permissions and create working directories for Threadfin
 RUN chmod +rx $THREADFIN_BIN/threadfin \
