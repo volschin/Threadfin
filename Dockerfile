@@ -61,27 +61,14 @@ WORKDIR $THREADFIN_HOME
 RUN apt-get -qqy update \
  && apt-get -qqy install --no-install-recommends --no-install-suggests \
    ca-certificates \
-#   gnupg wget \
    curl \
 #   vlc \
-#   ffmpeg \
    openssl \
    locales \
-# Intel VAAPI Tone mapping dependencies:
-# Prefer NEO to Beignet since the latter one doesn't support Comet Lake or newer for now.
-# Do not use the intel-opencl-icd package from repo since they will not build with RELEASE_WITH_REGKEYS enabled.
-# && mkdir intel-compute-runtime \
-# && cd intel-compute-runtime \
-# && wget -q https://github.com/intel/compute-runtime/releases/download/${NEO_VERSION}/libigdgmm12_${GMMLIB_VERSION}_amd64.deb \
-# && wget -q https://github.com/intel/intel-graphics-compiler/releases/download/igc-${IGC_VERSION}/intel-igc-core_${IGC_VERSION}_amd64.deb \
-# && wget -q https://github.com/intel/intel-graphics-compiler/releases/download/igc-${IGC_VERSION}/intel-igc-opencl_${IGC_VERSION}_amd64.deb \
-# && wget -q https://github.com/intel/compute-runtime/releases/download/${NEO_VERSION}/intel-opencl-icd_${NEO_VERSION}_amd64.deb \
-# && wget -q https://github.com/intel/compute-runtime/releases/download/${NEO_VERSION}/intel-level-zero-gpu_${LEVEL_ZERO_VERSION}_amd64.deb \
-# && wget https://github.com/intel/compute-runtime/releases/download/${NEO_VERSION}/ww35.sum && sha256sum -c ww35.sum \
+
 # && dpkg -i *.deb \
 # && cd .. \
 # && rm -rf intel-compute-runtime \
-# && apt-get -qqy remove gnupg wget \
  && apt-get -qqy autoremove \
  && apt-get -qqy clean autoclean \
  && rm -rf /var/lib/apt/lists/* \
@@ -97,8 +84,9 @@ ENV LANG en_US.UTF-8
 ENV LANGUAGE en_US:en
 
 # Copy built binary from builder image
-COPY --chown=${THREADFIN_UID} --from=builder [ "/src/threadfin", "${THREADFIN_BIN}/" ]
-COPY --from=ghcr.io/volschin/ffmpeg-static:main [ "/download/ffmpeg", "/usr/bin/" ]
+COPY --chown=${THREADFIN_UID} --from=builder ["/src/threadfin", "${THREADFIN_BIN}/"]
+COPY --from=ghcr.io/volschin/ffmpeg-static:main ["/download/ffmpeg", "/usr/bin/"]
+#COPY --from=ghcr.io/linuxserver/mods:jellyfin-opencl-intel ["/opencl-intel", "/opencl-intel"]
 # Set binary permissions and create working directories for Threadfin
 RUN chmod +rx $THREADFIN_BIN/threadfin \
   && mkdir $THREADFIN_HOME/cache \
