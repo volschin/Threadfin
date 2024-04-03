@@ -69,7 +69,7 @@ RUN apt-get -qqy update \
  && mkdir -p /cache /config /media \
  && chmod 777 /cache /config /media \
  && sed -i -e 's/# en_US.UTF-8 UTF-8/en_US.UTF-8 UTF-8/' /etc/locale.gen && locale-gen \
-# && sed -i 's/geteuid/getppid/' /usr/bin/vlc \
+ && sed -i 's/geteuid/getppid/' /usr/bin/vlc \
  && mkdir -p $THREADFIN_BIN
 
 # ENV DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=1
