@@ -107,3 +107,12 @@ jobs:
 #          repo_token: "${{ secrets.GITHUB_TOKEN }}"
 #          prerelease: false
 #          files: dist/*
+
+      - name: Cleanup old containers
+        uses: actions/delete-package-versions@v5
+        with: 
+          package-name: 'Threadfin'
+          package-type: 'container'
+          min-versions-to-keep: 10
+          delete-only-untagged-versions: 'true'
+#          delete-only-pre-release-versions: "true"
