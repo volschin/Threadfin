@@ -111,7 +111,7 @@ jobs:
       - name: Cleanup old containers
         uses: actions/delete-package-versions@v5
         with: 
-          package-name: 'Threadfin'
+          package-name: 'threadfin'
           package-type: 'container'
           min-versions-to-keep: 10
           delete-only-untagged-versions: 'true'
