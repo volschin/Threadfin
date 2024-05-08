@@ -8,7 +8,7 @@ require (
 	github.com/hashicorp/go-version v1.6.0
 	github.com/kardianos/osext v0.0.0-20190222173326-2bc1f35cddc0
 	github.com/koron/go-ssdp v0.0.4
-	golang.org/x/text v0.14.0
+	golang.org/x/text v0.15.0
 )
 
 require (
