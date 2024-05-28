@@ -337,60 +337,52 @@ func readStringFromFile(file string) (str string, err error) {
 }
 
 // Netzwerk
-func resolveHostIP() (err error) {
-
-	netInterfaceAddresses, err := net.InterfaceAddrs()
+func resolveHostIP() error {
+	interfaces, err := net.Interfaces()
 	if err != nil {
-		return
+		return err
 	}
 
-	for _, netInterfaceAddress := range netInterfaceAddresses {
-
-		networkIP, ok := netInterfaceAddress.(*net.IPNet)
-		System.IPAddressesList = append(System.IPAddressesList, networkIP.IP.String())
-
-		if ok {
-
-			var ip = networkIP.IP.String()
-
-			if networkIP.IP.To4() != nil {
-
-				System.IPAddressesV4 = append(System.IPAddressesV4, ip)
-
-				if !networkIP.IP.IsLoopback() && ip[0:7] != "169.254" {
-					System.IPAddress = ip
-				}
-
-			} else {
-				System.IPAddressesV6 = append(System.IPAddressesV6, ip)
-			}
-
+	for _, iface := range interfaces {
+		addrs, err := iface.Addrs()
+		if err != nil {
+			return err
 		}
 
+		for _, addr := range addrs {
+			networkIP, ok := addr.(*net.IPNet)
+			System.IPAddressesList = append(System.IPAddressesList, networkIP.IP.String())
+
+			if ok {
+				ip := networkIP.IP.String()
+
+				if networkIP.IP.To4() != nil {
+					// Skip unwanted IPs
+					if !strings.HasPrefix(ip, "169.254") {
+						System.IPAddressesV4 = append(System.IPAddressesV4, ip)
+						System.IPAddress = ip
+					}
+				} else {
+					System.IPAddressesV6 = append(System.IPAddressesV6, ip)
+				}
+			}
+		}
 	}
 
 	if len(System.IPAddress) == 0 {
-
-		switch len(System.IPAddressesV4) {
-
-		case 0:
-			if len(System.IPAddressesV6) > 0 {
-				System.IPAddress = System.IPAddressesV6[0]
-			}
-
-		default:
+		if len(System.IPAddressesV4) > 0 {
 			System.IPAddress = System.IPAddressesV4[0]
-
+		} else if len(System.IPAddressesV6) > 0 {
+			System.IPAddress = System.IPAddressesV6[0]
 		}
-
 	}
 
 	System.Hostname, err = os.Hostname()
 	if err != nil {
-		return
+		return err
 	}
 
-	return
+	return nil
 }
 
 // Sonstiges

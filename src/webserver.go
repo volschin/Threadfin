@@ -37,23 +37,28 @@ func StartWebserver() (err error) {
 
 	//http.HandleFunc("/auto/", Auto)
 
-	showInfo("DVR IP:" + System.IPAddress + ":" + Settings.Port)
+	ipAddress := System.IPAddress
+	if Settings.BindIpAddress != "" {
+		ipAddress = Settings.BindIpAddress
+	}
+
+	showInfo("DVR IP:" + ipAddress + ":" + Settings.Port)
 
 	var ips = len(System.IPAddressesV4) + len(System.IPAddressesV6) - 1
 	switch ips {
 
 	case 0:
-		showHighlight(fmt.Sprintf("Web Interface:%s://%s:%s/web/", System.ServerProtocol.WEB, System.IPAddress, Settings.Port))
+		showHighlight(fmt.Sprintf("Web Interface:%s://%s:%s/web/", System.ServerProtocol.WEB, ipAddress, Settings.Port))
 
 	case 1:
-		showHighlight(fmt.Sprintf("Web Interface:%s://%s:%s/web/ | Threadfin is also available via the other %d IP.", System.ServerProtocol.WEB, System.IPAddress, Settings.Port, ips))
+		showHighlight(fmt.Sprintf("Web Interface:%s://%s:%s/web/ | Threadfin is also available via the other %d IP.", System.ServerProtocol.WEB, ipAddress, Settings.Port, ips))
 
 	default:
-		showHighlight(fmt.Sprintf("Web Interface:%s://%s:%s/web/ | Threadfin is also available via the other %d IP's.", System.ServerProtocol.WEB, System.IPAddress, Settings.Port, len(System.IPAddressesV4)+len(System.IPAddressesV6)-1))
+		showHighlight(fmt.Sprintf("Web Interface:%s://%s:%s/web/ | Threadfin is also available via the other %d IP's.", System.ServerProtocol.WEB, ipAddress, Settings.Port, len(System.IPAddressesV4)+len(System.IPAddressesV6)-1))
 
 	}
 
-	if err = http.ListenAndServe(":"+port, nil); err != nil {
+	if err = http.ListenAndServe(ipAddress+":"+port, nil); err != nil {
 		ShowError(err, 1001)
 		return
 	}
@@ -69,7 +74,11 @@ func Index(w http.ResponseWriter, r *http.Request) {
 	var path = r.URL.Path
 	var debug string
 
-	setGlobalDomain(r.Host)
+	if Settings.HttpThreadfinDomain != "" {
+		setGlobalDomain(fmt.Sprintf("%s:%s", Settings.HttpThreadfinDomain, Settings.Port))
+	} else {
+		setGlobalDomain(r.Host)
+	}
 
 	debug = fmt.Sprintf("Web Server Request:Path: %s", path)
 	showDebug(debug, 2)
@@ -140,14 +149,14 @@ func Stream(w http.ResponseWriter, r *http.Request) {
 		req, err := http.NewRequest("HEAD", streamInfo.URL, nil)
 		if err != nil {
 			ShowError(err, 1501)
-			httpStatusError(w, r, 500)
+			httpStatusError(w, r, 405)
 			return
 		}
 
 		resp, err := client.Do(req)
 		if err != nil {
 			ShowError(err, 1502)
-			httpStatusError(w, r, 502) // Bad gateway error
+			httpStatusError(w, r, 405)
 			return
 		}
 		defer resp.Body.Close()
@@ -264,7 +273,11 @@ func Threadfin(w http.ResponseWriter, r *http.Request) {
 	var path = strings.TrimPrefix(r.URL.Path, "/")
 	var groups = []string{}
 
-	setGlobalDomain(r.Host)
+	if Settings.HttpThreadfinDomain != "" {
+		setGlobalDomain(fmt.Sprintf("%s:%s", Settings.HttpThreadfinDomain, Settings.Port))
+	} else {
+		setGlobalDomain(r.Host)
+	}
 
 	// XMLTV Datei
 	if strings.Contains(path, "xmltv/") {
@@ -286,6 +299,17 @@ func Threadfin(w http.ResponseWriter, r *http.Request) {
 
 		requestType = "m3u"
 		groupTitle = r.URL.Query().Get("group-title")
+
+		m3uFilePath := System.Folder.Data + "threadfin.m3u"
+
+		// Check if the m3u file exists
+		if _, err := os.Stat(m3uFilePath); err == nil {
+			log.Println("Serving existing m3u file")
+			http.ServeFile(w, r, m3uFilePath)
+			return
+		}
+
+		log.Println("M3U file does not exist, building new one")
 
 		if System.Dev == false {
 			// false: Dateiname wird im Header gesetzt
@@ -389,7 +413,11 @@ func WS(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	setGlobalDomain(r.Host)
+	if Settings.HttpThreadfinDomain != "" {
+		setGlobalDomain(fmt.Sprintf("%s:%s", Settings.HttpThreadfinDomain, Settings.Port))
+	} else {
+		setGlobalDomain(r.Host)
+	}
 
 	for {
 
@@ -657,7 +685,11 @@ func Web(w http.ResponseWriter, r *http.Request) {
 
 	var language LanguageUI
 
-	setGlobalDomain(r.Host)
+	if Settings.HttpThreadfinDomain != "" {
+		setGlobalDomain(fmt.Sprintf("%s:%s", Settings.HttpThreadfinDomain, Settings.Port))
+	} else {
+		setGlobalDomain(r.Host)
+	}
 
 	if System.Dev == true {
 
@@ -879,7 +911,11 @@ func API(w http.ResponseWriter, r *http.Request) {
 			}
 	*/
 
-	setGlobalDomain(r.Host)
+	if Settings.HttpThreadfinDomain != "" {
+		setGlobalDomain(fmt.Sprintf("%s:%s", Settings.HttpThreadfinDomain, Settings.Port))
+	} else {
+		setGlobalDomain(r.Host)
+	}
 	var request APIRequestStruct
 	var response APIResponseStruct
 
