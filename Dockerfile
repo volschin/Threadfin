@@ -1,6 +1,6 @@
 # First stage. Building a binary
 # -----------------------------------------------------------------------------
-FROM golang:1.22.3-alpine@sha256:b8ded51bad03238f67994d0a6b88680609b392db04312f60c23358cc878d4902 AS builder
+FROM golang:1.22.4-alpine@sha256:9bdd5692d39acc3f8d0ea6f81327f87ac6b473dd29a2b6006df362bff48dd1f8 AS builder
 
 COPY . /src
 WORKDIR /src
