@@ -34,6 +34,52 @@ func TestCreateNewUserStoresArgon2idPassword(t *testing.T) {
 	}
 }
 
+func TestCreateDefaultUserReturnsPersistenceError(t *testing.T) {
+	initAuthenticationTest(t)
+	database = filepath.Join(t.TempDir(), "missing-directory", databaseFile)
+
+	err := CreateDefaultUser("default-user", "password")
+	var pathErr *os.PathError
+	if !errors.As(err, &pathErr) {
+		t.Fatalf("CreateDefaultUser() error = %v, want persistence path error", err)
+	}
+	if got := len(data["users"].(map[string]interface{})); got != 0 {
+		t.Fatalf("users after failed CreateDefaultUser() = %d, want 0", got)
+	}
+}
+
+func TestCreateNewUserReturnsPersistenceError(t *testing.T) {
+	initAuthenticationTest(t)
+	database = filepath.Join(t.TempDir(), "missing-directory", databaseFile)
+
+	userID, err := CreateNewUser("new-user", "password")
+	var pathErr *os.PathError
+	if !errors.As(err, &pathErr) {
+		t.Fatalf("CreateNewUser() error = %v, want persistence path error", err)
+	}
+	if userID != "" {
+		t.Fatalf("CreateNewUser() userID = %q after persistence failure, want empty", userID)
+	}
+	if got := len(data["users"].(map[string]interface{})); got != 0 {
+		t.Fatalf("users after failed CreateNewUser() = %d, want 0", got)
+	}
+}
+
+func TestGetAllUserDataReturnsInitializationPersistenceError(t *testing.T) {
+	initAuthenticationTest(t)
+	data = make(map[string]interface{})
+	database = filepath.Join(t.TempDir(), "missing-directory", databaseFile)
+
+	users, err := GetAllUserData()
+	var pathErr *os.PathError
+	if !errors.As(err, &pathErr) {
+		t.Fatalf("GetAllUserData() error = %v, want persistence path error", err)
+	}
+	if users != nil {
+		t.Fatalf("GetAllUserData() users = %#v after persistence failure, want nil", users)
+	}
+}
+
 func TestSuccessfulLegacyLoginMigratesPasswordAndPersists(t *testing.T) {
 	databasePath := initAuthenticationTest(t)
 	userID, err := CreateNewUser("legacy-user", "temporary")

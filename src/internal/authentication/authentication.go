@@ -171,7 +171,10 @@ func CreateDefaultUser(username, password string) (err error) {
 		return
 	}
 	users[defaults["_id"].(string)] = defaults
-	saveDatabase(data)
+	if err = saveDatabase(data); err != nil {
+		delete(users, defaults["_id"].(string))
+		return
+	}
 
 	return
 }
@@ -210,7 +213,11 @@ func CreateNewUser(username, password string) (userID string, err error) {
 	userID = defaults["_id"].(string)
 	users[userID] = defaults
 
-	saveDatabase(data)
+	if err = saveDatabase(data); err != nil {
+		delete(users, userID)
+		userID = ""
+		return
+	}
 
 	return
 }
@@ -447,7 +454,9 @@ func GetAllUserData() (allUserData map[string]interface{}, err error) {
 		defaults["dbVersion"] = "1.0"
 		defaults["hash"] = "argon2id"
 		defaults["users"] = make(map[string]interface{})
-		saveDatabase(defaults)
+		if err = saveDatabase(defaults); err != nil {
+			return nil, err
+		}
 		data = defaults
 	}
 
