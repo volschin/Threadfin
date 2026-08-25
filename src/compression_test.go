@@ -10,6 +10,14 @@ import (
 	"testing"
 )
 
+var errArchiveWrite = errors.New("archive write failed")
+
+type archiveErrorWriter struct{}
+
+func (archiveErrorWriter) Write([]byte) (int, error) {
+	return 0, errArchiveWrite
+}
+
 func TestExtractZIPRejectsParentTraversal(t *testing.T) {
 	root := t.TempDir()
 	archivePath := filepath.Join(root, "malicious.zip")
@@ -41,6 +49,31 @@ func TestExtractZIPRejectsParentTraversal(t *testing.T) {
 	}
 	if _, err := os.Stat(escapedPath); !os.IsNotExist(err) {
 		t.Fatalf("archive entry escaped the target directory: %v", err)
+	}
+}
+
+func TestZipFilesReturnsMissingSourceError(t *testing.T) {
+	root := t.TempDir()
+	target := filepath.Join(root, "backup.zip")
+	missing := filepath.Join(root, "missing")
+
+	if err := zipFiles([]string{missing}, target); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("zipFiles() error = %v, want os.ErrNotExist", err)
+	}
+	if _, err := os.Stat(target); !os.IsNotExist(err) {
+		t.Fatalf("failed zipFiles() left partial archive: %v", err)
+	}
+}
+
+func TestWriteZIPReturnsFinalizationError(t *testing.T) {
+	root := t.TempDir()
+	source := filepath.Join(root, "source.txt")
+	if err := os.WriteFile(source, []byte("backup data"), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := writeZIP([]string{source}, archiveErrorWriter{}); !errors.Is(err, errArchiveWrite) {
+		t.Fatalf("writeZIP() error = %v, want %v", err, errArchiveWrite)
 	}
 }
 
