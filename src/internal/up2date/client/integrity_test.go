@@ -40,6 +40,17 @@ func TestSidecarURLPreservesQueryAndAddsSuffixToPath(t *testing.T) {
 	}
 }
 
+func TestSidecarURLPreservesPercentEscapedPath(t *testing.T) {
+	got, err := sidecarURL("https://updates.example/releases/a%2Fb/Threadfin", ".sha256")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "https://updates.example/releases/a%2Fb/Threadfin.sha256"
+	if got != want {
+		t.Fatalf("sidecar URL = %q, want %q", got, want)
+	}
+}
+
 func TestFetchExpectedChecksumVerifiesSignature(t *testing.T) {
 	publicKey, privateKey, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {

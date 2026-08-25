@@ -45,7 +45,9 @@ func sidecarURL(artifactURL, suffix string) (string, error) {
 		return "", fmt.Errorf("unsupported update URL scheme %q", u.Scheme)
 	}
 	u.Path += suffix
-	u.RawPath = ""
+	if u.RawPath != "" {
+		u.RawPath += suffix
+	}
 	return u.String(), nil
 }
 
