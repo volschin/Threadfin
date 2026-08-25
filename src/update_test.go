@@ -61,6 +61,7 @@ func TestConfiguredProviderRequestTimeoutNormalizesBounds(t *testing.T) {
 	}{
 		{name: "negative uses default", bufferTimeout: -1, want: 30 * time.Second},
 		{name: "zero uses default", bufferTimeout: 0, want: 30 * time.Second},
+		{name: "NaN uses default", bufferTimeout: math.NaN(), want: 30 * time.Second},
 		{name: "positive sub-millisecond clamps", bufferTimeout: 0.0005, want: time.Millisecond},
 		{name: "one millisecond boundary", bufferTimeout: 0.001, want: time.Millisecond},
 		{name: "normal configured timeout", bufferTimeout: 500, want: 500 * time.Second},
@@ -85,6 +86,19 @@ func TestWindowsUpdateReadinessBudgetUsesNormalizedProviderTimeout(t *testing.T)
 	}
 
 	if got, want := windowsUpdateReadinessBudget(settings), 2*time.Minute+time.Millisecond; got != want {
+		t.Fatalf("Windows update readiness budget = %v, want %v", got, want)
+	}
+}
+
+func TestWindowsUpdateReadinessBudgetUsesDefaultProviderTimeoutForNaN(t *testing.T) {
+	var settings SettingsStruct
+	settings.BufferTimeout = math.NaN()
+	settings.FilesUpdate = true
+	settings.Files.M3U = map[string]interface{}{
+		"remote": map[string]interface{}{"file.source": "https://example.test/playlist.m3u"},
+	}
+
+	if got, want := windowsUpdateReadinessBudget(settings), 2*time.Minute+30*time.Second; got != want {
 		t.Fatalf("Windows update readiness budget = %v, want %v", got, want)
 	}
 }

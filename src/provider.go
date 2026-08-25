@@ -3,6 +3,7 @@ package src
 import (
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"net/url"
 	"strings"
@@ -391,6 +392,9 @@ func isRemoteProviderSource(source string) bool {
 }
 
 func configuredProviderRequestTimeout(bufferTimeout float64) time.Duration {
+	if math.IsNaN(bufferTimeout) {
+		return 30 * time.Second
+	}
 	if bufferTimeout <= 0 {
 		return 30 * time.Second
 	}
