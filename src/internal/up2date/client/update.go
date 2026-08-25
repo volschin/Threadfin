@@ -2,6 +2,7 @@ package up2date
 
 import (
 	"archive/zip"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -66,7 +67,7 @@ func DoUpdate(fileType, filenameBIN string) (err error) {
 
 		// Restart binary (Windows)
 		if runtime.GOOS == "windows" {
-			return restartWindows(binary, oldBinary, cleanup, os.FindProcess, start, (*os.Process).Kill, waitForUpdateProcess)
+			return restartWindows(binary, oldBinary, cleanup, os.RemoveAll, os.FindProcess, start, (*os.Process).Kill, waitForUpdateProcess)
 		}
 
 		// Restart binary (Linux and UNIX)
@@ -111,6 +112,7 @@ func replacePreparedUpdate(candidate, binary, oldBinary string) error {
 func restartWindows(
 	binary, oldBinary string,
 	cleanup func() error,
+	removeOldBinary func(string) error,
 	findProcess func(int) (*os.Process, error),
 	startProcess func(...string) (*os.Process, error),
 	killProcess func(*os.Process) error,
@@ -127,16 +129,40 @@ func restartWindows(
 	if startErr != nil {
 		return restoreAfterUpdateFailure(startErr, oldBinary, binary)
 	}
-	if err := os.RemoveAll(oldBinary); err != nil {
-		return fmt.Errorf("remove previous binary: %w", err)
-	}
 	if err := killProcess(process); err != nil {
-		return fmt.Errorf("stop current process: %w", err)
+		return abortWindowsCutover(fmt.Errorf("stop current process: %w", err), proc, binary, oldBinary, killProcess, waitProcess)
 	}
 	if err := waitProcess(proc); err != nil {
-		return fmt.Errorf("wait for updated process: %w", err)
+		return abortWindowsCutover(fmt.Errorf("wait for updated process: %w", err), proc, binary, oldBinary, killProcess, waitProcess)
+	}
+	if err := removeOldBinary(oldBinary); err != nil {
+		return restoreAfterUpdateFailure(fmt.Errorf("remove previous binary: %w", err), oldBinary, binary)
 	}
 	return nil
+}
+
+func abortWindowsCutover(
+	cutoverErr error,
+	replacement *os.Process,
+	binary, oldBinary string,
+	killProcess func(*os.Process) error,
+	waitProcess func(*os.Process) error,
+) error {
+	stopErr := killProcess(replacement)
+	cutoverErr = errors.Join(cutoverErr, wrapError("stop replacement process", stopErr))
+	if stopErr != nil {
+		return cutoverErr
+	}
+	reapErr := waitProcess(replacement)
+	cutoverErr = errors.Join(cutoverErr, wrapError("reap replacement process", reapErr))
+	return restoreAfterUpdateFailure(cutoverErr, oldBinary, binary)
+}
+
+func wrapError(operation string, err error) error {
+	if err == nil {
+		return nil
+	}
+	return fmt.Errorf("%s: %w", operation, err)
 }
 
 func waitForUpdateProcess(process *os.Process) error {

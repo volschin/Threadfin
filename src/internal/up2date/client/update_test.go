@@ -170,7 +170,7 @@ func TestRestartWindowsReturnsStartErrorAfterRestoringBinary(t *testing.T) {
 	killProcess := func(*os.Process) error { return errors.New("kill should not be called") }
 	waitProcess := func(*os.Process) error { return errors.New("wait should not be called") }
 
-	err := restartWindows(binary, oldBinary, func() error { return nil }, findProcess, startProcess, killProcess, waitProcess)
+	err := restartWindows(binary, oldBinary, func() error { return nil }, os.RemoveAll, findProcess, startProcess, killProcess, waitProcess)
 	if !errors.Is(err, startErr) {
 		t.Fatalf("restart error = %v, want start error", err)
 	}
@@ -238,7 +238,7 @@ func TestRestartWindowsCleansCandidateBeforeSuccessfulCutover(t *testing.T) {
 		return nil
 	}
 
-	if err := restartWindows(binary, oldBinary, cleanup, findProcess, startProcess, killProcess, waitProcess); err != nil {
+	if err := restartWindows(binary, oldBinary, cleanup, os.RemoveAll, findProcess, startProcess, killProcess, waitProcess); err != nil {
 		t.Fatal(err)
 	}
 	if !started || !killed || !waited {
@@ -270,6 +270,7 @@ func TestRestartWindowsCleanupFailureRestoresBinary(t *testing.T) {
 		binary,
 		oldBinary,
 		func() error { return cleanupErr },
+		os.RemoveAll,
 		func(int) (*os.Process, error) { return &os.Process{}, nil },
 		startProcess,
 		func(*os.Process) error { return nil },
@@ -291,44 +292,254 @@ func TestRestartWindowsCleanupFailureRestoresBinary(t *testing.T) {
 }
 
 func TestRestartWindowsReturnsKillError(t *testing.T) {
-	killErr := errors.New("kill failed")
-	waitCalled := false
 	directory := t.TempDir()
+	binary := filepath.Join(directory, "threadfin.exe")
+	oldBinary := filepath.Join(directory, "old-threadfin.exe")
+	if err := os.WriteFile(binary, []byte("new executable"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(oldBinary, []byte("current executable"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	killErr := errors.New("kill failed")
+	currentProcess := &os.Process{}
+	updatedProcess := &os.Process{}
+	replacementStopped := false
+	replacementReaped := false
+	killProcess := func(process *os.Process) error {
+		switch process {
+		case currentProcess:
+			return killErr
+		case updatedProcess:
+			replacementStopped = true
+			return nil
+		default:
+			t.Fatalf("unexpected process killed: %p", process)
+			return nil
+		}
+	}
+	waitProcess := func(process *os.Process) error {
+		if process != updatedProcess {
+			t.Fatalf("waited process = %p, want updated process %p", process, updatedProcess)
+		}
+		replacementReaped = true
+		return nil
+	}
 
 	err := restartWindows(
-		filepath.Join(directory, "threadfin.exe"),
-		filepath.Join(directory, "missing-old-threadfin.exe"),
+		binary,
+		oldBinary,
 		func() error { return nil },
-		func(int) (*os.Process, error) { return &os.Process{}, nil },
-		func(...string) (*os.Process, error) { return &os.Process{}, nil },
-		func(*os.Process) error { return killErr },
-		func(*os.Process) error {
-			waitCalled = true
-			return nil
-		},
+		os.RemoveAll,
+		func(int) (*os.Process, error) { return currentProcess, nil },
+		func(...string) (*os.Process, error) { return updatedProcess, nil },
+		killProcess,
+		waitProcess,
 	)
 	if !errors.Is(err, killErr) {
 		t.Fatalf("restart error = %v, want kill error", err)
 	}
-	if waitCalled {
-		t.Fatal("wait was called after current-process kill failed")
+	if !replacementStopped || !replacementReaped {
+		t.Fatalf("replacement cleanup: stopped=%t reaped=%t", replacementStopped, replacementReaped)
+	}
+	got, readErr := os.ReadFile(binary)
+	if readErr != nil {
+		t.Fatal(readErr)
+	}
+	if string(got) != "current executable" {
+		t.Fatalf("current executable = %q after kill failure", got)
+	}
+	if _, err := os.Stat(oldBinary); !os.IsNotExist(err) {
+		t.Fatalf("rollback binary remains after restoration: %v", err)
 	}
 }
 
 func TestRestartWindowsReturnsWaitError(t *testing.T) {
-	waitErr := errors.New("wait failed")
 	directory := t.TempDir()
+	binary := filepath.Join(directory, "threadfin.exe")
+	oldBinary := filepath.Join(directory, "old-threadfin.exe")
+	if err := os.WriteFile(binary, []byte("new executable"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(oldBinary, []byte("current executable"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	waitErr := errors.New("wait failed")
+	currentProcess := &os.Process{}
+	updatedProcess := &os.Process{}
+	replacementStopped := false
+	replacementReaped := false
+	waitCalls := 0
+	killProcess := func(process *os.Process) error {
+		switch process {
+		case currentProcess:
+			return nil
+		case updatedProcess:
+			replacementStopped = true
+			return nil
+		default:
+			t.Fatalf("unexpected process killed: %p", process)
+			return nil
+		}
+	}
+	waitProcess := func(process *os.Process) error {
+		if process != updatedProcess {
+			t.Fatalf("waited process = %p, want updated process %p", process, updatedProcess)
+		}
+		waitCalls++
+		if waitCalls == 1 {
+			return waitErr
+		}
+		replacementReaped = true
+		return nil
+	}
 
 	err := restartWindows(
-		filepath.Join(directory, "threadfin.exe"),
-		filepath.Join(directory, "missing-old-threadfin.exe"),
+		binary,
+		oldBinary,
 		func() error { return nil },
-		func(int) (*os.Process, error) { return &os.Process{}, nil },
-		func(...string) (*os.Process, error) { return &os.Process{}, nil },
-		func(*os.Process) error { return nil },
-		func(*os.Process) error { return waitErr },
+		os.RemoveAll,
+		func(int) (*os.Process, error) { return currentProcess, nil },
+		func(...string) (*os.Process, error) { return updatedProcess, nil },
+		killProcess,
+		waitProcess,
 	)
 	if !errors.Is(err, waitErr) {
 		t.Fatalf("restart error = %v, want wait error", err)
+	}
+	if !replacementStopped || !replacementReaped {
+		t.Fatalf("replacement cleanup: stopped=%t reaped=%t", replacementStopped, replacementReaped)
+	}
+	got, readErr := os.ReadFile(binary)
+	if readErr != nil {
+		t.Fatal(readErr)
+	}
+	if string(got) != "current executable" {
+		t.Fatalf("current executable = %q after wait failure", got)
+	}
+	if _, err := os.Stat(oldBinary); !os.IsNotExist(err) {
+		t.Fatalf("rollback binary remains after restoration: %v", err)
+	}
+}
+
+func TestRestartWindowsReplacementStopFailureRetainsRollbackState(t *testing.T) {
+	directory := t.TempDir()
+	binary := filepath.Join(directory, "threadfin.exe")
+	oldBinary := filepath.Join(directory, "old-threadfin.exe")
+	if err := os.WriteFile(binary, []byte("new executable"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(oldBinary, []byte("current executable"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	killErr := errors.New("kill current failed")
+	stopErr := errors.New("stop replacement failed")
+	currentProcess := &os.Process{}
+	updatedProcess := &os.Process{}
+	killProcess := func(process *os.Process) error {
+		switch process {
+		case currentProcess:
+			return killErr
+		case updatedProcess:
+			return stopErr
+		default:
+			t.Fatalf("unexpected process killed: %p", process)
+			return nil
+		}
+	}
+
+	err := restartWindows(
+		binary,
+		oldBinary,
+		func() error { return nil },
+		os.RemoveAll,
+		func(int) (*os.Process, error) { return currentProcess, nil },
+		func(...string) (*os.Process, error) { return updatedProcess, nil },
+		killProcess,
+		func(*os.Process) error {
+			t.Fatal("replacement wait called after stop failure")
+			return nil
+		},
+	)
+	if !errors.Is(err, killErr) || !errors.Is(err, stopErr) {
+		t.Fatalf("restart error = %v, want current-kill and replacement-stop errors", err)
+	}
+	gotBinary, readErr := os.ReadFile(binary)
+	if readErr != nil {
+		t.Fatal(readErr)
+	}
+	if string(gotBinary) != "new executable" {
+		t.Fatalf("new executable = %q after replacement stop failure", gotBinary)
+	}
+	gotRollback, readErr := os.ReadFile(oldBinary)
+	if readErr != nil {
+		t.Fatal(readErr)
+	}
+	if string(gotRollback) != "current executable" {
+		t.Fatalf("rollback executable = %q after replacement stop failure", gotRollback)
+	}
+}
+
+func TestRestartWindowsOldBinaryCleanupFailureRestoresBinary(t *testing.T) {
+	directory := t.TempDir()
+	binary := filepath.Join(directory, "threadfin.exe")
+	oldBinary := filepath.Join(directory, "old-threadfin.exe")
+	if err := os.WriteFile(binary, []byte("new executable"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(oldBinary, []byte("current executable"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	cleanupErr := errors.New("old-binary cleanup failed")
+	currentProcess := &os.Process{}
+	updatedProcess := &os.Process{}
+	currentStopped := false
+	replacementReaped := false
+	removeOldBinary := func(path string) error {
+		if path != oldBinary {
+			t.Fatalf("old-binary cleanup path = %q, want %q", path, oldBinary)
+		}
+		return cleanupErr
+	}
+	killProcess := func(process *os.Process) error {
+		if process != currentProcess {
+			t.Fatalf("unexpected process killed: %p", process)
+		}
+		currentStopped = true
+		return nil
+	}
+	waitProcess := func(process *os.Process) error {
+		if process != updatedProcess {
+			t.Fatalf("waited process = %p, want updated process %p", process, updatedProcess)
+		}
+		replacementReaped = true
+		return nil
+	}
+
+	err := restartWindows(
+		binary,
+		oldBinary,
+		func() error { return nil },
+		removeOldBinary,
+		func(int) (*os.Process, error) { return currentProcess, nil },
+		func(...string) (*os.Process, error) { return updatedProcess, nil },
+		killProcess,
+		waitProcess,
+	)
+	if !errors.Is(err, cleanupErr) {
+		t.Fatalf("restart error = %v, want old-binary cleanup error", err)
+	}
+	if !currentStopped || !replacementReaped {
+		t.Fatalf("cutover state: currentStopped=%t replacementReaped=%t", currentStopped, replacementReaped)
+	}
+	got, readErr := os.ReadFile(binary)
+	if readErr != nil {
+		t.Fatal(readErr)
+	}
+	if string(got) != "current executable" {
+		t.Fatalf("current executable = %q after old-binary cleanup failure", got)
+	}
+	if _, err := os.Stat(oldBinary); !os.IsNotExist(err) {
+		t.Fatalf("rollback binary remains after restoration: %v", err)
 	}
 }
