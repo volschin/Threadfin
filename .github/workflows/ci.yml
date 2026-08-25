@@ -1,0 +1,37 @@
+name: Threadfin CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: Test and Vet
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Verify dependencies
+        run: |
+          go mod download
+          go mod verify
+          go mod vendor
+          git diff --exit-code -- go.mod go.sum vendor/
+
+      - name: Test
+        run: go test -count=1 -mod=vendor ./...
+
+      - name: Vet
+        run: go vet -mod=vendor ./...

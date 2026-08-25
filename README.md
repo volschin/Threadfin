@@ -72,7 +72,7 @@ You can follow the old xTeVe documentation for now until I update it for Threadf
 ---
 
 ## Docker Image
-[Threadfin](https://hub.docker.com/r/fyb3roptik/threadfin)
+[Threadfin](https://github.com/volschin/Threadfin/pkgs/container/threadfin)
 
 * Docker compose example
 
@@ -80,7 +80,7 @@ You can follow the old xTeVe documentation for now until I update it for Threadf
 version: "2.3"
 services:
   threadfin:
-    image: fyb3roptik/threadfin
+    image: ghcr.io/volschin/threadfin:latest
     container_name: threadfin
     ports:
       - 34400:34400
@@ -189,4 +189,3 @@ var GitHub = GitHubStruct{Branch: "main", User: "Threadfin", Repo: "Threadfin", 
 */
 
 ```
-
