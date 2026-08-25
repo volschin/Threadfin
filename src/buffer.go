@@ -19,7 +19,6 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"syscall"
 	"time"
 
 	"github.com/avfs/avfs/vfs/memfs"
@@ -1225,8 +1224,12 @@ func thirdPartyBuffer(streamID int, playlistID string, useBackup bool, backupNum
 			showInfo(bufferType + ":Processing data")
 		}
 
-		cmd.Start()
-		defer cmd.Wait()
+		if err = cmd.Start(); err != nil {
+			ShowError(err, 0)
+			killClientConnection(streamID, playlistID, false)
+			addErrorToStream(err)
+			return
+		}
 
 		go func() {
 
@@ -1253,7 +1256,13 @@ func thirdPartyBuffer(streamID int, playlistID string, useBackup bool, backupNum
 
 		f, err = bufferVFS.OpenFile(tmpFile, os.O_APPEND|os.O_WRONLY, 0600)
 		if err != nil {
-			panic(err)
+			if processErr := terminateProcess(cmd); processErr != nil {
+				ShowError(processErr, 0)
+			}
+			ShowError(err, 0)
+			killClientConnection(streamID, playlistID, false)
+			addErrorToStream(err)
+			return
 		}
 		defer f.Close()
 
@@ -1290,12 +1299,13 @@ func thirdPartyBuffer(streamID int, playlistID string, useBackup bool, backupNum
 			select {
 			case timeout := <-t:
 				if timeout >= 20 && tmpSegment == 1 {
-					cmd.Process.Kill()
+					if processErr := terminateProcess(cmd); processErr != nil {
+						ShowError(processErr, 0)
+					}
 					err = errors.New("Timeout")
 					ShowError(err, 4006)
 					killClientConnection(streamID, playlistID, false)
 					addErrorToStream(err)
-					cmd.Wait()
 					f.Close()
 					return
 				}
@@ -1309,9 +1319,10 @@ func thirdPartyBuffer(streamID int, playlistID string, useBackup bool, backupNum
 			}
 
 			if !clientConnection(stream) {
-				cmd.Process.Kill()
+				if processErr := terminateProcess(cmd); processErr != nil {
+					ShowError(processErr, 0)
+				}
 				f.Close()
-				cmd.Wait()
 				return
 			}
 
@@ -1323,11 +1334,12 @@ func thirdPartyBuffer(streamID int, playlistID string, useBackup bool, backupNum
 			fileSize = fileSize + len(buffer[:n])
 
 			if _, err := f.Write(buffer[:n]); err != nil {
-				cmd.Process.Kill()
+				if processErr := terminateProcess(cmd); processErr != nil {
+					ShowError(processErr, 0)
+				}
 				ShowError(err, 0)
 				killClientConnection(streamID, playlistID, false)
 				addErrorToStream(err)
-				cmd.Wait()
 				return
 			}
 
@@ -1358,11 +1370,13 @@ func thirdPartyBuffer(streamID int, playlistID string, useBackup bool, backupNum
 				_, errCreate = bufferVFS.Create(tmpFile)
 				f, errOpen = bufferVFS.OpenFile(tmpFile, os.O_APPEND|os.O_WRONLY, 0600)
 				if errCreate != nil || errOpen != nil {
-					cmd.Process.Kill()
+					if processErr := terminateProcess(cmd); processErr != nil {
+						ShowError(processErr, 0)
+					}
+					err = errors.Join(errCreate, errOpen)
 					ShowError(err, 0)
 					killClientConnection(streamID, playlistID, false)
 					addErrorToStream(err)
-					cmd.Wait()
 					return
 				}
 
@@ -1370,8 +1384,9 @@ func thirdPartyBuffer(streamID int, playlistID string, useBackup bool, backupNum
 
 		}
 
-		cmd.Process.Kill()
-		cmd.Wait()
+		if processErr := terminateProcess(cmd); processErr != nil {
+			ShowError(processErr, 0)
+		}
 
 		err = errors.New(bufferType + " error")
 		addErrorToStream(err)
@@ -1512,16 +1527,21 @@ func debugResponse(resp *http.Response) {
 	return
 }
 
-func terminateProcessGracefully(cmd *exec.Cmd) {
-	if cmd.Process != nil {
-		// Send a SIGTERM to the process
-		if err := cmd.Process.Signal(syscall.SIGTERM); err != nil {
-			// If an error occurred while trying to send the SIGTERM, you might resort to a SIGKILL.
-			ShowError(err, 0)
-			cmd.Process.Kill()
-		}
-
-		// Optionally, you can wait for the process to finish too
-		cmd.Wait()
+func terminateProcess(cmd *exec.Cmd) error {
+	if cmd == nil || cmd.Process == nil {
+		return nil
 	}
+
+	killErr := cmd.Process.Kill()
+	waitErr := cmd.Wait()
+	if killErr != nil && !errors.Is(killErr, os.ErrProcessDone) {
+		return killErr
+	}
+	if waitErr != nil {
+		var exitErr *exec.ExitError
+		if !errors.As(waitErr, &exitErr) {
+			return waitErr
+		}
+	}
+	return nil
 }
