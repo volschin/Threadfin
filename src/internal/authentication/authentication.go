@@ -134,7 +134,7 @@ func Init(databasePath string, validity int) (err error) {
 		// Create an empty database
 		var defaults = make(map[string]interface{})
 		defaults["dbVersion"] = "1.0"
-		defaults["hash"] = "sha256"
+		defaults["hash"] = "argon2id"
 		defaults["users"] = make(map[string]interface{})
 
 		if saveDatabase(defaults) != nil {
@@ -166,7 +166,10 @@ func CreateDefaultUser(username, password string) (err error) {
 		return
 	}
 
-	var defaults = defaultsForNewUser(username, password)
+	defaults, err := defaultsForNewUser(username, password)
+	if err != nil {
+		return
+	}
 	users[defaults["_id"].(string)] = defaults
 	saveDatabase(data)
 
@@ -200,7 +203,10 @@ func CreateNewUser(username, password string) (userID string, err error) {
 		}
 	}
 
-	var defaults = defaultsForNewUser(username, password)
+	defaults, err := defaultsForNewUser(username, password)
+	if err != nil {
+		return
+	}
 	userID = defaults["_id"].(string)
 	users[userID] = defaults
 
@@ -218,19 +224,29 @@ func UserAuthentication(username, password string) (token string, err error) {
 	}
 
 	var login = func(username, password string, loginData map[string]interface{}) (err error) {
-		err = createError(010)
-
 		var salt = loginData["_salt"].(string)
 		var loginUsername = loginData["_username"].(string)
 		var loginPassword = loginData["_password"].(string)
 
-		if SHA256(username, salt) == loginUsername {
-			if SHA256(password, salt) == loginPassword {
-				err = nil
+		if SHA256(username, salt) != loginUsername {
+			return createError(010)
+		}
+		matched, legacy := verifyPassword(password, loginPassword)
+		if !matched {
+			return createError(010)
+		}
+		if legacy {
+			migrated, hashErr := hashPassword(password)
+			if hashErr != nil {
+				return hashErr
+			}
+			loginData["_password"] = migrated
+			if saveErr := saveDatabase(data); saveErr != nil {
+				loginData["_password"] = loginPassword
+				return saveErr
 			}
 		}
-
-		return
+		return nil
 	}
 
 	var users = data["users"].(map[string]interface{})
@@ -400,7 +416,11 @@ func ChangeCredentials(userID, username, password string) (err error) {
 		}
 
 		if len(password) > 0 {
-			userData.(map[string]interface{})["_password"] = SHA256(password, salt)
+			passwordHash, hashErr := hashPassword(password)
+			if hashErr != nil {
+				return hashErr
+			}
+			userData.(map[string]interface{})["_password"] = passwordHash
 		}
 
 		err = saveDatabase(data)
@@ -420,7 +440,7 @@ func GetAllUserData() (allUserData map[string]interface{}, err error) {
 	if len(data) == 0 {
 		var defaults = make(map[string]interface{})
 		defaults["dbVersion"] = "1.0"
-		defaults["hash"] = "sha256"
+		defaults["hash"] = "argon2id"
 		defaults["users"] = make(map[string]interface{})
 		saveDatabase(defaults)
 		data = defaults
@@ -543,17 +563,21 @@ func createError(errCode int) (err error) {
 	return
 }
 
-func defaultsForNewUser(username, password string) map[string]interface{} {
+func defaultsForNewUser(username, password string) (map[string]interface{}, error) {
+	passwordHash, err := hashPassword(password)
+	if err != nil {
+		return nil, err
+	}
 	var defaults = make(map[string]interface{})
 	var salt = randomString(saltLength)
 	defaults["_username"] = SHA256(username, salt)
-	defaults["_password"] = SHA256(password, salt)
+	defaults["_password"] = passwordHash
 	defaults["_salt"] = salt
 	defaults["_id"] = "id-" + randomID(idLength)
 	//defaults["_one.time.token"] = randomString(tokenLength)
 	defaults["data"] = make(map[string]interface{})
 
-	return defaults
+	return defaults, nil
 }
 
 func setToken(id, oldToken string) (newToken string) {
