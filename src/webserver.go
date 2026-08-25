@@ -516,8 +516,10 @@ func WS(w http.ResponseWriter, r *http.Request) {
 		case "saveFilesM3U":
 			// Reset cache for urls.json
 			var filename = getPlatformFile(System.Folder.Config + "urls.json")
-			saveMapToJSONFile(filename, make(map[string]StreamInfo))
-			Data.Cache.StreamingURLS = make(map[string]StreamInfo)
+			err = resetStreamingURLCache(filename)
+			if err != nil {
+				break
+			}
 
 			err = saveFiles(request, "m3u")
 			if err == nil {
@@ -528,8 +530,10 @@ func WS(w http.ResponseWriter, r *http.Request) {
 		case "updateFileM3U":
 			// Reset cache for urls.json
 			var filename = getPlatformFile(System.Folder.Config + "urls.json")
-			saveMapToJSONFile(filename, make(map[string]StreamInfo))
-			Data.Cache.StreamingURLS = make(map[string]StreamInfo)
+			err = resetStreamingURLCache(filename)
+			if err != nil {
+				break
+			}
 
 			err = updateFile(request, "m3u")
 			if err == nil {
@@ -1252,6 +1256,15 @@ func disablePPV(w http.ResponseWriter, r *http.Request) {
 func httpStatusError(w http.ResponseWriter, r *http.Request, httpStatusCode int) {
 	http.Error(w, fmt.Sprintf("%s [%d]", http.StatusText(httpStatusCode), httpStatusCode), httpStatusCode)
 	return
+}
+
+func resetStreamingURLCache(filename string) error {
+	empty := make(map[string]StreamInfo)
+	if err := saveMapToJSONFile(filename, empty); err != nil {
+		return err
+	}
+	Data.Cache.StreamingURLS = empty
+	return nil
 }
 
 func getContentType(filename string) (contentType string) {

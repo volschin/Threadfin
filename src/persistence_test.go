@@ -83,3 +83,18 @@ func TestFilterFromInterfaceReturnsEncodingError(t *testing.T) {
 		t.Fatal("filterFromInterface() error = nil, want JSON encoding error")
 	}
 }
+
+func TestResetStreamingURLCachePreservesMemoryOnPersistenceError(t *testing.T) {
+	restorePersistentState(t)
+	Data.Cache.StreamingURLS = map[string]StreamInfo{"existing": {}}
+	target := filepath.Join(t.TempDir(), "missing", "urls.json")
+
+	err := resetStreamingURLCache(target)
+	var pathErr *os.PathError
+	if !errors.As(err, &pathErr) {
+		t.Fatalf("resetStreamingURLCache() error = %v, want persistence path error", err)
+	}
+	if _, ok := Data.Cache.StreamingURLS["existing"]; !ok {
+		t.Fatal("resetStreamingURLCache() cleared memory after persistence failure")
+	}
+}
