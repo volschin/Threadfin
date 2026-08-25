@@ -493,7 +493,6 @@ func saveFilter(request RequestStruct) (settings SettingsStruct, err error) {
 
 	settings = Settings
 
-
 	err = buildDatabaseDVR()
 	if err != nil {
 		return
@@ -949,7 +948,9 @@ func buildDatabaseDVR() (err error) {
 
 			compatibility["streams"] = len(channels)
 
-			setProviderCompatibility(id, fileType, compatibility)
+			if err = setProviderCompatibility(id, fileType, compatibility); err != nil {
+				return
+			}
 
 		}
 
@@ -1054,7 +1055,7 @@ func getProviderParameter(id, fileType, key string) (s string) {
 }
 
 // Provider Statistiken Kompatibilität aktualisieren
-func setProviderCompatibility(id, fileType string, compatibility map[string]int) {
+func setProviderCompatibility(id, fileType string, compatibility map[string]int) error {
 
 	var dataMap = make(map[string]interface{})
 
@@ -1082,8 +1083,9 @@ func setProviderCompatibility(id, fileType string, compatibility map[string]int)
 			Settings.Files.XMLTV = dataMap
 		}
 
-		saveSettings(Settings)
+		return saveSettings(Settings)
 
 	}
 
+	return nil
 }

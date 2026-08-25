@@ -173,10 +173,13 @@ func getLineup() (jsonContent []byte, err error) {
 	}
 
 	jsonContent, err = json.MarshalIndent(lineup, "", "  ")
+	if err != nil {
+		return
+	}
 
 	Data.Cache.PMS = nil
 
-	saveMapToJSONFile(System.File.URLS, Data.Cache.StreamingURLS)
+	err = saveMapToJSONFile(System.File.URLS, Data.Cache.StreamingURLS)
 
 	return
 }
@@ -228,7 +231,11 @@ func getGuideNumberPMS(channelName string) (pmsID string, err error) {
 
 		pmsID = getNewID(channelName)
 		Data.Cache.PMS[channelName] = pmsID
-		saveMapToJSONFile(System.File.PMS, Data.Cache.PMS)
+		if err = saveMapToJSONFile(System.File.PMS, Data.Cache.PMS); err != nil {
+			delete(Data.Cache.PMS, channelName)
+			pmsID = ""
+			return
+		}
 
 	}
 

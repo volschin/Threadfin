@@ -312,7 +312,9 @@ func getProviderData(fileType, fileID string) (err error) {
 
 		}
 
-		saveSettings(Settings)
+		if err = saveSettings(Settings); err != nil {
+			return err
+		}
 
 	Done:
 	}

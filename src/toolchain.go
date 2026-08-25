@@ -270,7 +270,6 @@ func saveMapToJSONFile(file string, tmpMap interface{}) error {
 		return err
 	}
 
-	os.Create(filename)
 	err = os.WriteFile(filename, []byte(jsonString), 0644)
 	if err != nil {
 		return err
