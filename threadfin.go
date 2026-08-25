@@ -68,6 +68,44 @@ var dev = flag.Bool("dev", false, ": Activates the developer mode, the source co
 var bindIpAddress = flag.String("bind", "", ": Bind IP address")
 
 func main() {
+	os.Exit(dispatchThreadfinStartup(os.Args, src.PrepareUpdateStartup, runThreadfinApplication))
+}
+
+func dispatchThreadfinStartup(
+	args []string,
+	prepare func([]string) (src.UpdateStartup, error),
+	application func([]string, bool) int,
+) int {
+	startup, err := prepare(args)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		if startup.ExitCode != 0 {
+			return startup.ExitCode
+		}
+		return 1
+	}
+	if startup.Private && startup.Exit {
+		return startup.ExitCode
+	}
+	applicationArgs := append([]string(nil), args...)
+	if startup.Private {
+		if len(args) == 0 {
+			return 1
+		}
+		applicationArgs = append([]string{args[0]}, startup.OriginalArgs...)
+	}
+	return application(applicationArgs, startup.SkipAutomaticUpdate)
+}
+
+func performStartupUpdate(skip bool, update func() error) error {
+	if skip {
+		return nil
+	}
+	return update()
+}
+
+func runThreadfinApplication(args []string, skipAutomaticUpdate bool) (exitCode int) {
+	os.Args = append([]string(nil), args...)
 
 	// Build-Nummer von der Versionsnummer trennen
 	var build = strings.Split(Version, ".")
@@ -85,6 +123,7 @@ func main() {
 	defer func() {
 
 		if r := recover(); r != nil {
+			exitCode = 1
 
 			fmt.Println()
 			fmt.Println("* * * * * FATAL ERROR * * * * *")
@@ -103,7 +142,7 @@ func main() {
 					f := runtime.FuncForPC(pc[i])
 					file, line := f.FileLine(pc[i])
 
-					if string(file)[0:1] != "?" {
+					if len(file) > 0 && string(file)[0:1] != "?" {
 						fmt.Printf("%s:%d %s\n", filepath.Base(file), line, f.Name())
 					}
 
@@ -122,7 +161,7 @@ func main() {
 
 	if *h {
 		flag.Usage()
-		return
+		return 0
 	}
 
 	system.Dev = *dev
@@ -135,11 +174,11 @@ func main() {
 		err := src.Init()
 		if err != nil {
 			src.ShowError(err, 0)
-			os.Exit(0)
+			return 1
 		}
 
 		src.ShowSystemInfo()
-		return
+		return 0
 
 	}
 
@@ -162,7 +201,7 @@ func main() {
 	system.Flag.Debug = *debug
 	if system.Flag.Debug > 3 {
 		flag.Usage()
-		return
+		return 1
 	}
 
 	// Speicherort für die Konfigurationsdateien
@@ -178,46 +217,50 @@ func main() {
 		err := src.Init()
 		if err != nil {
 			src.ShowError(err, 0)
-			os.Exit(0)
+			return 1
 		}
 
 		err = src.ThreadfinRestoreFromCLI(*restore)
 		if err != nil {
 			src.ShowError(err, 0)
+			return 1
 		}
 
-		os.Exit(0)
+		return 0
 	}
 
 	err := src.Init()
 	if err != nil {
 		src.ShowError(err, 0)
-		os.Exit(0)
+		return 1
 	}
 
-	err = src.BinaryUpdate()
-	if err != nil {
+	err = performStartupUpdate(skipAutomaticUpdate, src.BinaryUpdate)
+	if src.HandleBinaryUpdateResult(err, os.Exit, func(err error) {
 		src.ShowError(err, 0)
+	}) {
+		return 0
 	}
 
 	err = src.StartSystem(false)
 	if err != nil {
 		src.ShowError(err, 0)
-		os.Exit(0)
+		return 1
 	}
 
 	err = src.InitMaintenance()
 	if err != nil {
 		src.ShowError(err, 0)
-		os.Exit(0)
+		return 1
 	}
 
 	err = src.StartWebserver()
 	if err != nil {
 		src.ShowError(err, 0)
-		os.Exit(0)
+		return 1
 	}
 
+	return 0
 }
 
 func getPIDs(command string) ([]string, error) {

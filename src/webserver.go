@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -56,12 +57,24 @@ func StartWebserver() (err error) {
 	systemMutex.Unlock()
 
 	server := newHTTPServer(ipAddress+":"+port, http.DefaultServeMux)
-	if err = server.ListenAndServe(); err != nil {
+	if err = serveHTTPServer(server, SignalUpdateReady); err != nil {
 		ShowError(err, 1001)
 		return
 	}
 
 	return
+}
+
+func serveHTTPServer(server *http.Server, signalReady func() error) error {
+	listener, err := net.Listen("tcp", server.Addr)
+	if err != nil {
+		return err
+	}
+	if err := signalReady(); err != nil {
+		_ = listener.Close()
+		return err
+	}
+	return server.Serve(listener)
 }
 
 func newHTTPServer(address string, handler http.Handler) *http.Server {

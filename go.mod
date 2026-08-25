@@ -7,6 +7,7 @@ require (
 	github.com/gorilla/websocket v1.5.3
 	github.com/hashicorp/go-version v1.9.0
 	github.com/koron/go-ssdp v0.9.1
+	golang.org/x/crypto v0.55.0
 	golang.org/x/text v0.41.0
 )
 

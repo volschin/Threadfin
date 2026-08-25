@@ -73,6 +73,30 @@ jobs:
           # List all built binaries
           ls -la dist/
 
+      - name: Sign release artifacts
+        env:
+          UPDATE_SIGNING_KEY: ${{ secrets.THREADFIN_UPDATE_SIGNING_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "$UPDATE_SIGNING_KEY"
+          signing_key=$(mktemp)
+          cleanup() {
+            rm -f "$signing_key"
+          }
+          trap cleanup EXIT
+          chmod 600 "$signing_key"
+          printf '%s' "$UPDATE_SIGNING_KEY" > "$signing_key"
+          openssl pkey -in "$signing_key" -pubout | cmp - src/internal/up2date/client/update-signing-public-key.pem
+
+          assets=(dist/Threadfin_*)
+          test "${#assets[@]}" -gt 0
+          for asset in "${assets[@]}"; do
+            checksum=$(sha256sum "$asset")
+            printf '%s\n' "${checksum%% *}" > "${asset}.sha256"
+            openssl pkeyutl -sign -rawin -inkey "$signing_key" -in "${asset}.sha256" -out "${asset}.sha256.sig"
+            openssl pkeyutl -verify -pubin -inkey src/internal/up2date/client/update-signing-public-key.pem -rawin -in "${asset}.sha256" -sigfile "${asset}.sha256.sig"
+          done
+
       - name: Upload build artifacts
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:

@@ -3,6 +3,7 @@ package src
 import (
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"net/url"
 	"strings"
@@ -213,7 +214,7 @@ func getProviderData(fileType, fileID string) (err error) {
 
 		default:
 
-			if strings.Contains(fileSource, "http://") || strings.Contains(fileSource, "https://") {
+			if isRemoteProviderSource(fileSource) {
 
 				// Laden vom Remote Server
 				showInfo("Download:" + fileSource)
@@ -325,11 +326,7 @@ func downloadFileFromServer(providerURL string, proxyUrl string) (filename strin
 		return
 	}
 
-	// Derive a timeout: prefer configured buffer timeout if provided, else default to 30s
-	requestTimeout := 30 * time.Second
-	if Settings.BufferTimeout > 0 {
-		requestTimeout = time.Duration(Settings.BufferTimeout*1000) * time.Millisecond
-	}
+	requestTimeout := configuredProviderRequestTimeout(Settings.BufferTimeout)
 
 	httpClient := &http.Client{Timeout: requestTimeout}
 
@@ -388,4 +385,29 @@ func downloadFileFromServer(providerURL string, proxyUrl string) (filename strin
 	}
 
 	return
+}
+
+func isRemoteProviderSource(source string) bool {
+	return strings.Contains(source, "http://") || strings.Contains(source, "https://")
+}
+
+func configuredProviderRequestTimeout(bufferTimeout float64) time.Duration {
+	if math.IsNaN(bufferTimeout) {
+		return 30 * time.Second
+	}
+	if bufferTimeout <= 0 {
+		return 30 * time.Second
+	}
+	milliseconds := bufferTimeout * 1000
+	// Preserve a finite timeout for every positive configured value. One
+	// millisecond is the smallest duration represented by this conversion;
+	// zero would instead disable http.Client's timeout entirely.
+	if milliseconds < 1 {
+		return time.Millisecond
+	}
+	const maxDurationMilliseconds = float64((1<<63 - 1) / int64(time.Millisecond))
+	if milliseconds >= maxDurationMilliseconds {
+		return time.Duration(1<<63 - 1)
+	}
+	return time.Duration(milliseconds) * time.Millisecond
 }

@@ -7,11 +7,16 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
 	"syscall"
+	"time"
+)
+
+var (
+	updateHTTPClient  = &http.Client{Timeout: 2 * time.Minute}
+	chmodUpdateBinary = os.Chmod
 )
 
 // DoUpdate : Update binary
@@ -33,156 +38,90 @@ func DoUpdate(fileType, filenameBIN string) (err error) {
 	if len(url) > 0 {
 		log.Println("["+strings.ToUpper(fileType)+"]", "New version ("+Updater.Name+"):", Updater.Response.Version)
 
-		// Download new binary
-		resp, err := http.Get(url)
-		if err != nil {
-			return err
-		}
-		defer resp.Body.Close()
-		log.Println("["+strings.ToUpper(fileType)+"]", "Download new version...")
-
-		if resp.StatusCode != http.StatusOK {
-			log.Println("["+strings.ToUpper(fileType)+"]", "Download new version...OK")
-			return fmt.Errorf("bad status: %s", resp.Status)
-		}
-
-		// Change binary filename to .filename
 		binary, err := os.Executable()
-		var filename = getFilenameFromPath(binary)
-		var path = getPlatformPath(binary)
-		var oldBinary = path + "_old_" + filename
-		var newBinary = binary
-
-		// ZIP
-		var tmpFolder = path + "tmp"
-		var tmpFile = tmpFolder + string(os.PathSeparator) + filenameBIN
-
-		//fmt.Println(binary, path+"."+filename)
-		os.Rename(newBinary, oldBinary)
-
-		// Save the new binary with the old file name
-		out, err := os.Create(binary)
 		if err != nil {
-			restorOldBinary(oldBinary, newBinary)
 			return err
 		}
-		defer out.Close()
-
-		// Write the body to file
-
-		_, err = io.Copy(out, resp.Body)
+		publicKey, err := embeddedUpdatePublicKey()
 		if err != nil {
-			restorOldBinary(oldBinary, newBinary)
+			return err
+		}
+		path := getPlatformPath(binary)
+		candidate, cleanup, err := prepareVerifiedUpdate(updateHTTPClient, url, fileType, filenameBIN, path, publicKey)
+		if err != nil {
 			return err
 		}
 
-		// Update as a ZIP file
-		if fileType == "zip" {
-
-			log.Println("["+strings.ToUpper(fileType)+"]", "Update file:", filenameBIN)
-			log.Println("["+strings.ToUpper(fileType)+"]", "Unzip ZIP file...")
-			err = extractZIP(binary, tmpFolder)
-
-			binary = newBinary
-
-			if err != nil {
-
-				log.Println("["+strings.ToUpper(fileType)+"]", "Unzip ZIP file...ERROR")
-
-				restorOldBinary(oldBinary, newBinary)
-
-				return err
-			} else {
-
-				log.Println("["+strings.ToUpper(fileType)+"]", "Unzip ZIP file...OK")
-				log.Println("["+strings.ToUpper(fileType)+"]", "Copy binary file...")
-
-				err = copyFile(tmpFile, binary)
-				if err == nil {
-					log.Println("["+strings.ToUpper(fileType)+"]", "Copy binary file...OK")
-				} else {
-
-					log.Println("["+strings.ToUpper(fileType)+"]", "Copy binary file...ERROR")
-					restorOldBinary(oldBinary, newBinary)
-
-					return err
-				}
-
-				os.RemoveAll(tmpFolder)
+		filename := getFilenameFromPath(binary)
+		oldBinary := path + "_old_" + filename
+		if err := replacePreparedUpdate(candidate, binary, oldBinary); err != nil {
+			if cleanupErr := cleanup(); cleanupErr != nil {
+				return fmt.Errorf("%w; cleanup failed: %w", err, cleanupErr)
 			}
-
+			return err
 		}
-
-		// Set the permission
-		err = os.Chmod(binary, 0755)
-
-		// Close the new file !Windows
-		out.Close()
 
 		log.Println("["+strings.ToUpper(fileType)+"]", "Update Successful")
 
 		// Restart binary (Windows)
 		if runtime.GOOS == "windows" {
-
-			bin, err := os.Executable()
-
-			if err != nil {
-				restorOldBinary(oldBinary, newBinary)
-				return err
-			}
-
-			var pid = os.Getpid()
-			var process, _ = os.FindProcess(pid)
-
-			if proc, err := start(bin); err == nil {
-
-				os.RemoveAll(oldBinary)
-				process.Kill()
-				proc.Wait()
-
-			} else {
-				restorOldBinary(oldBinary, newBinary)
-			}
-
-		} else {
-
-			// Restart binary (Linux and UNIX)
-			file, _ := os.Executable()
-			os.RemoveAll(oldBinary)
-			err = syscall.Exec(file, os.Args, os.Environ())
-			if err != nil {
-				restorOldBinary(oldBinary, newBinary)
-				log.Fatal(err)
-				return err
-			}
-
+			return beginWindowsHandoff(binary, oldBinary, os.Args[1:], cleanup, defaultWindowsUpdateProtocol())
 		}
+
+		// Restart binary (Linux and UNIX)
+		return restartUnix(binary, oldBinary, cleanup, syscall.Exec)
 
 	}
 
 	return
 }
 
-func start(args ...string) (p *os.Process, err error) {
-
-	if args[0], err = exec.LookPath(args[0]); err == nil {
-		//fmt.Println(args[0])
-		var procAttr os.ProcAttr
-		procAttr.Files = []*os.File{os.Stdin, os.Stdout, os.Stderr}
-		p, err := os.StartProcess(args[0], args, &procAttr)
-
-		if err == nil {
-			return p, nil
-		}
-
+func replacePreparedUpdate(candidate, binary, oldBinary string) error {
+	_ = os.Remove(oldBinary)
+	if err := os.Rename(binary, oldBinary); err != nil {
+		return err
 	}
-
-	return nil, err
+	if err := copyFile(candidate, binary); err != nil {
+		return restoreAfterUpdateFailure(err, oldBinary, binary)
+	}
+	if err := chmodUpdateBinary(binary, 0755); err != nil {
+		return restoreAfterUpdateFailure(err, oldBinary, binary)
+	}
+	return nil
 }
 
-func restorOldBinary(oldBinary, newBinary string) {
-	os.RemoveAll(newBinary)
-	os.Rename(oldBinary, newBinary)
+func wrapError(operation string, err error) error {
+	if err == nil {
+		return nil
+	}
+	return fmt.Errorf("%s: %w", operation, err)
+}
+
+func restartUnix(binary, oldBinary string, cleanup func() error, execProcess func(string, []string, []string) error) error {
+	if err := cleanup(); err != nil {
+		return restoreAfterUpdateFailure(fmt.Errorf("clean temporary update material: %w", err), oldBinary, binary)
+	}
+	if err := execProcess(binary, os.Args, os.Environ()); err != nil {
+		return restoreAfterUpdateFailure(err, oldBinary, binary)
+	}
+	return nil
+}
+
+func restoreAfterUpdateFailure(updateErr error, oldBinary, newBinary string) error {
+	if restoreErr := restorOldBinary(oldBinary, newBinary); restoreErr != nil {
+		return fmt.Errorf("%w; rollback failed: %w", updateErr, restoreErr)
+	}
+	return updateErr
+}
+
+func restorOldBinary(oldBinary, newBinary string) error {
+	if err := os.RemoveAll(newBinary); err != nil {
+		return fmt.Errorf("remove failed update: %w", err)
+	}
+	if err := os.Rename(oldBinary, newBinary); err != nil {
+		return fmt.Errorf("restore previous binary: %w", err)
+	}
+	return nil
 }
 
 func getPlatformFile(filename string) string {

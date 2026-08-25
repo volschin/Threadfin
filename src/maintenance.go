@@ -3,6 +3,7 @@ package src
 import (
 	"fmt"
 	"math/rand"
+	"os"
 	"time"
 )
 
@@ -72,7 +73,9 @@ func maintenance() {
 			systemMutex.Lock()
 			if System.TimeForAutoUpdate == t.Format("1504") {
 				systemMutex.Unlock()
-				BinaryUpdate()
+				runMaintenanceBinaryUpdate(BinaryUpdate, os.Exit, func(err error) {
+					ShowError(err, 0)
+				})
 			} else {
 				systemMutex.Unlock()
 			}
@@ -85,6 +88,10 @@ func maintenance() {
 
 	}
 
+}
+
+func runMaintenanceBinaryUpdate(update func() error, exit func(int), report func(error)) {
+	HandleBinaryUpdateResult(update(), exit, report)
 }
 
 func randomTime(min, max int) int {
