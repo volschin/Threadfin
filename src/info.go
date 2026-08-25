@@ -38,10 +38,8 @@ func ShowSystemInfo() {
 
 		case count < 10:
 			fmt.Println(fmt.Sprintf("  %d.                 %s", count, ipv4))
-			break
 		case count < 100:
 			fmt.Println(fmt.Sprintf("  %d.                %s", count, ipv4))
-			break
 
 		}
 
@@ -56,10 +54,8 @@ func ShowSystemInfo() {
 
 		case count < 10:
 			fmt.Println(fmt.Sprintf("  %d.                 %s", count, ipv4))
-			break
 		case count < 100:
 			fmt.Println(fmt.Sprintf("  %d.                %s", count, ipv4))
-			break
 
 		}
 

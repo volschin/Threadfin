@@ -407,6 +407,9 @@ func convertToNewFilter(oldFilter []interface{}) (newFilterMap map[int]interface
 func setValueForUUID() (err error) {
 
 	xepg, err := loadJSONFileToMap(System.File.XEPG)
+	if err != nil {
+		return err
+	}
 
 	for _, c := range xepg {
 

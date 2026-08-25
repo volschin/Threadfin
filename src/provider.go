@@ -17,7 +17,7 @@ func getProviderData(fileType, fileID string) (err error) {
 
 	var fileExtension, serverFileName string
 	var body = make([]byte, 0)
-	var newProvider = false
+	var newProvider bool
 	var dataMap = make(map[string]interface{})
 
 	var saveDateFromProvider = func(fileSource, serverFileName, id string, body []byte) (err error) {
@@ -261,14 +261,12 @@ func getProviderData(fileType, fileID string) (err error) {
 						showWarning(1011)
 					}
 
-					err = downloadErr
 				}
 
 				// Fehler Counter um 1 erhöhen
-				var data = make(map[string]interface{})
 				if value, ok := dataMap[dataID].(map[string]interface{}); ok {
 
-					data = value
+					data := value
 					data["counter.error"] = data["counter.error"].(float64) + 1
 					data["counter.download"] = data["counter.download"].(float64) + 1
 
@@ -285,8 +283,7 @@ func getProviderData(fileType, fileID string) (err error) {
 
 			if value, ok := dataMap[dataID].(map[string]interface{}); ok {
 
-				var data = make(map[string]interface{})
-				data = value
+				data := value
 
 				if data["counter.error"].(float64) == 0 {
 					data["provider.availability"] = 100

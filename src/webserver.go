@@ -819,10 +819,7 @@ func Web(w http.ResponseWriter, r *http.Request) {
 
 		requestFile = file
 
-		if value, ok := webUI[requestFile]; ok {
-
-			content = GetHTMLString(value.(string))
-
+		if _, ok := webUI[requestFile]; ok {
 			if contentType == "text/plain" {
 				w.Header().Set("Content-Disposition", "attachment; filename="+getFilenameFromPath(requestFile))
 			}

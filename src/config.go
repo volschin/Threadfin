@@ -174,6 +174,9 @@ func Init() (err error) {
 	if err == nil {
 		err = checkFilePermission(System.Folder.Temp)
 	}
+	if err != nil {
+		return
+	}
 
 	// Separaten tmp Ordner für jede Instanz
 	//System.Folder.Temp = System.Folder.Temp + Settings.UUID + string(os.PathSeparator)

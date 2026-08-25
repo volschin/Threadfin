@@ -112,3 +112,30 @@ func TestCreateM3UFileReturnsStreamingURLPersistenceError(t *testing.T) {
 		t.Fatalf("createM3UFile() error = %v, want persistence path error", err)
 	}
 }
+
+func TestSetValueForUUIDPreservesLoadError(t *testing.T) {
+	restorePersistentState(t)
+	System.File.XEPG = filepath.Join(t.TempDir(), "missing.json")
+
+	err := setValueForUUID()
+	if !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("setValueForUUID() error = %v, want os.ErrNotExist", err)
+	}
+	if _, statErr := os.Stat(System.File.XEPG); !os.IsNotExist(statErr) {
+		t.Fatalf("setValueForUUID() created a replacement after load failure: %v", statErr)
+	}
+}
+
+func TestGetLocalXMLTVReturnsMalformedDocumentError(t *testing.T) {
+	restorePersistentState(t)
+	Data.Cache.XMLTV = make(map[string]XMLTV)
+	file := filepath.Join(t.TempDir(), "malformed.xml")
+	if err := os.WriteFile(file, []byte("<tv><channel>"), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	var document XMLTV
+	if err := getLocalXMLTV(file, &document); err == nil {
+		t.Fatal("getLocalXMLTV() error = nil, want malformed XML error")
+	}
+}

@@ -434,8 +434,8 @@ func deleteLocalProviderFiles(dataID, fileType string) {
 
 // Filtereinstellungen speichern (WebUI)
 func saveFilter(request RequestStruct) (settings SettingsStruct, err error) {
-	var filterMap = make(map[int64]interface{})
-	var newData = make(map[int64]interface{})
+	filterMap := Settings.Filter
+	newData := request.Filter
 	var defaultFilter FilterStruct
 	var newFilter = false
 
@@ -443,8 +443,6 @@ func saveFilter(request RequestStruct) (settings SettingsStruct, err error) {
 	defaultFilter.CaseSensitive = false
 	defaultFilter.LiveEvent = false
 
-	filterMap = Settings.Filter
-	newData = request.Filter
 	var createNewID = func() (id int64) {
 
 	newID:
@@ -692,8 +690,6 @@ func saveWizard(request RequestStruct) (nextStep int, err error) {
 			var filesMap = make(map[string]interface{})
 			var data = make(map[string]interface{})
 			var indicator, dataID string
-
-			filesMap = make(map[string]interface{})
 
 			data["type"] = key
 			data["new"] = true

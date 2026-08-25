@@ -10,7 +10,6 @@ import (
 // InitMaintenance : Wartungsprozess initialisieren
 func InitMaintenance() (err error) {
 
-	rand.Seed(time.Now().Unix())
 	System.TimeForAutoUpdate = fmt.Sprintf("0%d%d", randomTime(0, 2), randomTime(10, 59))
 
 	go maintenance()
@@ -95,6 +94,5 @@ func runMaintenanceBinaryUpdate(update func() error, exit func(int), report func
 }
 
 func randomTime(min, max int) int {
-	rand.Seed(time.Now().Unix())
 	return rand.Intn(max-min) + min
 }

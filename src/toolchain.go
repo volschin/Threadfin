@@ -108,11 +108,8 @@ func checkFile(filename string) (err error) {
 		return err
 	}
 
-	switch mode := fi.Mode(); {
-	case mode.IsDir():
+	if fi.IsDir() {
 		err = fmt.Errorf("%s: %s", file, getErrMsg(1072))
-	case mode.IsRegular():
-		break
 	}
 
 	return

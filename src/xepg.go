@@ -347,7 +347,6 @@ func createXEPGMapping() {
 		}
 
 		Data.XMLTV.Mapping = tmpMap
-		tmpMap = make(map[string]interface{})
 
 	} else {
 
@@ -1289,7 +1288,7 @@ func createLiveProgram(xepgChannel XEPGChannelStruct, channelId string) []*Progr
 	// Time examples: '11:59 PM', '6:30 AM', '11:59PM', '1PM'
 	re := regexp.MustCompile(`((\d{1,2}[./]\d{1,2})[-\s])*(\d{1,2}(:\d{2})*\s*(AM|PM)?(?:\s*(ET|CT|MT|PT|EST|CST|MST|PST))?)`)
 	matches := re.FindStringSubmatch(name)
-	layout := "2006.1.2 3:04 PM"
+	var layout string
 	if len(matches) > 0 {
 		timePart := matches[len(matches)-2]
 		if timePart == "" {
@@ -1667,14 +1666,13 @@ func getLocalXMLTV(file string, xmltv *XMLTV) (err error) {
 			err = parseXMLTVStream(file, xmltv)
 		} else {
 			// Use original method for smaller files
-			content, err := readByteFromFile(file)
-			if err != nil {
-				err = errors.New("Local copy of the file no longer exists")
-				return err
+			content, readErr := readByteFromFile(file)
+			if readErr != nil {
+				return errors.New("Local copy of the file no longer exists")
 			}
 
 			// XML Datei parsen
-			err = xml.Unmarshal(content, &xmltv)
+			err = xml.Unmarshal(content, xmltv)
 		}
 
 		if err != nil {
