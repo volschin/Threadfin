@@ -40,11 +40,17 @@ func maintenance() {
 					}
 
 					// Playlist und XMLTV Dateien aktualisieren
-					getProviderData("m3u", "")
-					getProviderData("hdhr", "")
+					if providerErr := getProviderData("m3u", ""); providerErr != nil {
+						ShowError(providerErr, 0)
+					}
+					if providerErr := getProviderData("hdhr", ""); providerErr != nil {
+						ShowError(providerErr, 0)
+					}
 
 					if Settings.EpgSource == "XEPG" {
-						getProviderData("xmltv", "")
+						if providerErr := getProviderData("xmltv", ""); providerErr != nil {
+							ShowError(providerErr, 0)
+						}
 					}
 
 					// Datenbank für DVR erstellen
@@ -56,7 +62,9 @@ func maintenance() {
 					systemMutex.Lock()
 					if !Settings.CacheImages && System.ImageCachingInProgress == 0 {
 						systemMutex.Unlock()
-						removeChildItems(System.Folder.ImagesCache)
+						if cleanupErr := removeChildItems(System.Folder.ImagesCache); cleanupErr != nil {
+							ShowError(cleanupErr, 0)
+						}
 					} else {
 						systemMutex.Unlock()
 					}

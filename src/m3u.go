@@ -437,10 +437,12 @@ func probeChannel(request RequestStruct) (string, string, string, error) {
 }
 
 func parseFrameRate(parts []string) int {
-	numerator, denom := 1, 1
-	fmt.Sscanf(parts[0], "%d", &numerator)
-	fmt.Sscanf(parts[1], "%d", &denom)
-	if denom == 0 {
+	if len(parts) != 2 {
+		return 0
+	}
+	numerator, numeratorErr := strconv.Atoi(parts[0])
+	denom, denominatorErr := strconv.Atoi(parts[1])
+	if numeratorErr != nil || denominatorErr != nil || denom == 0 {
 		return 0
 	}
 	return int(math.Round(float64(numerator) / float64(denom)))

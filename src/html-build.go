@@ -1,7 +1,6 @@
 package src
 
 import (
-	"bufio"
 	"encoding/base64"
 	"fmt"
 	"log"
@@ -44,12 +43,14 @@ func BuildGoFile() error {
 	content += `var ` + mapName + ` = make(map[string]interface{})` + "\n\n"
 	content += "func loadHTMLMap() {" + "\n\n"
 
-	content += createMapFromFiles(htmlFolder) + "\n"
+	mapContent, err := createMapFromFiles(htmlFolder)
+	if err != nil {
+		return err
+	}
+	content += mapContent + "\n"
 
 	content += "}" + "\n\n"
-	writeStringToFile(goFile, content)
-
-	return nil
+	return writeStringToFile(goFile, content)
 }
 
 // GetHTMLString : base64 -> string
@@ -58,13 +59,13 @@ func GetHTMLString(base string) string {
 	return string(content)
 }
 
-func createMapFromFiles(folder string) string {
+func createMapFromFiles(folder string) (string, error) {
 
 	var path = getLocalPath(folder)
 
 	err := filepath.Walk(path, readFilesToMap)
 	if err != nil {
-		checkErr(err)
+		return "", err
 	}
 
 	var content string
@@ -74,36 +75,34 @@ func createMapFromFiles(folder string) string {
 		content += `  ` + mapName + `["` + newKey + `"` + `] = "` + blankMap[key].(string) + `"` + "\n"
 	}
 
-	return content
+	return content, nil
 }
 
 func readFilesToMap(path string, info os.FileInfo, err error) error {
+	if err != nil {
+		return err
+	}
+	if info == nil {
+		return fmt.Errorf("missing file information for %s", path)
+	}
 
 	if info.IsDir() == false {
-		var base64Str = fileToBase64(getLocalPath(path))
+		base64Str, err := fileToBase64(getLocalPath(path))
+		if err != nil {
+			return err
+		}
 		blankMap[path] = base64Str
 	}
 
 	return nil
 }
 
-func fileToBase64(file string) string {
-
-	imgFile, _ := os.Open(file)
-	defer imgFile.Close()
-
-	// create a new buffer base on file size
-	fInfo, _ := imgFile.Stat()
-	var size = fInfo.Size()
-	buf := make([]byte, int64(size))
-
-	// read file content into buffer
-	fReader := bufio.NewReader(imgFile)
-	fReader.Read(buf)
-
-	imgBase64Str := base64.StdEncoding.EncodeToString(buf)
-
-	return imgBase64Str
+func fileToBase64(file string) (string, error) {
+	content, err := os.ReadFile(file)
+	if err != nil {
+		return "", err
+	}
+	return base64.StdEncoding.EncodeToString(content), nil
 }
 
 func getLocalPath(filename string) string {

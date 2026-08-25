@@ -264,11 +264,17 @@ func StartSystem(updateProviderFiles bool) (err error) {
 			ShowError(err, 1090)
 		}
 
-		getProviderData("m3u", "")
-		getProviderData("hdhr", "")
+		if providerErr := getProviderData("m3u", ""); providerErr != nil {
+			ShowError(providerErr, 0)
+		}
+		if providerErr := getProviderData("hdhr", ""); providerErr != nil {
+			ShowError(providerErr, 0)
+		}
 
 		if Settings.EpgSource == "XEPG" {
-			getProviderData("xmltv", "")
+			if providerErr := getProviderData("xmltv", ""); providerErr != nil {
+				ShowError(providerErr, 0)
+			}
 		}
 
 	}

@@ -176,7 +176,9 @@ func ThreadfinRestore(archive string) (newWebURL string, err error) {
 			ShowError(err, 0)
 		}
 
-		loadSettings()
+		if _, err = loadSettings(); err != nil {
+			return "", err
+		}
 
 		err := Init()
 		if err != nil {
@@ -196,7 +198,9 @@ func ThreadfinRestore(archive string) (newWebURL string, err error) {
 	var url = System.URLBase + "/web/"
 	newWebURL = strings.Replace(url, ":"+oldPort, ":"+newPort, 1)
 
-	os.RemoveAll(tmpRestore)
+	if err = os.RemoveAll(tmpRestore); err != nil {
+		ShowError(err, 0)
+	}
 
 	return
 }
@@ -238,7 +242,9 @@ func ThreadfinRestoreFromCLI(archive string) (err error) {
 
 	fmt.Print("All data will be replaced with those from the backup. Should the files be restored? [yes|no]:")
 
-	fmt.Scanln(&confirm)
+	if _, err = fmt.Scanln(&confirm); err != nil {
+		return err
+	}
 
 	switch strings.ToLower(confirm) {
 

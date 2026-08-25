@@ -426,7 +426,9 @@ func deleteLocalProviderFiles(dataID, fileType string) {
 
 	if _, ok := removeData[dataID]; ok {
 		delete(removeData, dataID)
-		os.RemoveAll(System.Folder.Data + dataID + fileExtension)
+		if err := os.RemoveAll(System.Folder.Data + dataID + fileExtension); err != nil {
+			ShowError(err, 0)
+		}
 	}
 
 	return

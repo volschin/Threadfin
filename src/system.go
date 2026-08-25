@@ -91,11 +91,17 @@ func createSystemFiles() (err error) {
 
 func updateUrlsJson() {
 
-	getProviderData("m3u", "")
-	getProviderData("hdhr", "")
+	if err := getProviderData("m3u", ""); err != nil {
+		ShowError(err, 0)
+	}
+	if err := getProviderData("hdhr", ""); err != nil {
+		ShowError(err, 0)
+	}
 
 	if Settings.EpgSource == "XEPG" {
-		getProviderData("xmltv", "")
+		if err := getProviderData("xmltv", ""); err != nil {
+			ShowError(err, 0)
+		}
 	}
 	err := buildDatabaseDVR()
 	if err != nil {
