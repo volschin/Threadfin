@@ -12,7 +12,10 @@ import (
 	"runtime"
 	"strings"
 	"syscall"
+	"time"
 )
+
+var updateHTTPClient = &http.Client{Timeout: 2 * time.Minute}
 
 // DoUpdate : Update binary
 func DoUpdate(fileType, filenameBIN string) (err error) {
@@ -33,91 +36,35 @@ func DoUpdate(fileType, filenameBIN string) (err error) {
 	if len(url) > 0 {
 		log.Println("["+strings.ToUpper(fileType)+"]", "New version ("+Updater.Name+"):", Updater.Response.Version)
 
-		// Download new binary
-		resp, err := http.Get(url)
-		if err != nil {
-			return err
-		}
-		defer resp.Body.Close()
-		log.Println("["+strings.ToUpper(fileType)+"]", "Download new version...")
-
-		if resp.StatusCode != http.StatusOK {
-			log.Println("["+strings.ToUpper(fileType)+"]", "Download new version...OK")
-			return fmt.Errorf("bad status: %s", resp.Status)
-		}
-
-		// Change binary filename to .filename
 		binary, err := os.Executable()
-		var filename = getFilenameFromPath(binary)
-		var path = getPlatformPath(binary)
-		var oldBinary = path + "_old_" + filename
-		var newBinary = binary
-
-		// ZIP
-		var tmpFolder = path + "tmp"
-		var tmpFile = tmpFolder + string(os.PathSeparator) + filenameBIN
-
-		//fmt.Println(binary, path+"."+filename)
-		os.Rename(newBinary, oldBinary)
-
-		// Save the new binary with the old file name
-		out, err := os.Create(binary)
 		if err != nil {
-			restorOldBinary(oldBinary, newBinary)
 			return err
 		}
-		defer out.Close()
-
-		// Write the body to file
-
-		_, err = io.Copy(out, resp.Body)
+		publicKey, err := embeddedUpdatePublicKey()
 		if err != nil {
-			restorOldBinary(oldBinary, newBinary)
 			return err
 		}
-
-		// Update as a ZIP file
-		if fileType == "zip" {
-
-			log.Println("["+strings.ToUpper(fileType)+"]", "Update file:", filenameBIN)
-			log.Println("["+strings.ToUpper(fileType)+"]", "Unzip ZIP file...")
-			err = extractZIP(binary, tmpFolder)
-
-			binary = newBinary
-
-			if err != nil {
-
-				log.Println("["+strings.ToUpper(fileType)+"]", "Unzip ZIP file...ERROR")
-
-				restorOldBinary(oldBinary, newBinary)
-
-				return err
-			} else {
-
-				log.Println("["+strings.ToUpper(fileType)+"]", "Unzip ZIP file...OK")
-				log.Println("["+strings.ToUpper(fileType)+"]", "Copy binary file...")
-
-				err = copyFile(tmpFile, binary)
-				if err == nil {
-					log.Println("["+strings.ToUpper(fileType)+"]", "Copy binary file...OK")
-				} else {
-
-					log.Println("["+strings.ToUpper(fileType)+"]", "Copy binary file...ERROR")
-					restorOldBinary(oldBinary, newBinary)
-
-					return err
-				}
-
-				os.RemoveAll(tmpFolder)
-			}
-
+		path := getPlatformPath(binary)
+		candidate, cleanup, err := prepareVerifiedUpdate(updateHTTPClient, url, fileType, filenameBIN, path, publicKey)
+		if err != nil {
+			return err
 		}
+		defer cleanup()
 
-		// Set the permission
-		err = os.Chmod(binary, 0755)
-
-		// Close the new file !Windows
-		out.Close()
+		filename := getFilenameFromPath(binary)
+		oldBinary := path + "_old_" + filename
+		_ = os.Remove(oldBinary)
+		if err := os.Rename(binary, oldBinary); err != nil {
+			return err
+		}
+		if err := copyFile(candidate, binary); err != nil {
+			restorOldBinary(oldBinary, binary)
+			return err
+		}
+		if err := os.Chmod(binary, 0755); err != nil {
+			restorOldBinary(oldBinary, binary)
+			return err
+		}
 
 		log.Println("["+strings.ToUpper(fileType)+"]", "Update Successful")
 
@@ -127,7 +74,7 @@ func DoUpdate(fileType, filenameBIN string) (err error) {
 			bin, err := os.Executable()
 
 			if err != nil {
-				restorOldBinary(oldBinary, newBinary)
+				restorOldBinary(oldBinary, binary)
 				return err
 			}
 
@@ -141,18 +88,15 @@ func DoUpdate(fileType, filenameBIN string) (err error) {
 				proc.Wait()
 
 			} else {
-				restorOldBinary(oldBinary, newBinary)
+				restorOldBinary(oldBinary, binary)
 			}
 
 		} else {
 
 			// Restart binary (Linux and UNIX)
-			file, _ := os.Executable()
-			os.RemoveAll(oldBinary)
-			err = syscall.Exec(file, os.Args, os.Environ())
+			err = syscall.Exec(binary, os.Args, os.Environ())
 			if err != nil {
-				restorOldBinary(oldBinary, newBinary)
-				log.Fatal(err)
+				restorOldBinary(oldBinary, binary)
 				return err
 			}
 

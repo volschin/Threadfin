@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"path/filepath"
 )
 
 const updateMetadataLimit int64 = 1024
@@ -137,4 +138,53 @@ func downloadVerified(client *http.Client, artifactURL, destination string, expe
 	}
 	succeeded = true
 	return nil
+}
+
+func prepareVerifiedUpdate(client *http.Client, artifactURL, fileType, filename, directory string, publicKey ed25519.PublicKey) (string, func(), error) {
+	expected, err := fetchExpectedChecksum(client, artifactURL, publicKey)
+	if err != nil {
+		return "", func() {}, err
+	}
+	temporary, err := os.CreateTemp(directory, ".threadfin-update-*")
+	if err != nil {
+		return "", func() {}, err
+	}
+	downloadPath := temporary.Name()
+	if err := temporary.Close(); err != nil {
+		_ = os.Remove(downloadPath)
+		return "", func() {}, err
+	}
+	if err := os.Remove(downloadPath); err != nil {
+		return "", func() {}, err
+	}
+	cleanupPaths := []string{downloadPath}
+	cleanup := func() {
+		for _, cleanupPath := range cleanupPaths {
+			_ = os.RemoveAll(cleanupPath)
+		}
+	}
+	if err := downloadVerified(client, artifactURL, downloadPath, expected); err != nil {
+		cleanup()
+		return "", func() {}, err
+	}
+	if fileType != "zip" {
+		return downloadPath, cleanup, nil
+	}
+	extractDirectory, err := os.MkdirTemp(directory, ".threadfin-update-extract-*")
+	if err != nil {
+		cleanup()
+		return "", func() {}, err
+	}
+	cleanupPaths = append(cleanupPaths, extractDirectory)
+	if err := extractZIP(downloadPath, extractDirectory); err != nil {
+		cleanup()
+		return "", func() {}, err
+	}
+	candidate := filepath.Join(extractDirectory, filepath.Base(filename))
+	info, err := os.Stat(candidate)
+	if err != nil || !info.Mode().IsRegular() {
+		cleanup()
+		return "", func() {}, fmt.Errorf("verified update archive does not contain %q", filepath.Base(filename))
+	}
+	return candidate, cleanup, nil
 }
