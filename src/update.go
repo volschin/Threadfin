@@ -15,6 +15,14 @@ import (
 	"reflect"
 )
 
+func officialUpdateAssetName(goos, goarch string) string {
+	name := fmt.Sprintf("Threadfin_%s_%s", goos, goarch)
+	if goos == "windows" {
+		name += ".exe"
+	}
+	return name
+}
+
 // BinaryUpdate : Binary Update Prozess. Git Branch master und beta wird von GitHub geladen.
 func BinaryUpdate() (err error) {
 
@@ -83,7 +91,7 @@ func BinaryUpdate() (err error) {
 			}
 		}
 
-		var File = fmt.Sprintf("%s/releases/download/%s/%s_%s_%s", System.Update.Git, latest, "Threadfin", System.OS, System.ARCH)
+		var File = fmt.Sprintf("%s/releases/download/%s/%s", System.Update.Git, latest, officialUpdateAssetName(System.OS, System.ARCH))
 
 		updater.Response.Status = true
 		updater.Response.UpdateBIN = File

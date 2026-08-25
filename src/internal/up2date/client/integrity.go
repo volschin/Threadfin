@@ -8,6 +8,7 @@ import (
 	_ "embed"
 	"encoding/hex"
 	"encoding/pem"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -16,7 +17,13 @@ import (
 	"path/filepath"
 )
 
-const updateMetadataLimit int64 = 1024
+const (
+	updateMetadataLimit int64 = 1024
+	// 16 MiB is the smallest binary-size boundary above every supported
+	// release artifact: current target builds are under 13 MB and the largest
+	// published Threadfin binary is under 14 MiB.
+	updateArtifactLimit int64 = 16 << 20
+)
 
 //go:embed update-signing-public-key.pem
 var updateSigningPublicKeyPEM []byte
@@ -112,6 +119,9 @@ func downloadVerified(client *http.Client, artifactURL, destination string, expe
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("update artifact returned %s", resp.Status)
 	}
+	if resp.ContentLength > updateArtifactLimit {
+		return fmt.Errorf("update artifact exceeds %d bytes", updateArtifactLimit)
+	}
 
 	out, err := os.OpenFile(destination, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600)
 	if err != nil {
@@ -125,13 +135,18 @@ func downloadVerified(client *http.Client, artifactURL, destination string, expe
 	}()
 
 	hash := sha256.New()
-	_, copyErr := io.Copy(io.MultiWriter(out, hash), resp.Body)
+	// net/http exposes automatically decoded content through resp.Body, so the
+	// limit applies to the post-decompression artifact bytes written to disk.
+	written, copyErr := io.Copy(io.MultiWriter(out, hash), io.LimitReader(resp.Body, updateArtifactLimit+1))
 	closeErr := out.Close()
 	if copyErr != nil {
 		return copyErr
 	}
 	if closeErr != nil {
 		return closeErr
+	}
+	if written > updateArtifactLimit {
+		return fmt.Errorf("update artifact exceeds %d bytes", updateArtifactLimit)
 	}
 	if subtle.ConstantTimeCompare(hash.Sum(nil), expected[:]) != 1 {
 		return fmt.Errorf("update artifact SHA-256 mismatch")
@@ -140,51 +155,53 @@ func downloadVerified(client *http.Client, artifactURL, destination string, expe
 	return nil
 }
 
-func prepareVerifiedUpdate(client *http.Client, artifactURL, fileType, filename, directory string, publicKey ed25519.PublicKey) (string, func(), error) {
+func prepareVerifiedUpdate(client *http.Client, artifactURL, fileType, filename, directory string, publicKey ed25519.PublicKey) (string, func() error, error) {
+	emptyCleanup := func() error { return nil }
 	expected, err := fetchExpectedChecksum(client, artifactURL, publicKey)
 	if err != nil {
-		return "", func() {}, err
+		return "", emptyCleanup, err
 	}
 	temporary, err := os.CreateTemp(directory, ".threadfin-update-*")
 	if err != nil {
-		return "", func() {}, err
+		return "", emptyCleanup, err
 	}
 	downloadPath := temporary.Name()
 	if err := temporary.Close(); err != nil {
 		_ = os.Remove(downloadPath)
-		return "", func() {}, err
+		return "", emptyCleanup, err
 	}
 	if err := os.Remove(downloadPath); err != nil {
-		return "", func() {}, err
+		return "", emptyCleanup, err
 	}
 	cleanupPaths := []string{downloadPath}
-	cleanup := func() {
+	cleanup := func() error {
+		var cleanupErr error
 		for _, cleanupPath := range cleanupPaths {
-			_ = os.RemoveAll(cleanupPath)
+			if err := os.RemoveAll(cleanupPath); err != nil {
+				cleanupErr = errors.Join(cleanupErr, fmt.Errorf("remove temporary update material: %w", err))
+			}
 		}
+		return cleanupErr
 	}
 	if err := downloadVerified(client, artifactURL, downloadPath, expected); err != nil {
-		cleanup()
-		return "", func() {}, err
+		return "", emptyCleanup, errors.Join(err, cleanup())
 	}
 	if fileType != "zip" {
 		return downloadPath, cleanup, nil
 	}
 	extractDirectory, err := os.MkdirTemp(directory, ".threadfin-update-extract-*")
 	if err != nil {
-		cleanup()
-		return "", func() {}, err
+		return "", emptyCleanup, errors.Join(err, cleanup())
 	}
 	cleanupPaths = append(cleanupPaths, extractDirectory)
 	if err := extractZIP(downloadPath, extractDirectory); err != nil {
-		cleanup()
-		return "", func() {}, err
+		return "", emptyCleanup, errors.Join(err, cleanup())
 	}
 	candidate := filepath.Join(extractDirectory, filepath.Base(filename))
 	info, err := os.Stat(candidate)
 	if err != nil || !info.Mode().IsRegular() {
-		cleanup()
-		return "", func() {}, fmt.Errorf("verified update archive does not contain %q", filepath.Base(filename))
+		candidateErr := fmt.Errorf("verified update archive does not contain %q", filepath.Base(filename))
+		return "", emptyCleanup, errors.Join(candidateErr, cleanup())
 	}
 	return candidate, cleanup, nil
 }

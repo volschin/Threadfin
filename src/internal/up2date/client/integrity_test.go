@@ -8,12 +8,26 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strconv"
+	"strings"
 	"testing"
 )
+
+const oversizedArtifactBytes int64 = 16<<20 + 1
+
+type repeatingByteReader struct{}
+
+func (repeatingByteReader) Read(p []byte) (int, error) {
+	for i := range p {
+		p[i] = 'x'
+	}
+	return len(p), nil
+}
 
 func signedUpdateServer(t *testing.T, artifact []byte, checksum []byte, signature []byte) *httptest.Server {
 	t.Helper()
@@ -154,6 +168,43 @@ func TestDownloadVerifiedRemovesChecksumMismatch(t *testing.T) {
 	}
 	if _, err := os.Stat(destination); !os.IsNotExist(err) {
 		t.Fatalf("unverified candidate remains: %v", err)
+	}
+}
+
+func TestDownloadVerifiedRejectsOversizedFixedLengthArtifact(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Length", strconv.FormatInt(oversizedArtifactBytes, 10))
+		_, _ = io.CopyN(w, repeatingByteReader{}, oversizedArtifactBytes)
+	}))
+	defer server.Close()
+	destination := filepath.Join(t.TempDir(), "candidate")
+
+	err := downloadVerified(server.Client(), server.URL, destination, sha256.Sum256(nil))
+	if err == nil || !strings.Contains(err.Error(), "exceeds") {
+		t.Fatalf("oversized fixed-length artifact error = %v, want size-limit error", err)
+	}
+	if _, err := os.Stat(destination); !os.IsNotExist(err) {
+		t.Fatalf("partial oversized candidate remains: %v", err)
+	}
+}
+
+func TestDownloadVerifiedRejectsOversizedChunkedArtifact(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Trailer", "X-Update-Complete")
+		w.WriteHeader(http.StatusOK)
+		w.(http.Flusher).Flush()
+		_, _ = io.CopyN(w, repeatingByteReader{}, oversizedArtifactBytes)
+		w.Header().Set("X-Update-Complete", "true")
+	}))
+	defer server.Close()
+	destination := filepath.Join(t.TempDir(), "candidate")
+
+	err := downloadVerified(server.Client(), server.URL, destination, sha256.Sum256(nil))
+	if err == nil || !strings.Contains(err.Error(), "exceeds") {
+		t.Fatalf("oversized chunked artifact error = %v, want size-limit error", err)
+	}
+	if _, err := os.Stat(destination); !os.IsNotExist(err) {
+		t.Fatalf("partial oversized candidate remains: %v", err)
 	}
 }
 

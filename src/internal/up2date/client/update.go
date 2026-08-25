@@ -52,11 +52,13 @@ func DoUpdate(fileType, filenameBIN string) (err error) {
 		if err != nil {
 			return err
 		}
-		defer cleanup()
 
 		filename := getFilenameFromPath(binary)
 		oldBinary := path + "_old_" + filename
 		if err := replacePreparedUpdate(candidate, binary, oldBinary); err != nil {
+			if cleanupErr := cleanup(); cleanupErr != nil {
+				return fmt.Errorf("%w; cleanup failed: %w", err, cleanupErr)
+			}
 			return err
 		}
 
@@ -64,7 +66,7 @@ func DoUpdate(fileType, filenameBIN string) (err error) {
 
 		// Restart binary (Windows)
 		if runtime.GOOS == "windows" {
-			return restartWindows(binary, oldBinary, start)
+			return restartWindows(binary, oldBinary, cleanup, os.FindProcess, start, (*os.Process).Kill, waitForUpdateProcess)
 		}
 
 		// Restart binary (Linux and UNIX)
@@ -106,8 +108,18 @@ func replacePreparedUpdate(candidate, binary, oldBinary string) error {
 	return nil
 }
 
-func restartWindows(binary, oldBinary string, startProcess func(...string) (*os.Process, error)) error {
-	process, err := os.FindProcess(os.Getpid())
+func restartWindows(
+	binary, oldBinary string,
+	cleanup func() error,
+	findProcess func(int) (*os.Process, error),
+	startProcess func(...string) (*os.Process, error),
+	killProcess func(*os.Process) error,
+	waitProcess func(*os.Process) error,
+) error {
+	if err := cleanup(); err != nil {
+		return restoreAfterUpdateFailure(fmt.Errorf("clean temporary update material: %w", err), oldBinary, binary)
+	}
+	process, err := findProcess(os.Getpid())
 	if err != nil {
 		return restoreAfterUpdateFailure(err, oldBinary, binary)
 	}
@@ -115,14 +127,27 @@ func restartWindows(binary, oldBinary string, startProcess func(...string) (*os.
 	if startErr != nil {
 		return restoreAfterUpdateFailure(startErr, oldBinary, binary)
 	}
-	_ = os.RemoveAll(oldBinary)
-	_ = process.Kill()
-	_, _ = proc.Wait()
+	if err := os.RemoveAll(oldBinary); err != nil {
+		return fmt.Errorf("remove previous binary: %w", err)
+	}
+	if err := killProcess(process); err != nil {
+		return fmt.Errorf("stop current process: %w", err)
+	}
+	if err := waitProcess(proc); err != nil {
+		return fmt.Errorf("wait for updated process: %w", err)
+	}
 	return nil
 }
 
-func restartUnix(binary, oldBinary string, cleanup func(), execProcess func(string, []string, []string) error) error {
-	cleanup()
+func waitForUpdateProcess(process *os.Process) error {
+	_, err := process.Wait()
+	return err
+}
+
+func restartUnix(binary, oldBinary string, cleanup func() error, execProcess func(string, []string, []string) error) error {
+	if err := cleanup(); err != nil {
+		return restoreAfterUpdateFailure(fmt.Errorf("clean temporary update material: %w", err), oldBinary, binary)
+	}
 	if err := execProcess(binary, os.Args, os.Environ()); err != nil {
 		return restoreAfterUpdateFailure(err, oldBinary, binary)
 	}
