@@ -24,3 +24,17 @@ func TestReadByteFromFileReturnsOpenError(t *testing.T) {
 		t.Fatalf("readByteFromFile() error = %v, want os.ErrNotExist", err)
 	}
 }
+
+func TestInterfaceToMapReturnsJSONEncodingError(t *testing.T) {
+	_, err := interfaceToMap(map[string]interface{}{"unsupported": make(chan int)})
+	if err == nil {
+		t.Fatal("interfaceToMap() error = nil, want JSON encoding error")
+	}
+}
+
+func TestJSONToMapReturnsDecodeError(t *testing.T) {
+	_, err := jsonToMap("{not-json")
+	if err == nil {
+		t.Fatal("jsonToMap() error = nil, want JSON decode error")
+	}
+}

@@ -18,8 +18,14 @@ import (
 // Einstellungen ändern (WebUI)
 func updateServerSettings(request RequestStruct) (settings SettingsStruct, err error) {
 
-	var oldSettings = jsonToMap(mapToJSON(Settings))
-	var newSettings = jsonToMap(mapToJSON(request.Settings))
+	oldSettings, err := interfaceToMap(Settings)
+	if err != nil {
+		return settings, err
+	}
+	newSettings, err := interfaceToMap(request.Settings)
+	if err != nil {
+		return settings, err
+	}
 	var reloadData = false
 	var cacheImages = false
 	var createXEPGFiles = false
@@ -452,7 +458,11 @@ func saveFilter(request RequestStruct) (settings SettingsStruct, err error) {
 			// New Filter
 			newFilter = true
 			dataID = createNewID()
-			filterMap[dataID] = jsonToMap(mapToJSON(newData))
+			converted, convertErr := interfaceToMap(newData)
+			if convertErr != nil {
+				return settings, convertErr
+			}
+			filterMap[dataID] = converted
 		}
 
 		// Update / delete filters
@@ -647,7 +657,10 @@ func saveNewUser(request RequestStruct) (err error) {
 // Wizard (WebUI)
 func saveWizard(request RequestStruct) (nextStep int, err error) {
 
-	var wizard = jsonToMap(mapToJSON(request.Wizard))
+	wizard, err := interfaceToMap(request.Wizard)
+	if err != nil {
+		return nextStep, err
+	}
 
 	for key, value := range wizard {
 

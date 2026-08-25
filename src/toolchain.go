@@ -238,12 +238,18 @@ func mapToJSON(tmpMap interface{}) string {
 	return string(jsonString)
 }
 
-func jsonToMap(content string) map[string]interface{} {
+func interfaceToMap(value interface{}) (tmpMap map[string]interface{}, err error) {
+	content, err := json.Marshal(value)
+	if err != nil {
+		return nil, err
+	}
+	err = json.Unmarshal(content, &tmpMap)
+	return tmpMap, err
+}
 
-	var tmpMap = make(map[string]interface{})
-	json.Unmarshal([]byte(content), &tmpMap)
-
-	return (tmpMap)
+func jsonToMap(content string) (tmpMap map[string]interface{}, err error) {
+	err = json.Unmarshal([]byte(content), &tmpMap)
+	return tmpMap, err
 }
 
 func jsonToMapInt64(content string) map[int64]interface{} {

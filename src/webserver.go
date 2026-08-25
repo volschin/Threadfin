@@ -704,7 +704,11 @@ func Web(w http.ResponseWriter, r *http.Request) {
 
 		if value, ok := webUI[languageFile].(string); ok {
 			content = GetHTMLString(value)
-			lang = jsonToMap(content)
+			lang, err = jsonToMap(content)
+			if err != nil {
+				ShowError(err, 000)
+				return
+			}
 		}
 	}
 
