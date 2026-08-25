@@ -43,6 +43,20 @@ func IsUpdateHandoff(err error) bool {
 	return up2date.IsUpdateHandoff(err)
 }
 
+// HandleBinaryUpdateResult applies the shared process-level outcome for every
+// automatic update caller. An acknowledged Windows handoff exits successfully;
+// ordinary failures are reported without stopping the serving process.
+func HandleBinaryUpdateResult(err error, exit func(int), report func(error)) bool {
+	if IsUpdateHandoff(err) {
+		exit(0)
+		return true
+	}
+	if err != nil {
+		report(err)
+	}
+	return false
+}
+
 // SignalUpdateReady notifies the private update protocol after the HTTP
 // listener has been acquired.
 func SignalUpdateReady() error {

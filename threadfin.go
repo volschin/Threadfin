@@ -236,11 +236,10 @@ func runThreadfinApplication(args []string, skipAutomaticUpdate bool) (exitCode 
 	}
 
 	err = performStartupUpdate(skipAutomaticUpdate, src.BinaryUpdate)
-	if src.IsUpdateHandoff(err) {
-		return 0
-	}
-	if err != nil {
+	if src.HandleBinaryUpdateResult(err, os.Exit, func(err error) {
 		src.ShowError(err, 0)
+	}) {
+		return 0
 	}
 
 	err = src.StartSystem(false)

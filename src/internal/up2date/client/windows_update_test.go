@@ -15,6 +15,8 @@ type fakeUpdateProcess struct {
 	pid          int
 	label        string
 	events       *[]string
+	waitStarted  chan struct{}
+	waitUntil    chan struct{}
 	exited       bool
 	exitedErr    error
 	killErr      error
@@ -45,6 +47,12 @@ func (process *fakeUpdateProcess) Kill() error {
 func (process *fakeUpdateProcess) Wait(time.Duration) error {
 	process.waitCalls++
 	process.record("wait")
+	if process.waitStarted != nil {
+		close(process.waitStarted)
+	}
+	if process.waitUntil != nil {
+		<-process.waitUntil
+	}
 	return process.waitErr
 }
 
@@ -184,8 +192,21 @@ func TestWindowsHelperWaitsForOldExitAndPreservesOriginalArguments(t *testing.T)
 	originalArgs := []string{"-config", `C:\path with spaces\`, `--quote="a b"`, `trailing\\`}
 	state, statePath := writeTestWindowsState(t, originalArgs)
 	events := []string{}
-	oldProcess := &fakeUpdateProcess{pid: state.OldPID, label: "old", events: &events}
+	oldWaitStarted := make(chan struct{})
+	oldExited := make(chan struct{})
+	oldProcess := &fakeUpdateProcess{
+		pid:         state.OldPID,
+		label:       "old",
+		events:      &events,
+		waitStarted: oldWaitStarted,
+		waitUntil:   oldExited,
+	}
 	replacement := &fakeUpdateProcess{pid: 85, label: "replacement", events: &events}
+	type replacementStart struct {
+		executable string
+		args       []string
+	}
+	replacementStarted := make(chan replacementStart, 1)
 	protocol := defaultWindowsUpdateProtocol()
 	protocol.currentPID = func() int { return 84 }
 	protocol.executable = func() (string, error) { return state.Backup, nil }
@@ -197,24 +218,7 @@ func TestWindowsHelperWaitsForOldExitAndPreservesOriginalArguments(t *testing.T)
 	}
 	protocol.startProcess = func(executable string, args []string) (updateProcess, error) {
 		events = append(events, "start-replacement")
-		if executable != state.Canonical {
-			t.Fatalf("replacement executable = %q, want %q", executable, state.Canonical)
-		}
-		want := []string{windowsUpdateChildMode, statePath, state.Nonce, string(windowsReplacementAttempt), "84"}
-		if !reflect.DeepEqual(args, want) {
-			t.Fatalf("replacement args = %#v, want %#v", args, want)
-		}
-		helperPID, err := strconv.Atoi(args[4])
-		if err != nil {
-			t.Fatal(err)
-		}
-		child, err := loadWindowsUpdateChild(args[1], args[2], windowsUpdateAttempt(args[3]), helperPID, executable)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if !reflect.DeepEqual(child.originalArgs, originalArgs) {
-			t.Fatalf("restored args = %#v, want %#v", child.originalArgs, originalArgs)
-		}
+		replacementStarted <- replacementStart{executable: executable, args: append([]string(nil), args...)}
 		return replacement, nil
 	}
 	protocol.pollCondition = func(_ time.Duration, check func() (bool, error)) (bool, error) {
@@ -223,13 +227,57 @@ func TestWindowsHelperWaitsForOldExitAndPreservesOriginalArguments(t *testing.T)
 			return done, err
 		}
 		if err := writeWindowsUpdateMarker(windowsUpdateReadyPath(statePath, windowsReplacementAttempt), state.Nonce, windowsUpdateReadyMarker); err != nil {
-			t.Fatal(err)
+			return false, err
 		}
 		return check()
 	}
 
-	if err := runWindowsUpdateHelper(statePath, state.Nonce, protocol); err != nil {
+	helperDone := make(chan error, 1)
+	go func() {
+		helperDone <- runWindowsUpdateHelper(statePath, state.Nonce, protocol)
+	}()
+	select {
+	case <-oldWaitStarted:
+	case <-time.After(time.Second):
+		t.Fatal("helper did not begin waiting for the old process")
+	}
+	select {
+	case call := <-replacementStarted:
+		t.Fatalf("replacement started before old exit: %#v", call)
+	default:
+	}
+	close(oldExited)
+	var call replacementStart
+	select {
+	case call = <-replacementStarted:
+	case <-time.After(time.Second):
+		t.Fatal("replacement did not start after old exit")
+	}
+	if call.executable != state.Canonical {
+		t.Fatalf("replacement executable = %q, want %q", call.executable, state.Canonical)
+	}
+	want := []string{windowsUpdateChildMode, statePath, state.Nonce, string(windowsReplacementAttempt), "84"}
+	if !reflect.DeepEqual(call.args, want) {
+		t.Fatalf("replacement args = %#v, want %#v", call.args, want)
+	}
+	helperPID, err := strconv.Atoi(call.args[4])
+	if err != nil {
 		t.Fatal(err)
+	}
+	child, err := loadWindowsUpdateChild(call.args[1], call.args[2], windowsUpdateAttempt(call.args[3]), helperPID, call.executable)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(child.originalArgs, originalArgs) {
+		t.Fatalf("restored args = %#v, want %#v", child.originalArgs, originalArgs)
+	}
+	select {
+	case err := <-helperDone:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("helper did not finish after replacement readiness")
 	}
 	wantEvents := []string{"old:wait", "start-replacement", "replacement:release"}
 	if !reflect.DeepEqual(events, wantEvents) {
@@ -469,10 +517,234 @@ func TestFinishedWindowsChildWaitsForHelperThenCleansRecoveryMaterial(t *testing
 		statePath,
 		windowsUpdateAckPath(statePath),
 		windowsUpdateReadyPath(statePath, windowsReplacementAttempt),
+		windowsUpdateCompletionPath(statePath),
 	} {
 		if _, err := os.Stat(path); !os.IsNotExist(err) {
 			t.Fatalf("update recovery material remains at %q: %v", path, err)
 		}
+	}
+}
+
+func TestFinishedWindowsChildPublishesCompletionAfterHelperWait(t *testing.T) {
+	state, statePath := writeTestWindowsState(t, []string{"-port", "34400"})
+	if err := os.Mkdir(state.Backup, 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(state.Backup, "retain"), []byte("known good"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	helper := &fakeUpdateProcess{pid: 84, label: "helper"}
+
+	if err := finishWindowsUpdateChild(state, statePath, helper); err == nil {
+		t.Fatal("injected cleanup failure returned success")
+	}
+	completePath := windowsUpdateCompletionPath(statePath)
+	if complete, err := windowsUpdateMarkerExists(completePath, state.Nonce, windowsUpdateCompleteMarker); err != nil {
+		t.Fatal(err)
+	} else if !complete {
+		t.Fatal("successful helper wait did not publish terminal completion before cleanup")
+	}
+	helper.assertOwnedExactlyOnce(t)
+}
+
+func TestHelperWaitTimeoutDoesNotAuthorizeDeferredCleanup(t *testing.T) {
+	state, statePath := writeTestWindowsState(t, []string{"-port", "34400"})
+	for path, body := range map[string]string{
+		state.Canonical: "replacement",
+		state.Backup:    "known good",
+	} {
+		if err := os.WriteFile(path, []byte(body), 0755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := writeWindowsUpdateMarker(windowsUpdateAckPath(statePath), state.Nonce, windowsUpdateAckMarker); err != nil {
+		t.Fatal(err)
+	}
+	readyPath := windowsUpdateReadyPath(statePath, windowsReplacementAttempt)
+	if err := writeWindowsUpdateMarker(readyPath, state.Nonce, windowsUpdateReadyMarker); err != nil {
+		t.Fatal(err)
+	}
+	helper := &fakeUpdateProcess{pid: 84, label: "helper", waitErr: errWindowsUpdateTimeout}
+
+	if err := finishWindowsUpdateChild(state, statePath, helper); err == nil {
+		t.Fatal("helper wait timeout was accepted as terminal completion")
+	}
+	completePath := windowsUpdateCompletionPath(statePath)
+	if complete, err := windowsUpdateMarkerExists(completePath, state.Nonce, windowsUpdateCompleteMarker); err != nil {
+		t.Fatal(err)
+	} else if complete {
+		t.Fatal("completion marker was published before helper exit was confirmed")
+	}
+	if err := retryCompletedWindowsUpdateCleanupForExecutable(state.Canonical); err != nil {
+		t.Fatal(err)
+	}
+	for _, path := range []string{
+		state.Canonical,
+		state.Backup,
+		statePath,
+		windowsUpdateAckPath(statePath),
+		readyPath,
+	} {
+		if _, err := os.Stat(path); err != nil {
+			t.Fatalf("recovery material %q was removed without terminal completion: %v", path, err)
+		}
+	}
+	helper.assertOwnedExactlyOnce(t)
+}
+
+func TestWindowsUpdateMarkerPublicationIsAbsentUntilComplete(t *testing.T) {
+	directory := t.TempDir()
+	path := filepath.Join(directory, "marker.ack")
+	nonce := strings.Repeat("ab", windowsUpdateNonceBytes)
+	prePublication := make(chan struct{})
+	allowPublication := make(chan struct{})
+	ops := defaultWindowsUpdateMarkerOps()
+	ops.beforePublish = func() {
+		close(prePublication)
+		<-allowPublication
+	}
+	writeDone := make(chan error, 1)
+	go func() {
+		writeDone <- writeWindowsUpdateMarkerWithOps(path, nonce, windowsUpdateAckMarker, ops)
+	}()
+
+	select {
+	case <-prePublication:
+	case <-time.After(time.Second):
+		t.Fatal("marker writer did not reach the pre-publication barrier")
+	}
+	if exists, err := windowsUpdateMarkerExists(path, nonce, windowsUpdateAckMarker); err != nil {
+		t.Fatal(err)
+	} else if exists {
+		t.Fatal("final marker path was visible before publication")
+	}
+	close(allowPublication)
+	select {
+	case err := <-writeDone:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("marker publication did not finish")
+	}
+	if exists, err := windowsUpdateMarkerExists(path, nonce, windowsUpdateAckMarker); err != nil {
+		t.Fatal(err)
+	} else if !exists {
+		t.Fatal("published marker was not complete")
+	}
+	temporary, err := filepath.Glob(filepath.Join(directory, ".marker.ack.tmp-*"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(temporary) != 0 {
+		t.Fatalf("temporary marker files remain after publication: %#v", temporary)
+	}
+}
+
+func TestWindowsUpdateMarkerPublicationFailureNeverAdvancesProtocol(t *testing.T) {
+	nonce := strings.Repeat("ab", windowsUpdateNonceBytes)
+	failure := errors.New("injected marker publication failure")
+	tests := []struct {
+		name   string
+		mutate func(*windowsUpdateMarkerOps)
+	}{
+		{
+			name: "close",
+			mutate: func(ops *windowsUpdateMarkerOps) {
+				ops.closeFile = func(file *os.File) error {
+					if err := file.Close(); err != nil {
+						return err
+					}
+					return failure
+				}
+			},
+		},
+		{
+			name: "publish",
+			mutate: func(ops *windowsUpdateMarkerOps) {
+				ops.publish = func(string, string) error { return failure }
+			},
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			directory := t.TempDir()
+			path := filepath.Join(directory, "marker.ready")
+			ops := defaultWindowsUpdateMarkerOps()
+			test.mutate(&ops)
+			if err := writeWindowsUpdateMarkerWithOps(path, nonce, windowsUpdateReadyMarker, ops); !errors.Is(err, failure) {
+				t.Fatalf("write error = %v, want injected failure", err)
+			}
+			if exists, err := windowsUpdateMarkerExists(path, nonce, windowsUpdateReadyMarker); err != nil {
+				t.Fatal(err)
+			} else if exists {
+				t.Fatal("protocol advanced after incomplete marker publication")
+			}
+			temporary, err := filepath.Glob(filepath.Join(directory, ".marker.ready.tmp-*"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(temporary) != 0 {
+				t.Fatalf("temporary marker files remain after failure: %#v", temporary)
+			}
+		})
+	}
+}
+
+func TestWindowsUpdateMarkerPublicationNeverReplacesExistingMarker(t *testing.T) {
+	directory := t.TempDir()
+	path := filepath.Join(directory, "marker.ack")
+	firstNonce := strings.Repeat("ab", windowsUpdateNonceBytes)
+	secondNonce := strings.Repeat("cd", windowsUpdateNonceBytes)
+	if err := writeWindowsUpdateMarker(path, firstNonce, windowsUpdateAckMarker); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeWindowsUpdateMarker(path, secondNonce, windowsUpdateAckMarker); err == nil {
+		t.Fatal("second publisher replaced an existing marker")
+	}
+	if exists, err := windowsUpdateMarkerExists(path, firstNonce, windowsUpdateAckMarker); err != nil {
+		t.Fatal(err)
+	} else if !exists {
+		t.Fatal("first publisher's complete marker was replaced")
+	}
+}
+
+func TestDeferredWindowsUpdateCleanupDiscoversStateCaseInsensitively(t *testing.T) {
+	state, statePath := writeTestWindowsState(t, []string{"-port", "34400"})
+	for path, body := range map[string]string{
+		state.Canonical: "replacement",
+		state.Backup:    "known good",
+	} {
+		if err := os.WriteFile(path, []byte(body), 0755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	casedStatePath := filepath.Join(
+		filepath.Dir(statePath),
+		"tHrEaDfIn.ExE.UpDaTe-"+state.Nonce+".JsOn",
+	)
+	if err := os.Rename(statePath, casedStatePath); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeWindowsUpdateMarker(windowsUpdateCompletionPath(casedStatePath), state.Nonce, windowsUpdateCompleteMarker); err != nil {
+		t.Fatal(err)
+	}
+	casedExecutable := filepath.Join(filepath.Dir(state.Canonical), "THREADFIN.EXE")
+
+	if err := retryCompletedWindowsUpdateCleanupForExecutable(casedExecutable); err != nil {
+		t.Fatal(err)
+	}
+	for _, path := range []string{
+		state.Backup,
+		casedStatePath,
+		windowsUpdateCompletionPath(casedStatePath),
+	} {
+		if _, err := os.Stat(path); !os.IsNotExist(err) {
+			t.Fatalf("case-insensitive cleanup left %q: %v", path, err)
+		}
+	}
+	if _, err := os.Stat(state.Canonical); err != nil {
+		t.Fatalf("canonical executable was removed: %v", err)
 	}
 }
 

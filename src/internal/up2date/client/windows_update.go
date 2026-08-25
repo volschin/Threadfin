@@ -25,8 +25,9 @@ const (
 	windowsUpdateHelperMode = "--threadfin-private-update-helper-v1"
 	windowsUpdateChildMode  = "--threadfin-private-update-child-v1"
 
-	windowsUpdateAckMarker   = "ACK"
-	windowsUpdateReadyMarker = "READY"
+	windowsUpdateAckMarker      = "ACK"
+	windowsUpdateReadyMarker    = "READY"
+	windowsUpdateCompleteMarker = "COMPLETE"
 
 	windowsUpdateAckTimeout      = 10 * time.Second
 	windowsOldProcessExitTimeout = 30 * time.Second
@@ -72,6 +73,12 @@ type windowsUpdateProtocol struct {
 	currentPID    func() int
 	executable    func() (string, error)
 	pollCondition func(time.Duration, func() (bool, error)) (bool, error)
+}
+
+type windowsUpdateMarkerOps struct {
+	closeFile     func(*os.File) error
+	beforePublish func()
+	publish       func(string, string) error
 }
 
 type windowsUpdateChild struct {
@@ -139,6 +146,10 @@ func windowsUpdateReadyPath(statePath string, attempt windowsUpdateAttempt) stri
 	return statePath + "." + string(attempt) + ".ready"
 }
 
+func windowsUpdateCompletionPath(statePath string) string {
+	return statePath + ".complete"
+}
+
 func validateWindowsUpdateState(state windowsUpdateState, statePath, nonce, executable string) error {
 	if state.Version != windowsUpdateStateVersion {
 		return fmt.Errorf("unsupported Windows update state version %d", state.Version)
@@ -190,10 +201,9 @@ func validateWindowsUpdateNonce(nonce string) error {
 }
 
 func sameUpdatePath(left, right string) bool {
-	if runtime.GOOS == "windows" {
-		return strings.EqualFold(left, right)
-	}
-	return left == right
+	// This comparator is only for the Windows update protocol. Keeping its
+	// semantics independent of the test host makes casing regressions testable.
+	return strings.EqualFold(left, right)
 }
 
 func writeWindowsUpdateState(statePath string, state windowsUpdateState) (err error) {
@@ -257,34 +267,52 @@ func readWindowsUpdateState(statePath, nonce, executable string) (windowsUpdateS
 	return state, nil
 }
 
-func writeWindowsUpdateMarker(path, nonce, kind string) (err error) {
+func defaultWindowsUpdateMarkerOps() windowsUpdateMarkerOps {
+	return windowsUpdateMarkerOps{
+		closeFile: func(file *os.File) error { return file.Close() },
+		publish:   os.Link,
+	}
+}
+
+func writeWindowsUpdateMarker(path, nonce, kind string) error {
+	return writeWindowsUpdateMarkerWithOps(path, nonce, kind, defaultWindowsUpdateMarkerOps())
+}
+
+func writeWindowsUpdateMarkerWithOps(path, nonce, kind string, ops windowsUpdateMarkerOps) error {
 	if err := validateWindowsUpdateNonce(nonce); err != nil {
 		return err
 	}
-	if kind != windowsUpdateAckMarker && kind != windowsUpdateReadyMarker {
+	if kind != windowsUpdateAckMarker && kind != windowsUpdateReadyMarker && kind != windowsUpdateCompleteMarker {
 		return errors.New("invalid Windows update marker kind")
 	}
-	file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600)
+	file, err := os.CreateTemp(filepath.Dir(path), "."+filepath.Base(path)+".tmp-*")
 	if err != nil {
-		return fmt.Errorf("create Windows update marker: %w", err)
+		return fmt.Errorf("create temporary Windows update marker: %w", err)
 	}
-	keep := false
+	temporaryPath := file.Name()
+	closed := false
 	defer func() {
-		closeErr := file.Close()
-		if err == nil && closeErr != nil {
-			err = fmt.Errorf("close Windows update marker: %w", closeErr)
+		if !closed {
+			_ = file.Close()
 		}
-		if !keep || err != nil {
-			_ = os.Remove(path)
-		}
+		_ = os.Remove(temporaryPath)
 	}()
-	if _, err = io.WriteString(file, kind+":"+nonce+"\n"); err != nil {
+	if _, err := io.WriteString(file, kind+":"+nonce+"\n"); err != nil {
 		return fmt.Errorf("write Windows update marker: %w", err)
 	}
-	if err = file.Sync(); err != nil {
+	if err := file.Sync(); err != nil {
 		return fmt.Errorf("sync Windows update marker: %w", err)
 	}
-	keep = true
+	if err := ops.closeFile(file); err != nil {
+		return fmt.Errorf("close Windows update marker: %w", err)
+	}
+	closed = true
+	if ops.beforePublish != nil {
+		ops.beforePublish()
+	}
+	if err := ops.publish(temporaryPath, path); err != nil {
+		return fmt.Errorf("publish Windows update marker: %w", err)
+	}
 	return nil
 }
 
@@ -540,6 +568,9 @@ func finishWindowsUpdateChild(state windowsUpdateState, statePath string, helper
 	if err := helper.Wait(windowsHelperExitTimeout); err != nil {
 		return fmt.Errorf("wait for Windows update helper: %w", err)
 	}
+	if err := writeWindowsUpdateMarker(windowsUpdateCompletionPath(statePath), state.Nonce, windowsUpdateCompleteMarker); err != nil {
+		return fmt.Errorf("publish Windows update completion: %w", err)
+	}
 	return cleanupCompletedWindowsUpdate(state, statePath)
 }
 
@@ -559,6 +590,9 @@ func cleanupCompletedWindowsUpdate(state windowsUpdateState, statePath string) e
 	if err := removeFileIfExists(statePath); err != nil {
 		return fmt.Errorf("remove Windows update state: %w", err)
 	}
+	if err := removeFileIfExists(windowsUpdateCompletionPath(statePath)); err != nil {
+		return fmt.Errorf("remove Windows update completion marker: %w", err)
+	}
 	return nil
 }
 
@@ -568,6 +602,7 @@ func removeWindowsUpdateMetadata(statePath string) error {
 		windowsUpdateAckPath(statePath),
 		windowsUpdateReadyPath(statePath, windowsReplacementAttempt),
 		windowsUpdateReadyPath(statePath, windowsRecoveryAttempt),
+		windowsUpdateCompletionPath(statePath),
 		statePath,
 	} {
 		result = errors.Join(result, removeFileIfExists(path))
@@ -733,37 +768,45 @@ func retryCompletedWindowsUpdateCleanup() error {
 	if err != nil {
 		return err
 	}
+	return retryCompletedWindowsUpdateCleanupForExecutable(executable)
+}
+
+func retryCompletedWindowsUpdateCleanupForExecutable(executable string) error {
+	var err error
 	executable, err = filepath.Abs(executable)
 	if err != nil {
 		return err
 	}
 	executable = filepath.Clean(executable)
-	paths, err := filepath.Glob(executable + ".update-*.json")
+	directory := filepath.Dir(executable)
+	entries, err := os.ReadDir(directory)
 	if err != nil {
 		return err
 	}
+	prefix := filepath.Base(executable) + ".update-"
+	suffix := ".json"
 	var result error
-	for _, statePath := range paths {
-		prefix := executable + ".update-"
-		if !strings.HasPrefix(statePath, prefix) || !strings.HasSuffix(statePath, ".json") {
+	for _, entry := range entries {
+		name := entry.Name()
+		if entry.IsDir() || len(name) <= len(prefix)+len(suffix) {
 			continue
 		}
-		nonce := strings.TrimSuffix(strings.TrimPrefix(statePath, prefix), ".json")
+		if !sameUpdatePath(name[:len(prefix)], prefix) || !sameUpdatePath(name[len(name)-len(suffix):], suffix) {
+			continue
+		}
+		nonce := name[len(prefix) : len(name)-len(suffix)]
+		statePath := filepath.Join(directory, name)
 		state, readErr := readWindowsUpdateState(statePath, nonce, executable)
 		if readErr != nil {
 			result = errors.Join(result, readErr)
 			continue
 		}
-		ready := false
-		for _, attempt := range []windowsUpdateAttempt{windowsReplacementAttempt, windowsRecoveryAttempt} {
-			markerReady, markerErr := windowsUpdateMarkerExists(windowsUpdateReadyPath(statePath, attempt), nonce, windowsUpdateReadyMarker)
-			if markerErr != nil {
-				result = errors.Join(result, markerErr)
-				continue
-			}
-			ready = ready || markerReady
+		complete, markerErr := windowsUpdateMarkerExists(windowsUpdateCompletionPath(statePath), nonce, windowsUpdateCompleteMarker)
+		if markerErr != nil {
+			result = errors.Join(result, markerErr)
+			continue
 		}
-		if ready {
+		if complete {
 			result = errors.Join(result, cleanupCompletedWindowsUpdate(state, statePath))
 		}
 	}
