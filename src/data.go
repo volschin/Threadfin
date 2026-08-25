@@ -619,7 +619,10 @@ func saveUserData(request RequestStruct) (err error) {
 
 		if _, ok := newUserData.(map[string]interface{})["delete"]; ok {
 
-			authentication.RemoveUser(userID)
+			err = authentication.RemoveUser(userID)
+			if err != nil {
+				return
+			}
 
 		} else {
 

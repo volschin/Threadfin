@@ -378,10 +378,13 @@ func RemoveUser(userID string) (err error) {
 
 	err = createError(032)
 
-	if _, ok := data["users"].(map[string]interface{})[userID]; ok {
+	if user, ok := data["users"].(map[string]interface{})[userID]; ok {
 
 		delete(data["users"].(map[string]interface{}), userID)
 		err = saveDatabase(data)
+		if err != nil {
+			data["users"].(map[string]interface{})[userID] = user
+		}
 
 		return
 	}

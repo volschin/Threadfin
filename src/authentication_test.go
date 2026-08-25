@@ -35,3 +35,30 @@ func TestCheckAuthorizationLevelPreservesUserDataPersistenceError(t *testing.T) 
 		t.Fatalf("checkAuthorizationLevel() error = %v, want persistence path error", err)
 	}
 }
+
+func TestSaveUserDataPreservesRemoveUserPersistenceError(t *testing.T) {
+	root := t.TempDir()
+	if err := authentication.Init(filepath.Join(root, "config"), 60); err != nil {
+		t.Fatal(err)
+	}
+	userID, err := authentication.CreateNewUser("remove-user", "password")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := os.RemoveAll(root); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(root, []byte("not a directory"), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	request := RequestStruct{UserData: map[string]interface{}{
+		userID: map[string]interface{}{"delete": true},
+	}}
+	err = saveUserData(request)
+	var pathErr *os.PathError
+	if !errors.As(err, &pathErr) {
+		t.Fatalf("saveUserData() error = %v, want persistence path error", err)
+	}
+}

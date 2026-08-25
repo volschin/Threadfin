@@ -80,6 +80,24 @@ func TestGetAllUserDataReturnsInitializationPersistenceError(t *testing.T) {
 	}
 }
 
+func TestRemoveUserRollsBackPersistenceFailure(t *testing.T) {
+	initAuthenticationTest(t)
+	userID, err := CreateNewUser("remove-user", "password")
+	if err != nil {
+		t.Fatal(err)
+	}
+	database = filepath.Join(t.TempDir(), "missing-directory", databaseFile)
+
+	err = RemoveUser(userID)
+	var pathErr *os.PathError
+	if !errors.As(err, &pathErr) {
+		t.Fatalf("RemoveUser() error = %v, want persistence path error", err)
+	}
+	if _, ok := data["users"].(map[string]interface{})[userID]; !ok {
+		t.Fatal("RemoveUser() discarded user from memory after persistence failure")
+	}
+}
+
 func TestSuccessfulLegacyLoginMigratesPasswordAndPersists(t *testing.T) {
 	databasePath := initAuthenticationTest(t)
 	userID, err := CreateNewUser("legacy-user", "temporary")
