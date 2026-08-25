@@ -7,6 +7,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"time"
 
 	up2date "threadfin/src/internal/up2date/client"
 
@@ -71,6 +72,50 @@ func officialUpdateAssetName(goos, goarch string) string {
 	return name
 }
 
+const windowsUpdateLocalStartupBudget = up2date.MinimumWindowsUpdateReadinessTimeout
+
+// windowsUpdateReadinessBudget retains the bounded local initialization
+// allowance and adds the configured maximum duration of every remote provider
+// request StartSystem executes sequentially before listener acquisition.
+func windowsUpdateReadinessBudget(settings SettingsStruct) time.Duration {
+	budget := windowsUpdateLocalStartupBudget
+	if !settings.FilesUpdate || len(settings.Files.M3U) == 0 {
+		return budget
+	}
+	remoteRequests := remoteWindowsStartupProviderCount(settings.Files.M3U, false)
+	remoteRequests += remoteWindowsStartupProviderCount(settings.Files.HDHR, true)
+	if settings.EpgSource == "XEPG" {
+		remoteRequests += remoteWindowsStartupProviderCount(settings.Files.XMLTV, false)
+	}
+	requestTimeout := configuredProviderRequestTimeout(settings.BufferTimeout)
+	const maximumBudget = time.Duration(1<<63 - 1)
+	for range remoteRequests {
+		if requestTimeout > maximumBudget-budget {
+			return maximumBudget
+		}
+		budget += requestTimeout
+	}
+	return budget
+}
+
+func remoteWindowsStartupProviderCount(providers map[string]interface{}, alwaysRemote bool) int {
+	if alwaysRemote {
+		return len(providers)
+	}
+	count := 0
+	for _, value := range providers {
+		provider, ok := value.(map[string]interface{})
+		if !ok {
+			continue
+		}
+		source, ok := provider["file.source"].(string)
+		if ok && isRemoteProviderSource(source) {
+			count++
+		}
+	}
+	return count
+}
+
 // BinaryUpdate : Binary Update Prozess. Git Branch master und beta wird von GitHub geladen.
 func BinaryUpdate() (err error) {
 
@@ -89,6 +134,7 @@ func BinaryUpdate() (err error) {
 	var updater = &up2date.Updater
 	updater.Name = System.Update.Name
 	updater.Branch = System.Branch
+	updater.WindowsUpdateReadinessTimeout = windowsUpdateReadinessBudget(Settings)
 
 	up2date.Init()
 

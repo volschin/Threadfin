@@ -15,12 +15,13 @@ import (
 
 // ClientInfo : Information about the key (NAME OS, ARCH, UUID, KEY)
 type ClientInfo struct {
-	Arch   string `json:"arch,required"`
-	Branch string `json:"branch,required"`
-	CMD    string `json:"cmd,omitempty"`
-	Name   string `json:"name,required"`
-	OS     string `json:"os,required"`
-	URL    string `json:"url,required"`
+	Arch                          string        `json:"arch,required"`
+	Branch                        string        `json:"branch,required"`
+	CMD                           string        `json:"cmd,omitempty"`
+	Name                          string        `json:"name,required"`
+	OS                            string        `json:"os,required"`
+	URL                           string        `json:"url,required"`
+	WindowsUpdateReadinessTimeout time.Duration `json:"-"`
 
 	Response ServerResponse `json:"response,omitempty"`
 }

@@ -18,6 +18,10 @@ import (
 )
 
 const (
+	// MinimumWindowsUpdateReadinessTimeout is the bounded allowance for local
+	// initialization after configured sequential provider waits are added.
+	MinimumWindowsUpdateReadinessTimeout = 2 * time.Minute
+
 	windowsUpdateStateVersion = 1
 	windowsUpdateNonceBytes   = 32
 	windowsUpdateStateLimit   = 128 << 10
@@ -29,12 +33,13 @@ const (
 	windowsUpdateReadyMarker    = "READY"
 	windowsUpdateCompleteMarker = "COMPLETE"
 
-	windowsUpdateAckTimeout      = 10 * time.Second
-	windowsOldProcessExitTimeout = 30 * time.Second
-	windowsChildReadinessTimeout = 2 * time.Minute
-	windowsProcessStopTimeout    = 10 * time.Second
-	windowsHelperExitTimeout     = 30 * time.Second
-	windowsUpdatePollInterval    = 50 * time.Millisecond
+	windowsUpdateAckTimeout       = 10 * time.Second
+	windowsOldProcessExitTimeout  = 30 * time.Second
+	windowsChildReadinessTimeout  = MinimumWindowsUpdateReadinessTimeout
+	windowsProcessStopTimeout     = 10 * time.Second
+	windowsHelperExitTimeout      = 30 * time.Second
+	windowsUpdatePollInterval     = 50 * time.Millisecond
+	windowsCompletionRetryTimeout = time.Second
 )
 
 var (
@@ -51,12 +56,13 @@ const (
 )
 
 type windowsUpdateState struct {
-	Version   int      `json:"version"`
-	Nonce     string   `json:"nonce"`
-	Canonical string   `json:"canonical"`
-	Backup    string   `json:"backup"`
-	Args      []string `json:"args"`
-	OldPID    int      `json:"old_pid"`
+	Version          int           `json:"version"`
+	Nonce            string        `json:"nonce"`
+	Canonical        string        `json:"canonical"`
+	Backup           string        `json:"backup"`
+	Args             []string      `json:"args"`
+	OldPID           int           `json:"old_pid"`
+	ReadinessTimeout time.Duration `json:"readiness_timeout,omitempty"`
 }
 
 type updateProcess interface {
@@ -68,11 +74,13 @@ type updateProcess interface {
 }
 
 type windowsUpdateProtocol struct {
-	startProcess  func(string, []string) (updateProcess, error)
-	findProcess   func(int) (updateProcess, error)
-	currentPID    func() int
-	executable    func() (string, error)
-	pollCondition func(time.Duration, func() (bool, error)) (bool, error)
+	startProcess     func(string, []string) (updateProcess, error)
+	findProcess      func(int) (updateProcess, error)
+	currentPID       func() int
+	executable       func() (string, error)
+	pollCondition    func(time.Duration, func() (bool, error)) (bool, error)
+	readinessTimeout time.Duration
+	writeMarker      func(string, string, string) error
 }
 
 type windowsUpdateMarkerOps struct {
@@ -105,27 +113,30 @@ var activeWindowsUpdateChild struct {
 
 func defaultWindowsUpdateProtocol() windowsUpdateProtocol {
 	return windowsUpdateProtocol{
-		startProcess:  startOSUpdateProcess,
-		findProcess:   findOSUpdateProcess,
-		currentPID:    os.Getpid,
-		executable:    os.Executable,
-		pollCondition: pollWindowsUpdateCondition,
+		startProcess:     startOSUpdateProcess,
+		findProcess:      findOSUpdateProcess,
+		currentPID:       os.Getpid,
+		executable:       os.Executable,
+		pollCondition:    pollWindowsUpdateCondition,
+		readinessTimeout: normalizedWindowsUpdateReadinessTimeout(Updater.WindowsUpdateReadinessTimeout),
+		writeMarker:      writeWindowsUpdateMarker,
 	}
 }
 
-func newWindowsUpdateState(canonical, backup string, args []string, oldPID int) (windowsUpdateState, string, error) {
+func newWindowsUpdateState(canonical, backup string, args []string, oldPID int, readinessTimeout time.Duration) (windowsUpdateState, string, error) {
 	nonceBytes := make([]byte, windowsUpdateNonceBytes)
 	if _, err := rand.Read(nonceBytes); err != nil {
 		return windowsUpdateState{}, "", fmt.Errorf("generate update nonce: %w", err)
 	}
 	nonce := hex.EncodeToString(nonceBytes)
 	state := windowsUpdateState{
-		Version:   windowsUpdateStateVersion,
-		Nonce:     nonce,
-		Canonical: filepath.Clean(canonical),
-		Backup:    filepath.Clean(backup),
-		Args:      append([]string{}, args...),
-		OldPID:    oldPID,
+		Version:          windowsUpdateStateVersion,
+		Nonce:            nonce,
+		Canonical:        filepath.Clean(canonical),
+		Backup:           filepath.Clean(backup),
+		Args:             append([]string{}, args...),
+		OldPID:           oldPID,
+		ReadinessTimeout: normalizedWindowsUpdateReadinessTimeout(readinessTimeout),
 	}
 	statePath := windowsUpdateStatePath(state.Canonical, nonce)
 	if err := validateWindowsUpdateState(state, statePath, nonce, state.Backup); err != nil {
@@ -186,7 +197,18 @@ func validateWindowsUpdateState(state windowsUpdateState, statePath, nonce, exec
 	if state.Args == nil {
 		return errors.New("Windows update state has no original argument vector")
 	}
+	if state.ReadinessTimeout != 0 && state.ReadinessTimeout < windowsChildReadinessTimeout {
+		return errors.New("Windows update readiness budget is below the protocol minimum")
+	}
 	return nil
+}
+
+func normalizedWindowsUpdateReadinessTimeout(timeout time.Duration) time.Duration {
+	// A zero value keeps state written by the first helper protocol readable.
+	if timeout < windowsChildReadinessTimeout {
+		return windowsChildReadinessTimeout
+	}
+	return timeout
 }
 
 func validateWindowsUpdateNonce(nonce string) error {
@@ -367,7 +389,7 @@ func beginWindowsHandoff(canonical, backup string, originalArgs []string, cleanu
 	if err := cleanup(); err != nil {
 		return restoreAfterUpdateFailure(fmt.Errorf("clean temporary update material: %w", err), backup, canonical)
 	}
-	state, statePath, err := newWindowsUpdateState(canonical, backup, originalArgs, protocol.currentPID())
+	state, statePath, err := newWindowsUpdateState(canonical, backup, originalArgs, protocol.currentPID(), protocol.readinessTimeout)
 	if err != nil {
 		return restoreAfterUpdateFailure(err, backup, canonical)
 	}
@@ -488,7 +510,7 @@ func runWindowsUpdateAttempt(state windowsUpdateState, statePath string, attempt
 func awaitWindowsUpdateReadiness(child updateProcess, state windowsUpdateState, statePath string, attempt windowsUpdateAttempt, protocol windowsUpdateProtocol) error {
 	childExited := false
 	ready := false
-	done, pollErr := protocol.pollCondition(windowsChildReadinessTimeout, func() (bool, error) {
+	done, pollErr := protocol.pollCondition(normalizedWindowsUpdateReadinessTimeout(state.ReadinessTimeout), func() (bool, error) {
 		var err error
 		ready, err = windowsUpdateMarkerExists(windowsUpdateReadyPath(statePath, attempt), state.Nonce, windowsUpdateReadyMarker)
 		if err != nil {
@@ -564,14 +586,37 @@ func validateWindowsUpdateAttempt(attempt windowsUpdateAttempt) error {
 	return nil
 }
 
-func finishWindowsUpdateChild(state windowsUpdateState, statePath string, helper updateProcess) error {
+func finishWindowsUpdateChild(state windowsUpdateState, statePath string, helper updateProcess, protocol windowsUpdateProtocol) error {
 	if err := helper.Wait(windowsHelperExitTimeout); err != nil {
 		return fmt.Errorf("wait for Windows update helper: %w", err)
 	}
-	if err := writeWindowsUpdateMarker(windowsUpdateCompletionPath(statePath), state.Nonce, windowsUpdateCompleteMarker); err != nil {
+	if err := publishWindowsUpdateCompletion(statePath, state.Nonce, protocol); err != nil {
 		return fmt.Errorf("publish Windows update completion: %w", err)
 	}
 	return cleanupCompletedWindowsUpdate(state, statePath)
+}
+
+func publishWindowsUpdateCompletion(statePath, nonce string, protocol windowsUpdateProtocol) error {
+	completionPath := windowsUpdateCompletionPath(statePath)
+	var lastWriteErr error
+	published, pollErr := protocol.pollCondition(windowsCompletionRetryTimeout, func() (bool, error) {
+		exists, err := windowsUpdateMarkerExists(completionPath, nonce, windowsUpdateCompleteMarker)
+		if err != nil {
+			return false, err
+		}
+		if exists {
+			return true, nil
+		}
+		lastWriteErr = protocol.writeMarker(completionPath, nonce, windowsUpdateCompleteMarker)
+		return lastWriteErr == nil, nil
+	})
+	if pollErr != nil {
+		return errors.Join(pollErr, lastWriteErr)
+	}
+	if !published {
+		return errors.Join(errWindowsUpdateTimeout, lastWriteErr)
+	}
+	return nil
 }
 
 func cleanupCompletedWindowsUpdate(state windowsUpdateState, statePath string) error {
@@ -756,7 +801,7 @@ func signalWindowsUpdateReady() error {
 		return errors.Join(err, helper.Release())
 	}
 	go func() {
-		if err := finishWindowsUpdateChild(child.state, child.statePath, helper); err != nil {
+		if err := finishWindowsUpdateChild(child.state, child.statePath, helper, protocol); err != nil {
 			log.Printf("Windows update cleanup retained recovery material: %v", err)
 		}
 	}()

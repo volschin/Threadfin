@@ -116,6 +116,10 @@ func TestBeginWindowsHandoffAcknowledgesHelperBeforeOwnershipTransfer(t *testing
 	originalArgs := []string{"-config", `C:\Threadfin Data\`, `--literal="quoted value"`}
 	events := []string{}
 	helper := &fakeUpdateProcess{pid: 84, label: "helper", events: &events}
+	slowStartupBudget := 10 * time.Minute
+	previousReadinessTimeout := Updater.WindowsUpdateReadinessTimeout
+	Updater.WindowsUpdateReadinessTimeout = slowStartupBudget
+	t.Cleanup(func() { Updater.WindowsUpdateReadinessTimeout = previousReadinessTimeout })
 	protocol := defaultWindowsUpdateProtocol()
 	protocol.currentPID = func() int { return 41 }
 	protocol.pollCondition = immediateWindowsPoll
@@ -133,6 +137,9 @@ func TestBeginWindowsHandoffAcknowledgesHelperBeforeOwnershipTransfer(t *testing
 		}
 		if !reflect.DeepEqual(state.Args, originalArgs) {
 			t.Fatalf("saved args = %#v, want %#v", state.Args, originalArgs)
+		}
+		if state.ReadinessTimeout != slowStartupBudget {
+			t.Fatalf("saved readiness budget = %v, want %v", state.ReadinessTimeout, slowStartupBudget)
 		}
 		if err := writeWindowsUpdateMarker(windowsUpdateAckPath(args[1]), args[2], windowsUpdateAckMarker); err != nil {
 			t.Fatal(err)
@@ -310,6 +317,27 @@ func TestWindowsReadinessRequiresMarkerWhileLiveChildIsReleased(t *testing.T) {
 	}
 }
 
+func TestWindowsReplacementUsesConfiguredSlowStartupBudget(t *testing.T) {
+	state, statePath := writeTestWindowsState(t, []string{"-port", "34400"})
+	state.ReadinessTimeout = 10 * time.Minute
+	child := &fakeUpdateProcess{pid: 85, label: "replacement"}
+	protocol := defaultWindowsUpdateProtocol()
+	protocol.pollCondition = func(timeout time.Duration, check func() (bool, error)) (bool, error) {
+		if timeout != 10*time.Minute {
+			t.Fatalf("replacement readiness budget = %v, want 10m", timeout)
+		}
+		if err := writeWindowsUpdateMarker(windowsUpdateReadyPath(statePath, windowsReplacementAttempt), state.Nonce, windowsUpdateReadyMarker); err != nil {
+			return false, err
+		}
+		return check()
+	}
+
+	if err := awaitWindowsUpdateReadiness(child, state, statePath, windowsReplacementAttempt, protocol); err != nil {
+		t.Fatal(err)
+	}
+	child.assertOwnedExactlyOnce(t)
+}
+
 func TestWindowsReadinessRejectsExitedChildEvenWithMarker(t *testing.T) {
 	state, statePath := writeTestWindowsState(t, []string{"-port", "34400"})
 	if err := writeWindowsUpdateMarker(windowsUpdateReadyPath(statePath, windowsReplacementAttempt), state.Nonce, windowsUpdateReadyMarker); err != nil {
@@ -445,6 +473,65 @@ func TestWindowsHelperKillsAndWaitsTimedOutReplacementBeforeRecovery(t *testing.
 	recovery.assertOwnedExactlyOnce(t)
 }
 
+func TestWindowsRecoveryUsesConfiguredSlowStartupBudgetAfterRollback(t *testing.T) {
+	state, statePath := writeTestWindowsState(t, []string{"-config", "data"})
+	state.ReadinessTimeout = 10 * time.Minute
+	if err := os.Remove(statePath); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeWindowsUpdateState(statePath, state); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(state.Canonical, []byte("new executable"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(state.Backup, []byte("known good executable"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	oldProcess := &fakeUpdateProcess{pid: state.OldPID, label: "old"}
+	replacement := &fakeUpdateProcess{pid: 85, label: "replacement"}
+	recovery := &fakeUpdateProcess{pid: 86, label: "recovery"}
+	protocol := defaultWindowsUpdateProtocol()
+	protocol.currentPID = func() int { return 84 }
+	protocol.executable = func() (string, error) { return state.Backup, nil }
+	protocol.findProcess = func(int) (updateProcess, error) { return oldProcess, nil }
+	startCalls := 0
+	protocol.startProcess = func(string, []string) (updateProcess, error) {
+		startCalls++
+		if startCalls == 1 {
+			return replacement, nil
+		}
+		return recovery, nil
+	}
+	pollCalls := 0
+	protocol.pollCondition = func(timeout time.Duration, check func() (bool, error)) (bool, error) {
+		pollCalls++
+		if timeout != 10*time.Minute {
+			t.Fatalf("attempt %d readiness budget = %v, want 10m", pollCalls, timeout)
+		}
+		if pollCalls == 1 {
+			return false, nil
+		}
+		if err := writeWindowsUpdateMarker(windowsUpdateReadyPath(statePath, windowsRecoveryAttempt), state.Nonce, windowsUpdateReadyMarker); err != nil {
+			return false, err
+		}
+		return check()
+	}
+
+	if err := runWindowsUpdateHelper(statePath, state.Nonce, protocol); err != nil {
+		t.Fatal(err)
+	}
+	if pollCalls != 2 {
+		t.Fatalf("readiness polls = %d, want replacement and recovery", pollCalls)
+	}
+	if replacement.killCalls != 1 || replacement.waitCalls != 1 {
+		t.Fatalf("replacement lifecycle: Kill=%d Wait=%d", replacement.killCalls, replacement.waitCalls)
+	}
+	oldProcess.assertOwnedExactlyOnce(t)
+	replacement.assertOwnedExactlyOnce(t)
+	recovery.assertOwnedExactlyOnce(t)
+}
+
 func TestWindowsHelperRetainsRecoveryMaterialWhenRestoredReadinessFails(t *testing.T) {
 	state, statePath := writeTestWindowsState(t, []string{"-config", "data"})
 	if err := os.WriteFile(state.Canonical, []byte("new executable"), 0755); err != nil {
@@ -508,7 +595,7 @@ func TestFinishedWindowsChildWaitsForHelperThenCleansRecoveryMaterial(t *testing
 	}
 	help := &fakeUpdateProcess{pid: 84, label: "helper"}
 
-	if err := finishWindowsUpdateChild(state, statePath, help); err != nil {
+	if err := finishWindowsUpdateChild(state, statePath, help, defaultWindowsUpdateProtocol()); err != nil {
 		t.Fatal(err)
 	}
 	help.assertOwnedExactlyOnce(t)
@@ -535,7 +622,7 @@ func TestFinishedWindowsChildPublishesCompletionAfterHelperWait(t *testing.T) {
 	}
 	helper := &fakeUpdateProcess{pid: 84, label: "helper"}
 
-	if err := finishWindowsUpdateChild(state, statePath, helper); err == nil {
+	if err := finishWindowsUpdateChild(state, statePath, helper, defaultWindowsUpdateProtocol()); err == nil {
 		t.Fatal("injected cleanup failure returned success")
 	}
 	completePath := windowsUpdateCompletionPath(statePath)
@@ -566,7 +653,7 @@ func TestHelperWaitTimeoutDoesNotAuthorizeDeferredCleanup(t *testing.T) {
 	}
 	helper := &fakeUpdateProcess{pid: 84, label: "helper", waitErr: errWindowsUpdateTimeout}
 
-	if err := finishWindowsUpdateChild(state, statePath, helper); err == nil {
+	if err := finishWindowsUpdateChild(state, statePath, helper, defaultWindowsUpdateProtocol()); err == nil {
 		t.Fatal("helper wait timeout was accepted as terminal completion")
 	}
 	completePath := windowsUpdateCompletionPath(statePath)
@@ -588,6 +675,40 @@ func TestHelperWaitTimeoutDoesNotAuthorizeDeferredCleanup(t *testing.T) {
 		if _, err := os.Stat(path); err != nil {
 			t.Fatalf("recovery material %q was removed without terminal completion: %v", path, err)
 		}
+	}
+	helper.assertOwnedExactlyOnce(t)
+}
+
+func TestFinishedWindowsChildRetriesFailOnceCompletionPublication(t *testing.T) {
+	state, statePath := writeTestWindowsState(t, []string{"-port", "34400"})
+	for path, body := range map[string]string{
+		state.Canonical: "replacement",
+		state.Backup:    "known good",
+	} {
+		if err := os.WriteFile(path, []byte(body), 0755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	helper := &fakeUpdateProcess{pid: 84, label: "helper"}
+	protocol := defaultWindowsUpdateProtocol()
+	protocol.pollCondition = immediateWindowsPoll
+	publicationAttempts := 0
+	protocol.writeMarker = func(path, nonce, kind string) error {
+		publicationAttempts++
+		if path != windowsUpdateCompletionPath(statePath) || nonce != state.Nonce || kind != windowsUpdateCompleteMarker {
+			return errors.New("completion publication received wrong marker identity")
+		}
+		if publicationAttempts == 1 {
+			return errors.New("injected transient completion failure")
+		}
+		return writeWindowsUpdateMarker(path, nonce, kind)
+	}
+
+	if err := finishWindowsUpdateChild(state, statePath, helper, protocol); err != nil {
+		t.Fatal(err)
+	}
+	if publicationAttempts != 2 {
+		t.Fatalf("completion publication attempts = %d, want 2", publicationAttempts)
 	}
 	helper.assertOwnedExactlyOnce(t)
 }
@@ -790,6 +911,12 @@ func TestWindowsUpdateStateRejectsInvalidPathAndNonceRelationships(t *testing.T)
 			name: "wrong executable generation",
 			mutate: func(_ *windowsUpdateState, _, _, executable *string) {
 				*executable = filepath.Join(filepath.Dir(*executable), "attacker.exe")
+			},
+		},
+		{
+			name: "readiness budget below protocol minimum",
+			mutate: func(candidate *windowsUpdateState, _, _, _ *string) {
+				candidate.ReadinessTimeout = time.Second
 			},
 		},
 	}

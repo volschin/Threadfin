@@ -1,6 +1,9 @@
 package src
 
-import "testing"
+import (
+	"testing"
+	"time"
+)
 
 func TestOfficialUpdateAssetNameMatchesReleaseTargets(t *testing.T) {
 	tests := []struct {
@@ -24,5 +27,27 @@ func TestOfficialUpdateAssetNameMatchesReleaseTargets(t *testing.T) {
 				t.Fatalf("official update asset = %q, want %q", got, test.want)
 			}
 		})
+	}
+}
+
+func TestWindowsUpdateReadinessBudgetIncludesSequentialConfiguredProviderTimeouts(t *testing.T) {
+	var settings SettingsStruct
+	settings.BufferTimeout = 500
+	settings.FilesUpdate = true
+	settings.EpgSource = "XEPG"
+	settings.Files.M3U = map[string]interface{}{
+		"remote": map[string]interface{}{"file.source": "https://example.test/playlist.m3u"},
+		"local":  map[string]interface{}{"file.source": `/srv/threadfin/playlist.m3u`},
+	}
+	settings.Files.HDHR = map[string]interface{}{
+		"tuner": map[string]interface{}{"file.source": "192.0.2.10"},
+	}
+	settings.Files.XMLTV = map[string]interface{}{
+		"remote": map[string]interface{}{"file.source": "https://example.test/guide.xml"},
+		"local":  map[string]interface{}{"file.source": `/srv/threadfin/guide.xml`},
+	}
+
+	if got, want := windowsUpdateReadinessBudget(settings), 27*time.Minute; got != want {
+		t.Fatalf("Windows update readiness budget = %v, want %v", got, want)
 	}
 }

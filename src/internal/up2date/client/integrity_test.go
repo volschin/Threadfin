@@ -7,6 +7,7 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -16,6 +17,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 )
 
 const oversizedArtifactBytes int64 = 16<<20 + 1
@@ -27,6 +29,19 @@ func (repeatingByteReader) Read(p []byte) (int, error) {
 		p[i] = 'x'
 	}
 	return len(p), nil
+}
+
+func TestClientInfoKeepsWindowsReadinessBudgetOutOfCustomServerPayload(t *testing.T) {
+	payload, err := json.Marshal(ClientInfo{
+		Name:                          "Threadfin",
+		WindowsUpdateReadinessTimeout: 10 * time.Minute,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(payload), "readiness") || strings.Contains(string(payload), "600000000000") {
+		t.Fatalf("custom update payload exposed local readiness budget: %s", payload)
+	}
 }
 
 func signedUpdateServer(t *testing.T, artifact []byte, checksum []byte, signature []byte) *httptest.Server {
