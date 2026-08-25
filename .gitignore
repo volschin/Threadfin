@@ -3,3 +3,4 @@ threadfin
 .DS_Store
 threadfin.exe
 .idea/**
+.worktrees/
