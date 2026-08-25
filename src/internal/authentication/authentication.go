@@ -251,13 +251,18 @@ func UserAuthentication(username, password string) (token string, err error) {
 
 	var users = data["users"].(map[string]interface{})
 	for id, loginData := range users {
-		err = login(username, password, loginData.(map[string]interface{}))
-		if err == nil {
+		user := loginData.(map[string]interface{})
+		if SHA256(username, user["_salt"].(string)) == user["_username"].(string) {
+			err = login(username, password, user)
+			if err != nil {
+				return
+			}
 			token = setToken(id, "-")
 			return
 		}
 	}
 
+	err = createError(010)
 	return
 }
 

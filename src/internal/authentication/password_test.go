@@ -2,6 +2,8 @@ package authentication
 
 import (
 	"bytes"
+	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -102,6 +104,41 @@ func TestLegacyMigrationSaveFailureDoesNotIssueToken(t *testing.T) {
 	token, err := UserAuthentication("legacy-user", "legacy-password")
 	if err == nil || token != "" {
 		t.Fatalf("migration persistence failure returned token %q and error %v", token, err)
+	}
+	if user["_password"] != legacy {
+		t.Fatal("failed migration changed the in-memory legacy verifier")
+	}
+}
+
+func TestLegacyMigrationSaveFailureWithMultipleUsersReturnsPersistenceError(t *testing.T) {
+	initAuthenticationTest(t)
+	userID, err := CreateNewUser("legacy-user", "temporary")
+	if err != nil {
+		t.Fatal(err)
+	}
+	user := data["users"].(map[string]interface{})[userID].(map[string]interface{})
+	legacy := SHA256("legacy-password", user["_salt"].(string))
+	user["_password"] = legacy
+
+	users := data["users"].(map[string]interface{})
+	for i := 0; i < 1024; i++ {
+		otherUser := make(map[string]interface{}, len(user))
+		for key, value := range user {
+			otherUser[key] = value
+		}
+		otherUser["_id"] = fmt.Sprintf("other-user-%d", i)
+		otherUser["_username"] = SHA256("other-user", user["_salt"].(string))
+		users[otherUser["_id"].(string)] = otherUser
+	}
+	database = filepath.Join(t.TempDir(), "missing-directory", databaseFile)
+
+	token, err := UserAuthentication("legacy-user", "legacy-password")
+	if token != "" {
+		t.Fatalf("migration persistence failure returned token %q", token)
+	}
+	var pathErr *os.PathError
+	if !errors.As(err, &pathErr) {
+		t.Fatalf("migration persistence failure returned %v, want filesystem persistence error", err)
 	}
 	if user["_password"] != legacy {
 		t.Fatal("failed migration changed the in-memory legacy verifier")
