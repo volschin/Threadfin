@@ -3,8 +3,11 @@ package src
 import (
 	"os"
 	"os/exec"
+	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/avfs/avfs/vfs/memfs"
 )
 
 func TestTerminateProcessKillsAndReapsChild(t *testing.T) {
@@ -24,5 +27,16 @@ func TestTerminateProcessKillsAndReapsChild(t *testing.T) {
 	}
 	if cmd.ProcessState == nil {
 		t.Fatal("terminateProcess() did not reap the child process")
+	}
+}
+
+func TestCreateBufferFileReturnsCreateError(t *testing.T) {
+	previousVFS := bufferVFS
+	bufferVFS = memfs.New()
+	t.Cleanup(func() { bufferVFS = previousVFS })
+
+	err := createBufferFile(filepath.Join("missing", "segment.ts"))
+	if err == nil {
+		t.Fatal("createBufferFile() error = nil, want missing-directory error")
 	}
 }
