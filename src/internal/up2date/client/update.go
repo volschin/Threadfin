@@ -15,7 +15,10 @@ import (
 	"time"
 )
 
-var updateHTTPClient = &http.Client{Timeout: 2 * time.Minute}
+var (
+	updateHTTPClient  = &http.Client{Timeout: 2 * time.Minute}
+	chmodUpdateBinary = os.Chmod
+)
 
 // DoUpdate : Update binary
 func DoUpdate(fileType, filenameBIN string) (err error) {
@@ -53,16 +56,7 @@ func DoUpdate(fileType, filenameBIN string) (err error) {
 
 		filename := getFilenameFromPath(binary)
 		oldBinary := path + "_old_" + filename
-		_ = os.Remove(oldBinary)
-		if err := os.Rename(binary, oldBinary); err != nil {
-			return err
-		}
-		if err := copyFile(candidate, binary); err != nil {
-			restorOldBinary(oldBinary, binary)
-			return err
-		}
-		if err := os.Chmod(binary, 0755); err != nil {
-			restorOldBinary(oldBinary, binary)
+		if err := replacePreparedUpdate(candidate, binary, oldBinary); err != nil {
 			return err
 		}
 
@@ -70,37 +64,11 @@ func DoUpdate(fileType, filenameBIN string) (err error) {
 
 		// Restart binary (Windows)
 		if runtime.GOOS == "windows" {
-
-			bin, err := os.Executable()
-
-			if err != nil {
-				restorOldBinary(oldBinary, binary)
-				return err
-			}
-
-			var pid = os.Getpid()
-			var process, _ = os.FindProcess(pid)
-
-			if proc, err := start(bin); err == nil {
-
-				os.RemoveAll(oldBinary)
-				process.Kill()
-				proc.Wait()
-
-			} else {
-				restorOldBinary(oldBinary, binary)
-			}
-
-		} else {
-
-			// Restart binary (Linux and UNIX)
-			err = syscall.Exec(binary, os.Args, os.Environ())
-			if err != nil {
-				restorOldBinary(oldBinary, binary)
-				return err
-			}
-
+			return restartWindows(binary, oldBinary, start)
 		}
+
+		// Restart binary (Linux and UNIX)
+		return restartUnix(binary, oldBinary, cleanup, syscall.Exec)
 
 	}
 
@@ -124,9 +92,58 @@ func start(args ...string) (p *os.Process, err error) {
 	return nil, err
 }
 
-func restorOldBinary(oldBinary, newBinary string) {
-	os.RemoveAll(newBinary)
-	os.Rename(oldBinary, newBinary)
+func replacePreparedUpdate(candidate, binary, oldBinary string) error {
+	_ = os.Remove(oldBinary)
+	if err := os.Rename(binary, oldBinary); err != nil {
+		return err
+	}
+	if err := copyFile(candidate, binary); err != nil {
+		return restoreAfterUpdateFailure(err, oldBinary, binary)
+	}
+	if err := chmodUpdateBinary(binary, 0755); err != nil {
+		return restoreAfterUpdateFailure(err, oldBinary, binary)
+	}
+	return nil
+}
+
+func restartWindows(binary, oldBinary string, startProcess func(...string) (*os.Process, error)) error {
+	process, err := os.FindProcess(os.Getpid())
+	if err != nil {
+		return restoreAfterUpdateFailure(err, oldBinary, binary)
+	}
+	proc, startErr := startProcess(binary)
+	if startErr != nil {
+		return restoreAfterUpdateFailure(startErr, oldBinary, binary)
+	}
+	_ = os.RemoveAll(oldBinary)
+	_ = process.Kill()
+	_, _ = proc.Wait()
+	return nil
+}
+
+func restartUnix(binary, oldBinary string, cleanup func(), execProcess func(string, []string, []string) error) error {
+	cleanup()
+	if err := execProcess(binary, os.Args, os.Environ()); err != nil {
+		return restoreAfterUpdateFailure(err, oldBinary, binary)
+	}
+	return nil
+}
+
+func restoreAfterUpdateFailure(updateErr error, oldBinary, newBinary string) error {
+	if restoreErr := restorOldBinary(oldBinary, newBinary); restoreErr != nil {
+		return fmt.Errorf("%w; rollback failed: %w", updateErr, restoreErr)
+	}
+	return updateErr
+}
+
+func restorOldBinary(oldBinary, newBinary string) error {
+	if err := os.RemoveAll(newBinary); err != nil {
+		return fmt.Errorf("remove failed update: %w", err)
+	}
+	if err := os.Rename(oldBinary, newBinary); err != nil {
+		return fmt.Errorf("restore previous binary: %w", err)
+	}
+	return nil
 }
 
 func getPlatformFile(filename string) string {
