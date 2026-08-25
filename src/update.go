@@ -15,6 +15,40 @@ import (
 	"reflect"
 )
 
+// UpdateStartup describes the private startup work resolved before ordinary
+// flag parsing and initialization.
+type UpdateStartup struct {
+	Private             bool
+	Exit                bool
+	ExitCode            int
+	OriginalArgs        []string
+	SkipAutomaticUpdate bool
+}
+
+// PrepareUpdateStartup is the narrow root-package bridge to the internal
+// Windows update helper protocol.
+func PrepareUpdateStartup(args []string) (UpdateStartup, error) {
+	private, exit, exitCode, originalArgs, skipAutomaticUpdate, err := up2date.PrepareUpdateStartup(args)
+	return UpdateStartup{
+		Private:             private,
+		Exit:                exit,
+		ExitCode:            exitCode,
+		OriginalArgs:        originalArgs,
+		SkipAutomaticUpdate: skipAutomaticUpdate,
+	}, err
+}
+
+// IsUpdateHandoff reports whether the acknowledged old process must exit.
+func IsUpdateHandoff(err error) bool {
+	return up2date.IsUpdateHandoff(err)
+}
+
+// SignalUpdateReady notifies the private update protocol after the HTTP
+// listener has been acquired.
+func SignalUpdateReady() error {
+	return up2date.SignalUpdateReady()
+}
+
 func officialUpdateAssetName(goos, goarch string) string {
 	name := fmt.Sprintf("Threadfin_%s_%s", goos, goarch)
 	if goos == "windows" {
@@ -172,6 +206,9 @@ func BinaryUpdate() (err error) {
 
 				err = up2date.DoUpdate(fileType, updater.Response.Filename)
 				if err != nil {
+					if up2date.IsUpdateHandoff(err) {
+						return err
+					}
 					ShowError(err, 6002)
 				}
 

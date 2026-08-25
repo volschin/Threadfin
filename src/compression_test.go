@@ -2,6 +2,8 @@ package src
 
 import (
 	"archive/zip"
+	"errors"
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -50,5 +52,55 @@ func TestNewHTTPServerConfiguresSlowClientTimeouts(t *testing.T) {
 	}
 	if server.IdleTimeout <= 0 {
 		t.Error("IdleTimeout must close abandoned keep-alive connections")
+	}
+}
+
+func TestServeHTTPServerSignalsReadinessOnlyAfterListenerAcquisition(t *testing.T) {
+	probe, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	address := probe.Addr().String()
+	if err := probe.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	server := newHTTPServer(address, http.NewServeMux())
+	readyErr := errors.New("stop after readiness assertion")
+	readyCalled := false
+	err = serveHTTPServer(server, func() error {
+		readyCalled = true
+		second, listenErr := net.Listen("tcp", address)
+		if listenErr == nil {
+			_ = second.Close()
+			t.Fatal("readiness was signaled before the HTTP listener was acquired")
+		}
+		return readyErr
+	})
+	if !errors.Is(err, readyErr) {
+		t.Fatalf("serve error = %v, want readiness error", err)
+	}
+	if !readyCalled {
+		t.Fatal("readiness was not signaled after listener acquisition")
+	}
+}
+
+func TestServeHTTPServerDoesNotSignalReadinessWhenListenerAcquisitionFails(t *testing.T) {
+	occupied, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer occupied.Close()
+
+	server := newHTTPServer(occupied.Addr().String(), http.NewServeMux())
+	readyCalled := false
+	if err := serveHTTPServer(server, func() error {
+		readyCalled = true
+		return nil
+	}); err == nil {
+		t.Fatal("server acquired an already occupied listener")
+	}
+	if readyCalled {
+		t.Fatal("readiness was signaled without listener ownership")
 	}
 }

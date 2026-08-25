@@ -2,13 +2,11 @@ package up2date
 
 import (
 	"archive/zip"
-	"errors"
 	"fmt"
 	"io"
 	"log"
 	"net/http"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -67,7 +65,7 @@ func DoUpdate(fileType, filenameBIN string) (err error) {
 
 		// Restart binary (Windows)
 		if runtime.GOOS == "windows" {
-			return restartWindows(binary, oldBinary, cleanup, os.RemoveAll, os.FindProcess, start, (*os.Process).Kill, waitForUpdateProcess)
+			return beginWindowsHandoff(binary, oldBinary, os.Args[1:], cleanup, defaultWindowsUpdateProtocol())
 		}
 
 		// Restart binary (Linux and UNIX)
@@ -76,23 +74,6 @@ func DoUpdate(fileType, filenameBIN string) (err error) {
 	}
 
 	return
-}
-
-func start(args ...string) (p *os.Process, err error) {
-
-	if args[0], err = exec.LookPath(args[0]); err == nil {
-		//fmt.Println(args[0])
-		var procAttr os.ProcAttr
-		procAttr.Files = []*os.File{os.Stdin, os.Stdout, os.Stderr}
-		p, err := os.StartProcess(args[0], args, &procAttr)
-
-		if err == nil {
-			return p, nil
-		}
-
-	}
-
-	return nil, err
 }
 
 func replacePreparedUpdate(candidate, binary, oldBinary string) error {
@@ -109,65 +90,11 @@ func replacePreparedUpdate(candidate, binary, oldBinary string) error {
 	return nil
 }
 
-func restartWindows(
-	binary, oldBinary string,
-	cleanup func() error,
-	removeOldBinary func(string) error,
-	findProcess func(int) (*os.Process, error),
-	startProcess func(...string) (*os.Process, error),
-	killProcess func(*os.Process) error,
-	waitProcess func(*os.Process) error,
-) error {
-	if err := cleanup(); err != nil {
-		return restoreAfterUpdateFailure(fmt.Errorf("clean temporary update material: %w", err), oldBinary, binary)
-	}
-	process, err := findProcess(os.Getpid())
-	if err != nil {
-		return restoreAfterUpdateFailure(err, oldBinary, binary)
-	}
-	proc, startErr := startProcess(binary)
-	if startErr != nil {
-		return restoreAfterUpdateFailure(startErr, oldBinary, binary)
-	}
-	if err := killProcess(process); err != nil {
-		return abortWindowsCutover(fmt.Errorf("stop current process: %w", err), proc, binary, oldBinary, killProcess, waitProcess)
-	}
-	if err := waitProcess(proc); err != nil {
-		return abortWindowsCutover(fmt.Errorf("wait for updated process: %w", err), proc, binary, oldBinary, killProcess, waitProcess)
-	}
-	if err := removeOldBinary(oldBinary); err != nil {
-		return restoreAfterUpdateFailure(fmt.Errorf("remove previous binary: %w", err), oldBinary, binary)
-	}
-	return nil
-}
-
-func abortWindowsCutover(
-	cutoverErr error,
-	replacement *os.Process,
-	binary, oldBinary string,
-	killProcess func(*os.Process) error,
-	waitProcess func(*os.Process) error,
-) error {
-	stopErr := killProcess(replacement)
-	cutoverErr = errors.Join(cutoverErr, wrapError("stop replacement process", stopErr))
-	if stopErr != nil {
-		return cutoverErr
-	}
-	reapErr := waitProcess(replacement)
-	cutoverErr = errors.Join(cutoverErr, wrapError("reap replacement process", reapErr))
-	return restoreAfterUpdateFailure(cutoverErr, oldBinary, binary)
-}
-
 func wrapError(operation string, err error) error {
 	if err == nil {
 		return nil
 	}
 	return fmt.Errorf("%s: %w", operation, err)
-}
-
-func waitForUpdateProcess(process *os.Process) error {
-	_, err := process.Wait()
-	return err
 }
 
 func restartUnix(binary, oldBinary string, cleanup func() error, execProcess func(string, []string, []string) error) error {
