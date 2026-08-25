@@ -98,3 +98,17 @@ func TestResetStreamingURLCachePreservesMemoryOnPersistenceError(t *testing.T) {
 		t.Fatal("resetStreamingURLCache() cleared memory after persistence failure")
 	}
 }
+
+func TestCreateM3UFileReturnsStreamingURLPersistenceError(t *testing.T) {
+	restorePersistentState(t)
+	System.Folder.Data = t.TempDir() + string(os.PathSeparator)
+	System.File.URLS = filepath.Join(t.TempDir(), "missing", "urls.json")
+	Data.XEPG.Channels = make(map[string]interface{})
+	Data.Cache.StreamingURLS = make(map[string]StreamInfo)
+
+	err := createM3UFile()
+	var pathErr *os.PathError
+	if !errors.As(err, &pathErr) {
+		t.Fatalf("createM3UFile() error = %v, want persistence path error", err)
+	}
+}

@@ -90,11 +90,22 @@ func buildXEPG(background bool) {
 			go func() {
 
 				createXEPGMapping()
-				createXEPGDatabase()
-				mapping()
+				if err := createXEPGDatabase(); err != nil {
+					ShowError(err, 0)
+					System.ScanInProgress = 0
+					return
+				}
+				if err := mapping(); err != nil {
+					ShowError(err, 0)
+					System.ScanInProgress = 0
+					return
+				}
 				cleanupXEPG()
-				createXMLTVFile()
-				createM3UFile()
+				if err := writeXEPGOutputFiles(); err != nil {
+					ShowError(err, 0)
+					System.ScanInProgress = 0
+					return
+				}
 
 				showInfo("XEPG:" + fmt.Sprintf("Ready to use"))
 
@@ -112,8 +123,9 @@ func buildXEPG(background bool) {
 						Data.Cache.Images.Image.Remove()
 						showInfo("Image Caching:Done")
 
-						createXMLTVFile()
-						createM3UFile()
+						if err := writeXEPGOutputFiles(); err != nil {
+							ShowError(err, 0)
+						}
 
 						systemMutex.Lock()
 						System.ImageCachingInProgress = 0
@@ -137,11 +149,22 @@ func buildXEPG(background bool) {
 		case false:
 
 			createXEPGMapping()
-			createXEPGDatabase()
-			mapping()
+			if err := createXEPGDatabase(); err != nil {
+				ShowError(err, 0)
+				System.ScanInProgress = 0
+				return
+			}
+			if err := mapping(); err != nil {
+				ShowError(err, 0)
+				System.ScanInProgress = 0
+				return
+			}
 			cleanupXEPG()
-			createXMLTVFile()
-			createM3UFile()
+			if err := writeXEPGOutputFiles(); err != nil {
+				ShowError(err, 0)
+				System.ScanInProgress = 0
+				return
+			}
 
 			// Exit maintenance before long file generation to keep UI responsive
 			System.ScanInProgress = 0
@@ -162,8 +185,9 @@ func buildXEPG(background bool) {
 						Data.Cache.Images.Image.Remove()
 						showInfo("Image Caching:Done")
 
-						createXMLTVFile()
-						createM3UFile()
+						if err := writeXEPGOutputFiles(); err != nil {
+							ShowError(err, 0)
+						}
 
 						systemMutex.Lock()
 						System.ImageCachingInProgress = 0
@@ -185,7 +209,9 @@ func buildXEPG(background bool) {
 
 	} else {
 
-		getLineup()
+		if _, err := getLineup(); err != nil {
+			ShowError(err, 0)
+		}
 		System.ScanInProgress = 0
 
 	}
@@ -207,8 +233,16 @@ func updateXEPG(background bool) {
 
 		case false:
 
-			createXEPGDatabase()
-			mapping()
+			if err := createXEPGDatabase(); err != nil {
+				ShowError(err, 0)
+				System.ScanInProgress = 0
+				return
+			}
+			if err := mapping(); err != nil {
+				ShowError(err, 0)
+				System.ScanInProgress = 0
+				return
+			}
 			cleanupXEPG()
 
 			// Exit maintenance before long file generation to keep UI responsive
@@ -216,8 +250,10 @@ func updateXEPG(background bool) {
 
 			go func() {
 
-				createXMLTVFile()
-				createM3UFile()
+				if err := writeXEPGOutputFiles(); err != nil {
+					ShowError(err, 0)
+					return
+				}
 				showInfo("XEPG:" + fmt.Sprintf("Ready to use"))
 
 			}()
@@ -1004,9 +1040,10 @@ func createXMLTVFile() (err error) {
 	if err != nil {
 		return err
 	}
-	defer xmlFile.Close()
 	writer := bufio.NewWriterSize(xmlFile, 1<<20) // 1MB buffer
-	defer writer.Flush()
+	defer func() {
+		err = errors.Join(err, writer.Flush(), xmlFile.Close())
+	}()
 
 	var xepgXML XMLTV
 
@@ -1752,17 +1789,22 @@ func isInInactiveList(channelURL string) bool {
 }
 
 // M3U Datei erstellen
-func createM3UFile() {
+func createM3UFile() error {
 
 	showInfo("XEPG:" + fmt.Sprintf("Create M3U file (%s)", System.File.M3U))
 	_, err := buildM3U([]string{})
 	if err != nil {
-		ShowError(err, 000)
+		return err
 	}
 
-	saveMapToJSONFile(System.File.URLS, Data.Cache.StreamingURLS)
+	return saveMapToJSONFile(System.File.URLS, Data.Cache.StreamingURLS)
+}
 
-	return
+func writeXEPGOutputFiles() error {
+	if err := createXMLTVFile(); err != nil {
+		return err
+	}
+	return createM3UFile()
 }
 
 // XEPG Datenbank bereinigen

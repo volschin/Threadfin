@@ -221,14 +221,17 @@ func updateServerSettings(request RequestStruct) (settings SettingsStruct, err e
 				switch Settings.CacheImages {
 
 				case false:
-					createXMLTVFile()
-					createM3UFile()
+					if err = writeXEPGOutputFiles(); err != nil {
+						return
+					}
 
 				case true:
 					go func() {
 
-						createXMLTVFile()
-						createM3UFile()
+						if err := writeXEPGOutputFiles(); err != nil {
+							ShowError(err, 0)
+							return
+						}
 
 						System.ImageCachingInProgress = 1
 						showInfo("Image Caching:Images are cached")
@@ -251,8 +254,9 @@ func updateServerSettings(request RequestStruct) (settings SettingsStruct, err e
 		if createXEPGFiles == true {
 
 			go func() {
-				createXMLTVFile()
-				createM3UFile()
+				if err := writeXEPGOutputFiles(); err != nil {
+					ShowError(err, 0)
+				}
 			}()
 
 		}
@@ -540,8 +544,10 @@ func saveXEpgMapping(request RequestStruct) (err error) {
 	if System.ScanInProgress == 0 {
 
 		System.ScanInProgress = 1
-		createXMLTVFile()
-		createM3UFile()
+		if err = writeXEPGOutputFiles(); err != nil {
+			System.ScanInProgress = 0
+			return
+		}
 		System.ScanInProgress = 0
 		showInfo("XEPG:" + fmt.Sprintf("Ready to use"))
 
@@ -565,8 +571,12 @@ func saveXEpgMapping(request RequestStruct) (err error) {
 			}
 
 			System.ScanInProgress = 1
-			createXMLTVFile()
-			createM3UFile()
+			if err := writeXEPGOutputFiles(); err != nil {
+				ShowError(err, 0)
+				System.ScanInProgress = 0
+				System.BackgroundProcess = false
+				return
+			}
 			System.ScanInProgress = 0
 			showInfo("XEPG:" + fmt.Sprintf("Ready to use"))
 

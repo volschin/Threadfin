@@ -269,7 +269,11 @@ func buildM3U(groups []string) (m3u string, err error) {
 		if err != nil {
 			return "", err
 		}
-		defer file.Close()
+		defer func() {
+			if closeErr := file.Close(); err == nil {
+				err = closeErr
+			}
+		}()
 		writer = bufio.NewWriterSize(file, 1<<20) // 1MB buffer
 		if _, err = writer.WriteString(header); err != nil {
 			return "", err
@@ -329,7 +333,7 @@ func buildM3U(groups []string) (m3u string, err error) {
 			}
 		}
 
-        // Disabling so not to rewrite stream to https domain when disable stream from https set
+		// Disabling so not to rewrite stream to https domain when disable stream from https set
 		if Settings.ForceHttps && Settings.HttpsThreadfinDomain != "" && Settings.ExcludeStreamHttps == false {
 			u, err := url.Parse(channel.URL)
 			if err == nil {
@@ -344,7 +348,7 @@ func buildM3U(groups []string) (m3u string, err error) {
 					channel.URL = fmt.Sprintf("https://%s:%d%s", u.Host, Settings.HttpsPort, u.Path)
 				}
 			}
-	    }
+		}
 
 		logo := ""
 		if channel.TvgLogo != "" {
