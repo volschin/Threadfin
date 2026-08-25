@@ -64,3 +64,22 @@ func TestGetLineupReturnsStreamingURLPersistenceError(t *testing.T) {
 		t.Fatalf("getLineup() error = %v, want persistence path error", err)
 	}
 }
+
+func TestCreateXEPGDatabaseReturnsStreamingURLPersistenceError(t *testing.T) {
+	restorePersistentState(t)
+	Data.Cache.StreamingURLS = make(map[string]StreamInfo)
+	System.File.URLS = filepath.Join(t.TempDir(), "missing", "urls.json")
+
+	err := createXEPGDatabase()
+	var pathErr *os.PathError
+	if !errors.As(err, &pathErr) {
+		t.Fatalf("createXEPGDatabase() error = %v, want persistence path error", err)
+	}
+}
+
+func TestFilterFromInterfaceReturnsEncodingError(t *testing.T) {
+	_, err := filterFromInterface(map[string]interface{}{"unsupported": make(chan int)})
+	if err == nil {
+		t.Fatal("filterFromInterface() error = nil, want JSON encoding error")
+	}
+}

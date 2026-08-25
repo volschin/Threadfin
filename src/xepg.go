@@ -43,6 +43,15 @@ func checkXMLCompatibility(id string, body []byte) (err error) {
 
 var buildXEPGCount int
 
+func filterFromInterface(value interface{}) (filter FilterStruct, err error) {
+	encoded, err := json.Marshal(value)
+	if err != nil {
+		return filter, err
+	}
+	err = json.Unmarshal(encoded, &filter)
+	return filter, err
+}
+
 // XEPG Daten erstellen
 func buildXEPG(background bool) {
 	xepgMutex.Lock()
@@ -59,7 +68,11 @@ func buildXEPG(background bool) {
 
 	// Clear streaming URL cache
 	Data.Cache.StreamingURLS = make(map[string]StreamInfo)
-	saveMapToJSONFile(System.File.URLS, Data.Cache.StreamingURLS)
+	if err := saveMapToJSONFile(System.File.URLS, Data.Cache.StreamingURLS); err != nil {
+		ShowError(err, 0)
+		System.ScanInProgress = 0
+		return
+	}
 
 	var err error
 
@@ -342,7 +355,9 @@ func createXEPGDatabase() (err error) {
 
 	// Clear streaming URL cache
 	Data.Cache.StreamingURLS = make(map[string]StreamInfo)
-	saveMapToJSONFile(System.File.URLS, Data.Cache.StreamingURLS)
+	if err = saveMapToJSONFile(System.File.URLS, Data.Cache.StreamingURLS); err != nil {
+		return err
+	}
 
 	Data.Cache.Streams.Active = make([]string, 0, System.UnfilteredChannelLimit)
 	Settings = SettingsStruct{}
@@ -356,8 +371,13 @@ func createXEPGDatabase() (err error) {
 	if err != nil || len(settings) == 0 {
 		return
 	}
-	settings_json, _ := json.Marshal(settings)
-	json.Unmarshal(settings_json, &Settings)
+	settingsJSON, err := json.Marshal(settings)
+	if err != nil {
+		return err
+	}
+	if err = json.Unmarshal(settingsJSON, &Settings); err != nil {
+		return err
+	}
 
 	// Remove duplicate channels from existing XEPG database based on new hash logic
 	removeDuplicateChannels()
@@ -624,9 +644,10 @@ func createXEPGDatabase() (err error) {
 			// Check channel start number from Group Filter
 			filters := []FilterStruct{}
 			for _, filter := range Settings.Filter {
-				filter_json, _ := json.Marshal(filter)
-				f := FilterStruct{}
-				json.Unmarshal(filter_json, &f)
+				f, filterErr := filterFromInterface(filter)
+				if filterErr != nil {
+					return filterErr
+				}
 				filters = append(filters, f)
 			}
 
@@ -667,9 +688,10 @@ func createXEPGDatabase() (err error) {
 				if channel, ok := channelsMap[m3uChannel.TvgID]; ok {
 					filters := []FilterStruct{}
 					for _, filter := range Settings.Filter {
-						filter_json, _ := json.Marshal(filter)
-						f := FilterStruct{}
-						json.Unmarshal(filter_json, &f)
+						f, filterErr := filterFromInterface(filter)
+						if filterErr != nil {
+							return filterErr
+						}
 						filters = append(filters, f)
 					}
 					for _, filter := range filters {
@@ -816,9 +838,10 @@ func mapping() (err error) {
 
 						filters := []FilterStruct{}
 						for _, filter := range Settings.Filter {
-							filter_json, _ := json.Marshal(filter)
-							f := FilterStruct{}
-							json.Unmarshal(filter_json, &f)
+							f, filterErr := filterFromInterface(filter)
+							if filterErr != nil {
+								return filterErr
+							}
 							filters = append(filters, f)
 						}
 						for _, filter := range filters {
@@ -871,9 +894,10 @@ func mapping() (err error) {
 
 						filters := []FilterStruct{}
 						for _, filter := range Settings.Filter {
-							filter_json, _ := json.Marshal(filter)
-							f := FilterStruct{}
-							json.Unmarshal(filter_json, &f)
+							f, filterErr := filterFromInterface(filter)
+							if filterErr != nil {
+								return filterErr
+							}
 							filters = append(filters, f)
 						}
 						for _, filter := range filters {
@@ -905,9 +929,10 @@ func mapping() (err error) {
 				// Loop through dummy channels and assign the filter info
 				filters := []FilterStruct{}
 				for _, filter := range Settings.Filter {
-					filter_json, _ := json.Marshal(filter)
-					f := FilterStruct{}
-					json.Unmarshal(filter_json, &f)
+					f, filterErr := filterFromInterface(filter)
+					if filterErr != nil {
+						return filterErr
+					}
 					filters = append(filters, f)
 				}
 				for _, filter := range filters {
@@ -1142,9 +1167,10 @@ func getProgramData(xepgChannel XEPGChannelStruct) (xepgXML XMLTV, err error) {
 
 			filters := []FilterStruct{}
 			for _, filter := range Settings.Filter {
-				filter_json, _ := json.Marshal(filter)
-				f := FilterStruct{}
-				json.Unmarshal(filter_json, &f)
+				f, filterErr := filterFromInterface(filter)
+				if filterErr != nil {
+					return xmltv, filterErr
+				}
 				filters = append(filters, f)
 			}
 
