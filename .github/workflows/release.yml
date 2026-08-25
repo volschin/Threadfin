@@ -1,7 +1,7 @@
 name: Threadfin Build
 on:
   push:
-    tags: "1.*"
+    tags: "v*"
 permissions:
   contents: read
 
