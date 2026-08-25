@@ -4,6 +4,7 @@ import (
 	"archive/zip"
 	"bytes"
 	"compress/gzip"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -86,6 +87,7 @@ func extractZIP(archive, target string) (err error) {
 	if err != nil {
 		return err
 	}
+	defer reader.Close()
 
 	if err := os.MkdirAll(target, 0755); err != nil {
 		return err
@@ -93,9 +95,14 @@ func extractZIP(archive, target string) (err error) {
 
 	for _, file := range reader.File {
 
-		path := filepath.Join(target, file.Name)
+		path, err := archiveDestination(target, file.Name)
+		if err != nil {
+			return err
+		}
 		if file.FileInfo().IsDir() {
-			os.MkdirAll(path, file.Mode())
+			if err := os.MkdirAll(path, file.Mode()); err != nil {
+				return err
+			}
 			continue
 		}
 
@@ -103,21 +110,54 @@ func extractZIP(archive, target string) (err error) {
 		if err != nil {
 			return err
 		}
-		defer fileReader.Close()
 
 		targetFile, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, file.Mode())
 		if err != nil {
+			fileReader.Close()
 			return err
 		}
-		defer targetFile.Close()
 
-		if _, err := io.Copy(targetFile, fileReader); err != nil {
-			return err
+		_, copyErr := io.Copy(targetFile, fileReader)
+		closeTargetErr := targetFile.Close()
+		closeSourceErr := fileReader.Close()
+		if copyErr != nil {
+			return copyErr
+		}
+		if closeTargetErr != nil {
+			return closeTargetErr
+		}
+		if closeSourceErr != nil {
+			return closeSourceErr
 		}
 
 	}
 
-	return
+	return nil
+}
+
+func archiveDestination(target, name string) (string, error) {
+	cleanName := filepath.Clean(filepath.FromSlash(name))
+	if filepath.IsAbs(cleanName) || cleanName == ".." || strings.HasPrefix(cleanName, ".."+string(os.PathSeparator)) {
+		return "", fmt.Errorf("archive entry %q escapes target directory", name)
+	}
+
+	targetRoot, err := filepath.Abs(target)
+	if err != nil {
+		return "", err
+	}
+	destination, err := filepath.Abs(filepath.Join(targetRoot, cleanName))
+	if err != nil {
+		return "", err
+	}
+	relative, err := filepath.Rel(targetRoot, destination)
+	if err != nil {
+		return "", err
+	}
+	if relative == ".." || strings.HasPrefix(relative, ".."+string(os.PathSeparator)) {
+		return "", fmt.Errorf("archive entry %q escapes target directory", name)
+	}
+
+	return destination, nil
 }
 
 func extractGZIP(gzipBody []byte, fileSource string) (body []byte, err error) {

@@ -107,7 +107,7 @@ func BinaryUpdate() (err error) {
 		err = up2date.GetVersion()
 		if err != nil {
 
-			debug = fmt.Sprintf(err.Error())
+			debug = err.Error()
 			showDebug(debug, 1)
 
 			return nil
@@ -115,7 +115,7 @@ func BinaryUpdate() (err error) {
 
 		if len(updater.Response.Reason) > 0 {
 
-			err = fmt.Errorf(fmt.Sprintf("Update Server: %s", updater.Response.Reason))
+			err = fmt.Errorf("Update Server: %s", updater.Response.Reason)
 			ShowError(err, 6002)
 
 			return nil

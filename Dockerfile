@@ -2,25 +2,21 @@
 # -----------------------------------------------------------------------------
 ARG USE_NVIDIA
 
-FROM golang:1.23-bullseye AS builder
+FROM golang:1.27-bookworm AS builder
 
 WORKDIR /app
-
-# Copy go mod files first for better caching
-COPY go.mod go.sum ./
-RUN go mod download
 
 # Copy the source code
 COPY . .
 
 # Build the application with optimizations
-RUN CGO_ENABLED=0 go build -mod=mod -ldflags="-s -w" -trimpath -o threadfin threadfin.go
+RUN CGO_ENABLED=0 go build -mod=vendor -ldflags="-s -w" -trimpath -o threadfin threadfin.go
 
 # Second stage. Creating a minimal image
 # -----------------------------------------------------------------------------
 ARG USE_NVIDIA
 FROM ubuntu:24.04 AS standard
-FROM nvidia/cuda:12.8.0-base-ubuntu24.04 AS nvidia
+FROM nvidia/cuda:12.8.2-base-ubuntu24.04 AS nvidia
 FROM standard AS final
 FROM nvidia AS final-nvidia
 

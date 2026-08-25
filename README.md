@@ -138,12 +138,11 @@ When the branch is changed, an update is only performed if there is a new versio
 ## Build from source code [Go / Golang]
 
 #### Requirements
-* [Go](https://golang.org) (go1.18 or newer)
+* [Go](https://go.dev) (go1.27 or newer)
 
 #### Dependencies
 * [go-ssdp](https://github.com/koron/go-ssdp)
 * [websocket](https://github.com/gorilla/websocket)
-* [osext](https://github.com/kardianos/osext)
 * [avfs](github.com/avfs/avfs)
 
 #### Build
@@ -190,5 +189,4 @@ var GitHub = GitHubStruct{Branch: "main", User: "Threadfin", Repo: "Threadfin", 
 */
 
 ```
-
 

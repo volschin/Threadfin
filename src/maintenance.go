@@ -85,7 +85,6 @@ func maintenance() {
 
 	}
 
-	return
 }
 
 func randomTime(min, max int) int {

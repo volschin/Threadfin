@@ -12,6 +12,7 @@ import (
 	"path"
 	"strconv"
 	"strings"
+	"time"
 
 	"threadfin/src/internal/authentication"
 
@@ -54,12 +55,22 @@ func StartWebserver() (err error) {
 	}
 	systemMutex.Unlock()
 
-	if err = http.ListenAndServe(ipAddress+":"+port, nil); err != nil {
+	server := newHTTPServer(ipAddress+":"+port, http.DefaultServeMux)
+	if err = server.ListenAndServe(); err != nil {
 		ShowError(err, 1001)
 		return
 	}
 
 	return
+}
+
+func newHTTPServer(address string, handler http.Handler) *http.Server {
+	return &http.Server{
+		Addr:              address,
+		Handler:           handler,
+		ReadHeaderTimeout: 10 * time.Second,
+		IdleTimeout:       2 * time.Minute,
+	}
 }
 
 // Index : Web Server /
@@ -134,11 +145,11 @@ func Stream(w http.ResponseWriter, r *http.Request) {
 
 	systemMutex.Lock()
 	forceHttps := Settings.ForceHttps
-    noStreamHttps := Settings.ExcludeStreamHttps
+	noStreamHttps := Settings.ExcludeStreamHttps
 	systemMutex.Unlock()
 
 	// Dont Change Source M3Us to use HTTPs when forceHttps set and Exclude Streams from https
-    if forceHttps && noStreamHttps == false {
+	if forceHttps && noStreamHttps == false {
 		u, err := url.Parse(streamInfo.URL)
 		if err == nil {
 			u.Scheme = "https"
@@ -466,7 +477,6 @@ func WS(w http.ResponseWriter, r *http.Request) {
 				ShowError(err, 1022)
 			} else {
 				return
-				break
 			}
 			return
 
@@ -840,50 +850,50 @@ func Web(w http.ResponseWriter, r *http.Request) {
 func API(w http.ResponseWriter, r *http.Request) {
 
 	/*
-			API Bedingungen (ohne Authentifizierung):
-			- API muss in den Einstellungen aktiviert sein
+		API Bedingungen (ohne Authentifizierung):
+		- API muss in den Einstellungen aktiviert sein
 
-			Beispiel API Request mit curl
-			Status:
-			curl -X POST -H "Content-Type: application/json" -d '{"cmd":"status"}' http://localhost:34400/api/
+		Beispiel API Request mit curl
+		Status:
+		curl -X POST -H "Content-Type: application/json" -d '{"cmd":"status"}' http://localhost:34400/api/
 
-			- - - - -
+		- - - - -
 
-			API Bedingungen (mit Authentifizierung):
-			- API muss in den Einstellungen aktiviert sein
-			- API muss bei den Authentifizierungseinstellungen aktiviert sein
-			- Benutzer muss die Berechtigung API haben
+		API Bedingungen (mit Authentifizierung):
+		- API muss in den Einstellungen aktiviert sein
+		- API muss bei den Authentifizierungseinstellungen aktiviert sein
+		- Benutzer muss die Berechtigung API haben
 
-			Nach jeder API Anfrage wird ein Token generiert, dieser ist einmal in 60 Minuten gültig.
-			In jeder Antwort ist ein neuer Token enthalten
+		Nach jeder API Anfrage wird ein Token generiert, dieser ist einmal in 60 Minuten gültig.
+		In jeder Antwort ist ein neuer Token enthalten
 
-			Beispiel API Request mit curl
-			Login:
-			curl -X POST -H "Content-Type: application/json" -d '{"cmd":"login","username":"plex","password":"123"}' http://localhost:34400/api/
+		Beispiel API Request mit curl
+		Login:
+		curl -X POST -H "Content-Type: application/json" -d '{"cmd":"login","username":"plex","password":"example-password"}' http://localhost:34400/api/
 
-			Antwort:
-			{
-		  	"status": true,
-		  	"token": "U0T-NTSaigh-RlbkqERsHvUpgvaaY2dyRGuwIIvv"
-			}
+		Antwort:
+		{
+		"status": true,
+		"token": "EXAMPLE_TOKEN"
+		}
 
-			Status mit Verwendung eines Tokens:
-			curl -X POST -H "Content-Type: application/json" -d '{"cmd":"status","token":"U0T-NTSaigh-RlbkqERsHvUpgvaaY2dyRGuwIIvv"}' http://localhost:4400/api/
+		Status mit Verwendung eines Tokens:
+		curl -X POST -H "Content-Type: application/json" -d '{"cmd":"status","token":"EXAMPLE_TOKEN"}' http://localhost:4400/api/
 
-			Antwort:
-			{
-			  "epg.source": "XEPG",
-			  "status": true,
-			  "streams.active": 7,
-			  "streams.all": 63,
-			  "streams.xepg": 2,
-			  "token": "mXiG1NE1MrTXDtyh7PxRHK5z8iPI_LzxsQmY-LFn",
-			  "url.dvr": "localhost:34400",
-			  "url.m3u": "http://localhost:34400/m3u/threadfin.m3u",
-			  "url.xepg": "http://localhost:34400/xmltv/threadfin.xml",
-			  "version.api": "1.1.0",
-			  "version.threadfin": "1.3.0"
-			}
+		Antwort:
+		{
+		  "epg.source": "XEPG",
+		  "status": true,
+		  "streams.active": 7,
+		  "streams.all": 63,
+		  "streams.xepg": 2,
+		  "token": "ROTATED_EXAMPLE_TOKEN",
+		  "url.dvr": "localhost:34400",
+		  "url.m3u": "http://localhost:34400/m3u/threadfin.m3u",
+		  "url.xepg": "http://localhost:34400/xmltv/threadfin.xml",
+		  "version.api": "1.1.0",
+		  "version.threadfin": "1.3.0"
+		}
 	*/
 
 	if Settings.HttpThreadfinDomain != "" {
