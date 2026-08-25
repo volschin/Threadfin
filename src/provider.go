@@ -395,6 +395,12 @@ func configuredProviderRequestTimeout(bufferTimeout float64) time.Duration {
 		return 30 * time.Second
 	}
 	milliseconds := bufferTimeout * 1000
+	// Preserve a finite timeout for every positive configured value. One
+	// millisecond is the smallest duration represented by this conversion;
+	// zero would instead disable http.Client's timeout entirely.
+	if milliseconds < 1 {
+		return time.Millisecond
+	}
 	const maxDurationMilliseconds = float64((1<<63 - 1) / int64(time.Millisecond))
 	if milliseconds >= maxDurationMilliseconds {
 		return time.Duration(1<<63 - 1)
