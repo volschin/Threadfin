@@ -230,14 +230,9 @@ func UserAuthentication(username, password string) (token string, err error) {
 		return
 	}
 
-	var login = func(username, password string, loginData map[string]interface{}) (err error) {
-		var salt = loginData["_salt"].(string)
-		var loginUsername = loginData["_username"].(string)
+	var login = func(password string, loginData map[string]interface{}) (err error) {
 		var loginPassword = loginData["_password"].(string)
 
-		if SHA256(username, salt) != loginUsername {
-			return createError(010)
-		}
 		matched, legacy := verifyPassword(password, loginPassword)
 		if !matched {
 			return createError(010)
@@ -260,7 +255,7 @@ func UserAuthentication(username, password string) (token string, err error) {
 	for id, loginData := range users {
 		user := loginData.(map[string]interface{})
 		if SHA256(username, user["_salt"].(string)) == user["_username"].(string) {
-			err = login(username, password, user)
+			err = login(password, user)
 			if err != nil {
 				return
 			}
@@ -613,14 +608,6 @@ loopToken:
 	tokens[newToken] = tmp
 
 	return
-}
-
-func mapToJSON(tmpMap interface{}) string {
-	jsonString, err := json.MarshalIndent(tmpMap, "", "  ")
-	if err != nil {
-		return "{}"
-	}
-	return string(jsonString)
 }
 
 // SetCookieToken : set cookie

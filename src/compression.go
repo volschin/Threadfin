@@ -20,13 +20,17 @@ func zipFiles(sourceFiles []string, target string) error {
 
 	writeErr := writeZIP(sourceFiles, zipfile)
 	closeErr := zipfile.Close()
-	err = errors.Join(writeErr, closeErr)
-	if err != nil {
-		if removeErr := os.Remove(target); removeErr != nil && !errors.Is(removeErr, os.ErrNotExist) {
-			return errors.Join(err, removeErr)
-		}
+	return removeIncompleteFile(target, errors.Join(writeErr, closeErr))
+}
+
+func removeIncompleteFile(path string, operationErr error) error {
+	if operationErr == nil {
+		return nil
 	}
-	return err
+	if removeErr := os.Remove(path); removeErr != nil && !errors.Is(removeErr, os.ErrNotExist) {
+		return errors.Join(operationErr, removeErr)
+	}
+	return operationErr
 }
 
 func writeZIP(sourceFiles []string, target io.Writer) (err error) {
@@ -41,10 +45,7 @@ func writeZIP(sourceFiles []string, target io.Writer) (err error) {
 			return err
 		}
 
-		var baseDir string
-		if info.IsDir() {
-			baseDir = filepath.Base(System.Folder.Data)
-		}
+		sourceIsDir := info.IsDir()
 
 		if err := filepath.Walk(source, func(path string, info os.FileInfo, err error) error {
 			if err != nil {
@@ -56,7 +57,7 @@ func writeZIP(sourceFiles []string, target io.Writer) (err error) {
 				return err
 			}
 
-			if baseDir != "" {
+			if sourceIsDir {
 				header.Name = filepath.Join(strings.TrimPrefix(path, System.Folder.Config))
 			}
 
@@ -211,12 +212,7 @@ func compressGZIP(data *[]byte, file string) (err error) {
 		_, writeErr := w.Write(*data)
 		writerCloseErr := w.Close()
 		fileCloseErr := f.Close()
-		if err = errors.Join(writeErr, writerCloseErr, fileCloseErr); err != nil {
-			if removeErr := os.Remove(file); removeErr != nil && !errors.Is(removeErr, os.ErrNotExist) {
-				return errors.Join(err, removeErr)
-			}
-			return err
-		}
+		err = removeIncompleteFile(file, errors.Join(writeErr, writerCloseErr, fileCloseErr))
 	}
 
 	return
@@ -238,11 +234,5 @@ func compressGZIPFile(sourcePath, targetPath string) (err error) {
 	_, copyErr := io.Copy(gw, in)
 	writerCloseErr := gw.Close()
 	fileCloseErr := out.Close()
-	if err = errors.Join(copyErr, writerCloseErr, fileCloseErr); err != nil {
-		if removeErr := os.Remove(targetPath); removeErr != nil && !errors.Is(removeErr, os.ErrNotExist) {
-			return errors.Join(err, removeErr)
-		}
-		return err
-	}
-	return nil
+	return removeIncompleteFile(targetPath, errors.Join(copyErr, writerCloseErr, fileCloseErr))
 }

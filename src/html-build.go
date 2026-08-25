@@ -117,13 +117,12 @@ func getLocalPath(filename string) string {
 
 func writeStringToFile(filename, content string) error {
 
-	err := os.WriteFile(getPlatformFile(filename), []byte(content), 0644)
+	err := writeByteToFile(filename, []byte(content))
 	if err != nil {
 		checkErr(err)
-		return err
 	}
 
-	return nil
+	return err
 }
 
 func checkHTMLFile(filename string) error {

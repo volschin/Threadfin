@@ -266,29 +266,16 @@ func jsonToInterface(content string) (tmpMap interface{}, err error) {
 
 func saveMapToJSONFile(file string, tmpMap interface{}) error {
 
-	var filename = getPlatformFile(file)
 	jsonString, err := json.MarshalIndent(tmpMap, "", "  ")
-
 	if err != nil {
 		return err
 	}
 
-	err = os.WriteFile(filename, []byte(jsonString), 0644)
-	if err != nil {
-		return err
-	}
-
-	return nil
+	return writeByteToFile(file, jsonString)
 }
 
 func loadJSONFileToMap(file string) (tmpMap map[string]interface{}, err error) {
-	f, err := os.Open(getPlatformFile(file))
-	if err != nil {
-		return nil, err
-	}
-	defer f.Close()
-
-	content, err := io.ReadAll(f)
+	content, err := readByteFromFile(file)
 	if err != nil {
 		return nil, err
 	}

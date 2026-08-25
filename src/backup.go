@@ -13,10 +13,8 @@ import (
 func ThreadfinAutoBackup() (err error) {
 
 	var archiv = "threadfin_auto_backup_" + time.Now().Format("20060102_1504") + ".zip"
-	var target string
 	var sourceFiles = make([]string, 0)
 	var oldBackupFiles = make([]string, 0)
-	var debug string
 
 	if len(Settings.BackupPath) > 0 {
 		System.Folder.Backup = Settings.BackupPath
@@ -32,68 +30,47 @@ func ThreadfinAutoBackup() (err error) {
 
 	// Alte Backups löschen
 	files, err := os.ReadDir(System.Folder.Backup)
-
-	if err == nil {
-
-		for _, file := range files {
-
-			if filepath.Ext(file.Name()) == ".zip" && strings.Contains(file.Name(), "threadfin_auto_backup") {
-				oldBackupFiles = append(oldBackupFiles, file.Name())
-			}
-
-		}
-
-		// Alle Backups löschen
-		var end int
-		switch Settings.BackupKeep {
-		case 0:
-			end = 0
-		default:
-			end = Settings.BackupKeep - 1
-		}
-
-		for i := 0; i < len(oldBackupFiles)-end; i++ {
-
-			os.RemoveAll(System.Folder.Backup + oldBackupFiles[i])
-			debug = fmt.Sprintf("Delete backup file:%s", oldBackupFiles[i])
-			showDebug(debug, 1)
-
-		}
-
-		if Settings.BackupKeep == 0 {
-			return
-		}
-
-	} else {
-
+	if err != nil {
 		return
+	}
 
+	for _, file := range files {
+		if filepath.Ext(file.Name()) == ".zip" && strings.Contains(file.Name(), "threadfin_auto_backup") {
+			oldBackupFiles = append(oldBackupFiles, file.Name())
+		}
+	}
+
+	// Alle Backups löschen
+	var end int
+	switch Settings.BackupKeep {
+	case 0:
+		end = 0
+	default:
+		end = Settings.BackupKeep - 1
+	}
+
+	for i := 0; i < len(oldBackupFiles)-end; i++ {
+		os.RemoveAll(System.Folder.Backup + oldBackupFiles[i])
+		showDebug(fmt.Sprintf("Delete backup file:%s", oldBackupFiles[i]), 1)
+	}
+
+	if Settings.BackupKeep == 0 {
+		return
 	}
 
 	// Backup erstellen
-	if err == nil {
+	target := System.Folder.Backup + archiv
+	for _, i := range SystemFiles {
+		sourceFiles = append(sourceFiles, System.Folder.Config+i)
+	}
+	sourceFiles = append(sourceFiles, System.Folder.ImagesUpload)
 
-		target = System.Folder.Backup + archiv
-
-		for _, i := range SystemFiles {
-			sourceFiles = append(sourceFiles, System.Folder.Config+i)
-		}
-
-		sourceFiles = append(sourceFiles, System.Folder.ImagesUpload)
-
-		err = zipFiles(sourceFiles, target)
-
-		if err == nil {
-
-			debug = fmt.Sprintf("Create backup file:%s", target)
-			showDebug(debug, 1)
-
-			showInfo("Backup file:" + target)
-
-		}
-
+	if err = zipFiles(sourceFiles, target); err != nil {
+		return
 	}
 
+	showDebug(fmt.Sprintf("Create backup file:%s", target), 1)
+	showInfo("Backup file:" + target)
 	return
 }
 
@@ -171,10 +148,6 @@ func ThreadfinRestore(archive string) (newWebURL string, err error) {
 	oldPort = Settings.Port
 
 	if newPort == oldPort {
-
-		if err != nil {
-			ShowError(err, 0)
-		}
 
 		if _, err = loadSettings(); err != nil {
 			return "", err

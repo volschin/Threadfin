@@ -28,20 +28,11 @@ func activatedSystemAuthentication() (err error) {
 
 func createFirstUserForAuthentication(username, password string) (token string, err error) {
 
-	var authenticationErr = func(err error) {
-		if err != nil {
-			return
-		}
-	}
-
 	err = authentication.CreateDefaultUser(username, password)
-	authenticationErr(err)
 
 	token, err = authentication.UserAuthentication(username, password)
-	authenticationErr(err)
 
 	token, err = authentication.CheckTheValidityOfTheToken(token)
-	authenticationErr(err)
 
 	var userData = make(map[string]interface{})
 	userData["username"] = username
@@ -53,10 +44,8 @@ func createFirstUserForAuthentication(username, password string) (token string, 
 	userData["defaultUser"] = true
 
 	userID, err := authentication.GetUserID(token)
-	authenticationErr(err)
 
 	err = authentication.WriteUserData(userID, userData)
-	authenticationErr(err)
 
 	return
 }

@@ -1015,22 +1015,9 @@ func API(w http.ResponseWriter, r *http.Request) {
 		response.URLM3U = System.ServerProtocol.M3U + "://" + System.Domain + "/m3u/threadfin.m3u"
 		response.URLXepg = System.ServerProtocol.XML + "://" + System.Domain + "/xmltv/threadfin.xml"
 
-	case "update.m3u":
-		err = getProviderData("m3u", "")
-		if err != nil {
-			break
-		}
-
-		err = buildDatabaseDVR()
-		if err != nil {
-			break
-		}
-
-		buildXEPG(false)
-
-	case "update.hdhr":
-
-		err = getProviderData("hdhr", "")
+	case "update.m3u", "update.hdhr":
+		provider := strings.TrimPrefix(request.Cmd, "update.")
+		err = getProviderData(provider, "")
 		if err != nil {
 			break
 		}

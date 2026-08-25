@@ -18,6 +18,11 @@ import (
 )
 
 // Playlisten parsen
+var (
+	filterExcludeRegexp = regexp.MustCompile(`!+[{]+[^.]+[}]`)
+	filterIncludeRegexp = regexp.MustCompile(`[{]+[^.]+[}]`)
+)
+
 func parsePlaylist(filename, fileType string) (channels []interface{}, err error) {
 
 	content, err := readByteFromFile(filename)
@@ -42,9 +47,6 @@ func parsePlaylist(filename, fileType string) (channels []interface{}, err error
 func filterThisStream(s interface{}) (status bool, liveEvent bool) {
 
 	var stream = s.(map[string]string)
-	var regexpYES = `[{]+[^.]+[}]`
-	var regexpNO = `!+[{]+[^.]+[}]`
-
 	liveEvent = false
 
 	for _, filter := range Data.Filter {
@@ -70,8 +72,7 @@ func filterThisStream(s interface{}) (status bool, liveEvent bool) {
 		}
 
 		// Unerwünschte Streams !{DEU}
-		r := regexp.MustCompile(regexpNO)
-		val := r.FindStringSubmatch(filter.Rule)
+		val := filterExcludeRegexp.FindStringSubmatch(filter.Rule)
 
 		if len(val) == 1 {
 
@@ -82,8 +83,7 @@ func filterThisStream(s interface{}) (status bool, liveEvent bool) {
 		}
 
 		// Muss zusätzlich erfüllt sein {DEU}
-		r = regexp.MustCompile(regexpYES)
-		val = r.FindStringSubmatch(filter.Rule)
+		val = filterIncludeRegexp.FindStringSubmatch(filter.Rule)
 
 		if len(val) == 1 {
 
