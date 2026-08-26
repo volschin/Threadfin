@@ -135,21 +135,62 @@ func createStreamID(stream map[int]ThisStream, ip, userAgent string) (streamID i
 	return
 }
 
+const contentTypeSniffBytes = 512
+
+type segmentInputReader struct {
+	reader io.Reader
+	err    error
+}
+
+func (reader *segmentInputReader) Read(buffer []byte) (int, error) {
+	n, err := reader.reader.Read(buffer)
+	if err != nil && !errors.Is(err, io.EOF) {
+		reader.err = err
+	}
+	return n, err
+}
+
+type segmentOutputWriter struct {
+	writer io.Writer
+	err    error
+}
+
+func (writer *segmentOutputWriter) Write(buffer []byte) (int, error) {
+	n, err := writer.writer.Write(buffer)
+	if err != nil {
+		writer.err = err
+	}
+	return n, err
+}
+
 func transferSegment(
 	destination io.Writer,
 	segment io.ReadCloser,
 	beforeWrite func([]byte),
 ) (inputErr, writeErr error) {
-	content, readErr := io.ReadAll(segment)
-	closeErr := segment.Close()
-	if inputErr = errors.Join(readErr, closeErr); inputErr != nil {
-		return inputErr, nil
+	reader := bufio.NewReaderSize(segment, contentTypeSniffBytes)
+	prefix, prefixErr := reader.Peek(contentTypeSniffBytes)
+	if prefixErr != nil && !errors.Is(prefixErr, io.EOF) {
+		return errors.Join(prefixErr, segment.Close()), nil
 	}
 	if beforeWrite != nil {
-		beforeWrite(content)
+		beforeWrite(prefix)
 	}
-	_, writeErr = destination.Write(content)
-	return nil, writeErr
+
+	trackedInput := &segmentInputReader{reader: reader}
+	trackedOutput := &segmentOutputWriter{writer: destination}
+	_, transferErr := io.Copy(trackedOutput, trackedInput)
+	closeErr := segment.Close()
+	if trackedInput.err != nil {
+		return errors.Join(trackedInput.err, closeErr), nil
+	}
+	if trackedOutput.err != nil {
+		return closeErr, trackedOutput.err
+	}
+	if transferErr == io.ErrShortWrite {
+		transferErr = nil
+	}
+	return closeErr, transferErr
 }
 
 func bufferingStream(playlistID string, streamingURL string, backupStream1 *BackupStream, backupStream2 *BackupStream, backupStream3 *BackupStream, channelName string, w http.ResponseWriter, r *http.Request) {

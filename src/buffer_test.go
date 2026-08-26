@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -70,12 +71,12 @@ func (reader segmentErrorReader) Read([]byte) (int, error) {
 	return 0, reader.err
 }
 
-func TestTransferSegmentClosesThenRunsCallbackThenWrites(t *testing.T) {
+func TestTransferSegmentRunsCallbackThenWritesThenCloses(t *testing.T) {
 	source := &trackingSegmentReadCloser{Reader: strings.NewReader("segment-data")}
 	callbackRan := false
 	destination := segmentWriterFunc(func(content []byte) (int, error) {
-		if !source.closed {
-			t.Fatal("destination write occurred before close")
+		if source.closed {
+			t.Fatal("destination write occurred after close")
 		}
 		if !callbackRan {
 			t.Fatal("destination write occurred before callback")
@@ -87,8 +88,8 @@ func TestTransferSegmentClosesThenRunsCallbackThenWrites(t *testing.T) {
 	})
 
 	inputErr, writeErr := transferSegment(destination, source, func(content []byte) {
-		if !source.closed {
-			t.Fatal("callback occurred before close")
+		if source.closed {
+			t.Fatal("callback occurred after close")
 		}
 		if !bytes.Equal(content, []byte("segment-data")) {
 			t.Fatalf("callback content = %q", content)
@@ -97,6 +98,9 @@ func TestTransferSegmentClosesThenRunsCallbackThenWrites(t *testing.T) {
 	})
 	if inputErr != nil || writeErr != nil {
 		t.Fatalf("transferSegment() = (%v, %v), want (nil, nil)", inputErr, writeErr)
+	}
+	if !source.closed {
+		t.Fatal("source was not closed")
 	}
 }
 
@@ -201,5 +205,117 @@ func TestSwitchBandwidthRejectsEmptyVariantMap(t *testing.T) {
 
 	if err := switchBandwidth(stream); err == nil {
 		t.Fatal("switchBandwidth() succeeded with no streaming variants")
+	}
+}
+
+var errSegmentRead = errors.New("segment read failed")
+var errSegmentWrite = errors.New("segment write failed")
+var errSegmentClose = errors.New("segment close failed")
+
+type segmentBody struct {
+	io.Reader
+	closeErr error
+	closes   int
+}
+
+func (body *segmentBody) Close() error {
+	body.closes++
+	return body.closeErr
+}
+
+type segmentMidReadFailure struct {
+	remaining int
+}
+
+func (reader *segmentMidReadFailure) Read(buffer []byte) (int, error) {
+	if reader.remaining == 0 {
+		return 0, errSegmentRead
+	}
+	n := min(len(buffer), reader.remaining)
+	for index := range n {
+		buffer[index] = 0x47
+	}
+	reader.remaining -= n
+	return n, nil
+}
+
+type segmentWriteFailure struct {
+	limit   int
+	written int
+}
+
+func (writer *segmentWriteFailure) Write(buffer []byte) (int, error) {
+	remaining := writer.limit - writer.written
+	if remaining <= 0 {
+		return 0, errSegmentWrite
+	}
+	if len(buffer) > remaining {
+		writer.written += remaining
+		return remaining, errSegmentWrite
+	}
+	writer.written += len(buffer)
+	return len(buffer), nil
+}
+
+func TestTransferSegmentStreamsExactBytesAfterPrefix(t *testing.T) {
+	for _, size := range []int{0, 100, 512, 1024} {
+		t.Run(strconv.Itoa(size), func(t *testing.T) {
+			payload := bytes.Repeat([]byte{0x47}, size)
+			source := &segmentBody{Reader: bytes.NewReader(payload)}
+			var destination bytes.Buffer
+			var prefix []byte
+			inputErr, writeErr := transferSegment(&destination, source, func(value []byte) {
+				prefix = append([]byte(nil), value...)
+			})
+			if inputErr != nil || writeErr != nil {
+				t.Fatalf("errors=(%v,%v)", inputErr, writeErr)
+			}
+			if !bytes.Equal(destination.Bytes(), payload) {
+				t.Fatal("segment bytes changed")
+			}
+			if !bytes.Equal(prefix, payload[:min(len(payload), 512)]) {
+				t.Fatal("prefix changed")
+			}
+			if source.closes != 1 {
+				t.Fatalf("Close calls=%d", source.closes)
+			}
+		})
+	}
+}
+
+func TestTransferSegmentExposesPartialBytesAfterPrefixReadFailure(t *testing.T) {
+	source := &segmentBody{Reader: &segmentMidReadFailure{remaining: 1024}, closeErr: errSegmentClose}
+	var destination bytes.Buffer
+	inputErr, writeErr := transferSegment(&destination, source, func([]byte) {})
+	if !errors.Is(inputErr, errSegmentRead) || !errors.Is(inputErr, errSegmentClose) || writeErr != nil {
+		t.Fatalf("errors=(%v,%v)", inputErr, writeErr)
+	}
+	if destination.Len() != 1024 {
+		t.Fatalf("partial bytes=%d", destination.Len())
+	}
+}
+
+func TestTransferSegmentReturnsWriteAndCloseErrors(t *testing.T) {
+	source := &segmentBody{Reader: bytes.NewReader(bytes.Repeat([]byte{0x47}, 2048)), closeErr: errSegmentClose}
+	destination := &segmentWriteFailure{limit: 700}
+	inputErr, writeErr := transferSegment(destination, source, func([]byte) {})
+	if !errors.Is(inputErr, errSegmentClose) || !errors.Is(writeErr, errSegmentWrite) {
+		t.Fatalf("errors=(%v,%v)", inputErr, writeErr)
+	}
+	if destination.written != 700 {
+		t.Fatalf("written=%d", destination.written)
+	}
+}
+
+func TestTransferSegmentDoesNotWriteWhenPrefixReadFails(t *testing.T) {
+	source := &segmentBody{Reader: &segmentMidReadFailure{remaining: 100}}
+	var destination bytes.Buffer
+	called := false
+	inputErr, writeErr := transferSegment(&destination, source, func([]byte) { called = true })
+	if !errors.Is(inputErr, errSegmentRead) || writeErr != nil {
+		t.Fatalf("errors=(%v,%v)", inputErr, writeErr)
+	}
+	if destination.Len() != 0 || called {
+		t.Fatal("prefix failure committed output")
 	}
 }
