@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"sync"
 
 	"crypto/hmac"
 	"crypto/rand"
@@ -30,6 +31,7 @@ var data = make(map[string]interface{})
 var tokens = make(map[string]interface{})
 
 var initAuthentication = false
+var authenticationMutex sync.RWMutex
 
 // Cookie : cookie
 type Cookie struct {
@@ -127,6 +129,9 @@ func main() {
 
 // Init : databasePath = Path to authentication.json
 func Init(databasePath string, validity int) (err error) {
+	authenticationMutex.Lock()
+	defer authenticationMutex.Unlock()
+
 	database = filepath.Dir(databasePath) + string(os.PathSeparator) + databaseFile
 
 	// Check if the database already exists
@@ -153,6 +158,8 @@ func Init(databasePath string, validity int) (err error) {
 
 // CreateDefaultUser = created efault user
 func CreateDefaultUser(username, password string) (err error) {
+	authenticationMutex.Lock()
+	defer authenticationMutex.Unlock()
 
 	err = checkInit()
 	if err != nil {
@@ -181,6 +188,8 @@ func CreateDefaultUser(username, password string) (err error) {
 
 // CreateNewUser : create new user
 func CreateNewUser(username, password string) (userID string, err error) {
+	authenticationMutex.Lock()
+	defer authenticationMutex.Unlock()
 
 	err = checkInit()
 	if err != nil {
@@ -224,6 +233,8 @@ func CreateNewUser(username, password string) (userID string, err error) {
 
 // UserAuthentication : user authentication
 func UserAuthentication(username, password string) (token string, err error) {
+	authenticationMutex.Lock()
+	defer authenticationMutex.Unlock()
 
 	err = checkInit()
 	if err != nil {
@@ -270,6 +281,8 @@ func UserAuthentication(username, password string) (token string, err error) {
 
 // CheckTheValidityOfTheToken : check token
 func CheckTheValidityOfTheToken(token string) (newToken string, err error) {
+	authenticationMutex.Lock()
+	defer authenticationMutex.Unlock()
 
 	err = checkInit()
 	if err != nil {
@@ -299,6 +312,8 @@ func CheckTheValidityOfTheToken(token string) (newToken string, err error) {
 
 // GetUserID : get user ID
 func GetUserID(token string) (userID string, err error) {
+	authenticationMutex.RLock()
+	defer authenticationMutex.RUnlock()
 
 	err = checkInit()
 	if err != nil {
@@ -323,6 +338,8 @@ func GetUserID(token string) (userID string, err error) {
 
 // WriteUserData : save user date
 func WriteUserData(userID string, userData map[string]interface{}) (err error) {
+	authenticationMutex.Lock()
+	defer authenticationMutex.Unlock()
 
 	err = checkInit()
 	if err != nil {
@@ -333,7 +350,7 @@ func WriteUserData(userID string, userData map[string]interface{}) (err error) {
 
 	if v, ok := data["users"].(map[string]interface{})[userID].(map[string]interface{}); ok {
 
-		v["data"] = userData
+		v["data"] = cloneAuthenticationMap(userData)
 		err = saveDatabase(data)
 
 	} else {
@@ -345,6 +362,8 @@ func WriteUserData(userID string, userData map[string]interface{}) (err error) {
 
 // ReadUserData : load user date
 func ReadUserData(userID string) (userData map[string]interface{}, err error) {
+	authenticationMutex.RLock()
+	defer authenticationMutex.RUnlock()
 
 	err = checkInit()
 	if err != nil {
@@ -354,7 +373,7 @@ func ReadUserData(userID string) (userData map[string]interface{}, err error) {
 	err = createError(031)
 
 	if v, ok := data["users"].(map[string]interface{})[userID].(map[string]interface{}); ok {
-		userData = v["data"].(map[string]interface{})
+		userData = cloneAuthenticationMap(v["data"].(map[string]interface{}))
 		err = nil
 
 		return
@@ -363,8 +382,68 @@ func ReadUserData(userID string) (userData map[string]interface{}, err error) {
 	return
 }
 
+// PermissionGranted reads a boolean user permission without changing storage.
+// Missing permissions are denied so newly introduced authority stays opt-in.
+func PermissionGranted(userID, permission string) (bool, error) {
+	authenticationMutex.RLock()
+	defer authenticationMutex.RUnlock()
+	if err := checkInit(); err != nil {
+		return false, err
+	}
+	user, ok := data["users"].(map[string]interface{})[userID].(map[string]interface{})
+	if !ok {
+		return false, createError(031)
+	}
+	userData, ok := user["data"].(map[string]interface{})
+	if !ok {
+		return false, createError(031)
+	}
+	granted, ok := userData[permission].(bool)
+	return ok && granted, nil
+}
+
+// AuthorizeTokenPermissions validates a token and all requested permissions
+// against one authentication snapshot, then rotates the token only on success.
+func AuthorizeTokenPermissions(token string, permissions ...string) (newToken, userID string, err error) {
+	authenticationMutex.Lock()
+	defer authenticationMutex.Unlock()
+	if err = checkInit(); err != nil {
+		return "", "", err
+	}
+	tokenData, ok := tokens[token].(map[string]interface{})
+	if !ok {
+		return "", "", createError(011)
+	}
+	expires, ok := tokenData["expires"].(time.Time)
+	if !ok || expires.Before(time.Now().Local()) {
+		return "", "", createError(011)
+	}
+	userID, ok = tokenData["id"].(string)
+	if !ok {
+		return "", "", createError(011)
+	}
+	user, ok := data["users"].(map[string]interface{})[userID].(map[string]interface{})
+	if !ok {
+		return "", "", createError(011)
+	}
+	userData, ok := user["data"].(map[string]interface{})
+	if !ok {
+		return "", "", createError(011)
+	}
+	for _, permission := range permissions {
+		granted, exists := userData[permission].(bool)
+		if !exists || !granted {
+			return "", "", createError(011)
+		}
+	}
+	newToken = setToken(userID, token)
+	return newToken, userID, nil
+}
+
 // RemoveUser : remove user
 func RemoveUser(userID string) (err error) {
+	authenticationMutex.Lock()
+	defer authenticationMutex.Unlock()
 
 	err = checkInit()
 	if err != nil {
@@ -389,27 +468,28 @@ func RemoveUser(userID string) (err error) {
 
 // SetDefaultUserData : set default user data
 func SetDefaultUserData(defaults map[string]interface{}) (err error) {
-
-	allUserData, err := GetAllUserData()
-
-	for _, d := range allUserData {
-		var data = d.(map[string]interface{})["data"].(map[string]interface{})
-		var userID = d.(map[string]interface{})["_id"].(string)
-
+	authenticationMutex.Lock()
+	defer authenticationMutex.Unlock()
+	if err = checkInit(); err != nil {
+		return err
+	}
+	for _, d := range data["users"].(map[string]interface{}) {
+		userData := d.(map[string]interface{})["data"].(map[string]interface{})
 		for k, v := range defaults {
-			if _, ok := data[k]; ok {
+			if _, ok := userData[k]; ok {
 				// Key exist
 			} else {
-				data[k] = v
+				userData[k] = cloneAuthenticationValue(v)
 			}
 		}
-		err = WriteUserData(userID, data)
 	}
-	return
+	return saveDatabase(data)
 }
 
 // ChangeCredentials : change credentials
 func ChangeCredentials(userID, username, password string) (err error) {
+	authenticationMutex.Lock()
+	defer authenticationMutex.Unlock()
 	err = checkInit()
 	if err != nil {
 		return
@@ -441,6 +521,8 @@ func ChangeCredentials(userID, username, password string) (err error) {
 
 // GetAllUserData : get all user data
 func GetAllUserData() (allUserData map[string]interface{}, err error) {
+	authenticationMutex.Lock()
+	defer authenticationMutex.Unlock()
 
 	err = checkInit()
 	if err != nil {
@@ -458,7 +540,7 @@ func GetAllUserData() (allUserData map[string]interface{}, err error) {
 		data = defaults
 	}
 
-	allUserData = data["users"].(map[string]interface{})
+	allUserData = cloneAuthenticationMap(data["users"].(map[string]interface{}))
 	return
 }
 
@@ -587,7 +669,7 @@ func defaultsForNewUser(username, password string) (map[string]interface{}, erro
 	defaults["_salt"] = salt
 	defaults["_id"] = "id-" + randomID(idLength)
 	//defaults["_one.time.token"] = randomString(tokenLength)
-	defaults["data"] = make(map[string]interface{})
+	defaults["data"] = map[string]interface{}{"authentication.config": false}
 
 	return defaults, nil
 }
@@ -610,8 +692,33 @@ loopToken:
 	return
 }
 
+func cloneAuthenticationValue(value interface{}) interface{} {
+	switch typed := value.(type) {
+	case map[string]interface{}:
+		return cloneAuthenticationMap(typed)
+	case []interface{}:
+		cloned := make([]interface{}, len(typed))
+		for index, item := range typed {
+			cloned[index] = cloneAuthenticationValue(item)
+		}
+		return cloned
+	default:
+		return typed
+	}
+}
+
+func cloneAuthenticationMap(source map[string]interface{}) map[string]interface{} {
+	cloned := make(map[string]interface{}, len(source))
+	for key, value := range source {
+		cloned[key] = cloneAuthenticationValue(value)
+	}
+	return cloned
+}
+
 // SetCookieToken : set cookie
 func SetCookieToken(w http.ResponseWriter, token string) http.ResponseWriter {
+	authenticationMutex.RLock()
+	defer authenticationMutex.RUnlock()
 	expiration := time.Now().Add(time.Minute * time.Duration(tokenValidity))
 	cookie := http.Cookie{Name: "Token", Value: token, Expires: expiration}
 	http.SetCookie(w, &cookie)

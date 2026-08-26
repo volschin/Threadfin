@@ -93,11 +93,14 @@ func writeZIP(sourceFiles []string, target io.Writer) (err error) {
 }
 
 func extractGZIP(gzipBody []byte, fileSource string) (body []byte, err error) {
+	return extractGZIPBounded(gzipBody, fileSource, providerResponseBodyLimit)
+}
+
+func extractGZIPBounded(gzipBody []byte, fileSource string, limit int64) (body []byte, err error) {
 
 	var b = bytes.NewBuffer(gzipBody)
 
-	var r io.Reader
-	r, err = gzip.NewReader(b)
+	r, err := gzip.NewReader(b)
 	if err != nil {
 		// Keine gzip Datei
 		body = gzipBody
@@ -108,11 +111,13 @@ func extractGZIP(gzipBody []byte, fileSource string) (body []byte, err error) {
 	showInfo("Extract gzip:" + sanitizeProviderSourceForLog(fileSource))
 
 	var resB bytes.Buffer
-	_, err = resB.ReadFrom(r)
-	if err != nil {
-		body = gzipBody
-		err = nil
-		return
+	_, readErr := io.Copy(&resB, io.LimitReader(r, limit+1))
+	closeErr := r.Close()
+	if readErr != nil || closeErr != nil {
+		return nil, errors.New("provider compressed response could not be read")
+	}
+	if int64(resB.Len()) > limit {
+		return nil, errProviderResponseTooLarge
 	}
 
 	body = resB.Bytes()

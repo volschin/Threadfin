@@ -64,7 +64,7 @@ class MainMenuItem extends MainMenu {
         break
 
       case "users":
-        this.tableHeader = ["{{.users.table.username}}", "{{.users.table.password}}", "{{.users.table.web}}", "{{.users.table.pms}}", "{{.users.table.m3u}}", "{{.users.table.xml}}", "{{.users.table.api}}"]
+        this.tableHeader = ["{{.users.table.username}}", "{{.users.table.password}}", "{{.users.table.web}}", "{{.users.table.pms}}", "{{.users.table.m3u}}", "{{.users.table.xml}}", "{{.users.table.api}}", "{{.users.table.config}}"]
         break
 
       case "mapping":
@@ -397,6 +397,16 @@ class Content {
             cell.child = true
             cell.childType = "P"
             if (data[key]["data"]["authentication.api"] == true) {
+              cell.value = "✓"
+            } else {
+              cell.value = "-"
+            }
+            tr.appendChild(cell.createCell())
+
+            var cell: Cell = new Cell()
+            cell.child = true
+            cell.childType = "P"
+            if (data[key]["data"]["authentication.config"] == true) {
               cell.value = "✓"
             } else {
               cell.value = "-"
@@ -1882,6 +1892,12 @@ function openPopUp(dataType, element) {
       var input = content.createCheckbox(dbKey)
       input.checked = data[dbKey]
       content.appendRow("{{.users.api.title}}", input)
+
+      // Berechtigung CONFIG
+      var dbKey: string = "authentication.config"
+      var input = content.createCheckbox(dbKey)
+      input.checked = data[dbKey] == true
+      content.appendRow("{{.users.config.title}}", input)
 
       // Interaktion
       content.createInteraction()

@@ -476,7 +476,8 @@
       "pms": "PMS",
       "m3u": "M3U",
       "xml": "XML",
-      "api": "API"
+      "api": "API",
+      "config": "CONFIG"
     },
     "username": {
       "title": "Username",
@@ -517,6 +518,11 @@
       "title": "API Access",
       "placeholder": "",
       "description": ""
+    },
+    "config": {
+      "title": "CONFIG Access",
+      "placeholder": "",
+      "description": "Allows the typed configuration workflow, including source fetches from permitted private-LAN destinations."
     }
   },
   "settings": {
@@ -724,7 +730,8 @@
     },
     "users": {
       "purpose": "Control which Threadfin interfaces and generated endpoints each account may use. Passwords are edit-only secrets.",
-      "passwords": "Passwords are available only while creating or editing an account."
+      "passwords": "Passwords are available only while creating or editing an account.",
+      "configAuthority": "CONFIG grants the typed configuration workflow authority to fetch sources from permitted private-LAN destinations."
     },
     "log": {
       "purpose": "Search the current diagnostic record or filter response-backed DEBUG, WARNING, and ERROR markers.",

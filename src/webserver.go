@@ -1,6 +1,7 @@
 package src
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -508,6 +509,7 @@ func WS(w http.ResponseWriter, r *http.Request) {
 		}
 		systemMutex.Unlock()
 
+		unlockConfigMutation := lockConfigMutationForCommand(request.Cmd)
 		switch request.Cmd {
 		// Data read commands
 		case "getServerConfig":
@@ -682,6 +684,7 @@ func WS(w http.ResponseWriter, r *http.Request) {
 		default:
 			fmt.Println("+ + + + + + + + + + +", request.Cmd)
 		}
+		unlockConfigMutation()
 
 		if err != nil {
 			response.Status = false
@@ -958,6 +961,25 @@ func API(w http.ResponseWriter, r *http.Request) {
 		}
 	*/
 
+	limitedBody := &io.LimitedReader{R: r.Body, N: configAPIRequestLimit + 1}
+	body, bodyErr := io.ReadAll(limitedBody)
+	closeErr := r.Body.Close()
+	if closeErr != nil {
+		ShowError(closeErr, 0)
+	}
+	if bodyErr != nil {
+		httpStatusError(w, r, http.StatusBadRequest)
+		return
+	}
+	if len(body) > configAPIRequestLimit {
+		httpStatusError(w, r, http.StatusRequestEntityTooLarge)
+		return
+	}
+	if isConfigCommandBody(body) {
+		handleConfigAPI(w, r, body)
+		return
+	}
+
 	if Settings.HttpThreadfinDomain != "" {
 		setGlobalDomain(getBaseUrl(Settings.HttpThreadfinDomain, Settings.Port))
 	} else {
@@ -990,10 +1012,7 @@ func API(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	request, decodeErr, closeErr := decodeAndCloseAPIRequest(r.Body)
-	if closeErr != nil {
-		ShowError(closeErr, 0)
-	}
+	request, decodeErr := decodeAPIRequest(bytes.NewReader(body))
 	if decodeErr != nil {
 		httpStatusError(w, r, http.StatusBadRequest)
 		return
@@ -1040,6 +1059,7 @@ func API(w http.ResponseWriter, r *http.Request) {
 
 	}
 
+	unlockConfigMutation := lockConfigMutationForCommand(request.Cmd)
 	switch request.Cmd {
 	case "login": // Muss nichts übergeben werden
 
@@ -1084,6 +1104,7 @@ func API(w http.ResponseWriter, r *http.Request) {
 		err = errors.New(getErrMsg(5000))
 
 	}
+	unlockConfigMutation()
 
 	if err != nil {
 		responseAPIError(err)
@@ -1223,6 +1244,7 @@ func browserUserData() (map[string]interface{}, error) {
 		"authentication.m3u",
 		"authentication.xml",
 		"authentication.api",
+		"authentication.config",
 	}
 	browserUsers := make(map[string]interface{}, len(users))
 	for userID, value := range users {
@@ -1250,6 +1272,9 @@ func authenticationSettingsRequireReload(previous, current bool) bool {
 }
 
 func enablePPV(w http.ResponseWriter, r *http.Request) {
+	configMutationMutex.Lock()
+	defer configMutationMutex.Unlock()
+
 	xepg, err := loadJSONFileToMap(System.File.XEPG)
 	if err != nil {
 		var response APIResponseStruct
@@ -1285,6 +1310,9 @@ func enablePPV(w http.ResponseWriter, r *http.Request) {
 }
 
 func disablePPV(w http.ResponseWriter, r *http.Request) {
+	configMutationMutex.Lock()
+	defer configMutationMutex.Unlock()
+
 	xepg, err := loadJSONFileToMap(System.File.XEPG)
 	if err != nil {
 		var response APIResponseStruct

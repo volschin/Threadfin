@@ -66,13 +66,29 @@ func decodeFilters(values map[int64]interface{}) ([]FilterStruct, error) {
 
 // XEPG Daten erstellen
 func buildXEPG(background bool) {
+	if err := buildXEPGWithResult(background); err != nil {
+		ShowError(err, 0)
+	}
+}
+
+func buildXEPGWithResult(background bool) error {
+	backgroundMutationLock := background
+	if backgroundMutationLock {
+		configMutationMutex.Lock()
+	}
+	defer func() {
+		if backgroundMutationLock {
+			configMutationMutex.Unlock()
+		}
+	}()
+
 	xepgMutex.Lock()
 	defer func() {
 		xepgMutex.Unlock()
 	}()
 
 	if System.ScanInProgress == 1 {
-		return
+		return nil
 	}
 
 	System.ScanInProgress = 1
@@ -81,16 +97,16 @@ func buildXEPG(background bool) {
 	// Clear streaming URL cache
 	Data.Cache.StreamingURLS = make(map[string]StreamInfo)
 	if err := saveMapToJSONFile(System.File.URLS, Data.Cache.StreamingURLS); err != nil {
-		ShowError(err, 0)
 		System.ScanInProgress = 0
-		return
+		return err
 	}
 
 	var err error
 
 	Data.Cache.Images, err = imgcache.New(System.Folder.ImagesCache, fmt.Sprintf("%s://%s/images/", System.ServerProtocol.WEB, System.Domain), Settings.CacheImages)
 	if err != nil {
-		ShowError(err, 0)
+		System.ScanInProgress = 0
+		return err
 	}
 
 	if Settings.EpgSource == "XEPG" {
@@ -99,7 +115,9 @@ func buildXEPG(background bool) {
 
 		case true:
 
+			backgroundMutationLock = false
 			go func() {
+				defer configMutationMutex.Unlock()
 
 				createXEPGMapping()
 				if err := createXEPGDatabase(); err != nil {
@@ -162,20 +180,17 @@ func buildXEPG(background bool) {
 
 			createXEPGMapping()
 			if err := createXEPGDatabase(); err != nil {
-				ShowError(err, 0)
 				System.ScanInProgress = 0
-				return
+				return err
 			}
 			if err := mapping(); err != nil {
-				ShowError(err, 0)
 				System.ScanInProgress = 0
-				return
+				return err
 			}
 			cleanupXEPG()
 			if err := writeXEPGOutputFiles(); err != nil {
-				ShowError(err, 0)
 				System.ScanInProgress = 0
-				return
+				return err
 			}
 
 			// Exit maintenance before long file generation to keep UI responsive
@@ -222,19 +237,28 @@ func buildXEPG(background bool) {
 	} else {
 
 		if _, err := getLineup(); err != nil {
-			ShowError(err, 0)
+			System.ScanInProgress = 0
+			return err
 		}
 		System.ScanInProgress = 0
 
 	}
 
+	return nil
+
 }
 
 // Update XEPG data
 func updateXEPG(background bool) {
+	if err := updateXEPGWithResult(background); err != nil {
+		ShowError(err, 0)
+	}
+}
+
+func updateXEPGWithResult(background bool) error {
 
 	if System.ScanInProgress == 1 {
-		return
+		return nil
 	}
 
 	System.ScanInProgress = 1
@@ -246,14 +270,12 @@ func updateXEPG(background bool) {
 		case false:
 
 			if err := createXEPGDatabase(); err != nil {
-				ShowError(err, 0)
 				System.ScanInProgress = 0
-				return
+				return err
 			}
 			if err := mapping(); err != nil {
-				ShowError(err, 0)
 				System.ScanInProgress = 0
-				return
+				return err
 			}
 			cleanupXEPG()
 
@@ -284,7 +306,7 @@ func updateXEPG(background bool) {
 	// Cache löschen
 	Data.Cache.XMLTV = make(map[string]XMLTV)
 
-	return
+	return nil
 }
 
 // Mapping Menü für die XMLTV Dateien erstellen

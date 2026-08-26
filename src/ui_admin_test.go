@@ -25,13 +25,14 @@ func TestUIAdminBrowserUsersExcludeCredentialMaterial(t *testing.T) {
 		t.Fatal(err)
 	}
 	permissions := map[string]interface{}{
-		"username":           "browser-admin",
-		"defaultUser":        true,
-		"authentication.web": true,
-		"authentication.pms": true,
-		"authentication.m3u": false,
-		"authentication.xml": true,
-		"authentication.api": false,
+		"username":              "browser-admin",
+		"defaultUser":           true,
+		"authentication.web":    true,
+		"authentication.pms":    true,
+		"authentication.m3u":    false,
+		"authentication.xml":    true,
+		"authentication.api":    false,
+		"authentication.config": false,
 	}
 	if err := authentication.WriteUserData(userID, permissions); err != nil {
 		t.Fatal(err)
@@ -332,8 +333,8 @@ func TestUIAdminUsersGeneratedEnvelopesAndSafeRows(t *testing.T) {
 	if err := json.Unmarshal(output, &got); err != nil {
 		t.Fatalf("decode generated Users fixture: %v\n%s", err, output)
 	}
-	if len(got.Permissions) != 5 {
-		t.Fatalf("Users permissions = %#v, want WEB/PMS/M3U/XML/API", got.Permissions)
+	if len(got.Permissions) != 6 {
+		t.Fatalf("Users permissions = %#v, want WEB/PMS/M3U/XML/API/CONFIG", got.Permissions)
 	}
 	for _, permission := range got.Permissions {
 		if permission["key"] == "" || permission["label"] == "" || strings.TrimSpace(permission["description"].(string)) == "" {
@@ -343,7 +344,7 @@ func TestUIAdminUsersGeneratedEnvelopesAndSafeRows(t *testing.T) {
 	newData := map[string]any{
 		"username": "new-user", "password": "new-secret", "confirm": "new-secret", "defaultUser": false,
 		"authentication.web": true, "authentication.pms": true, "authentication.m3u": false,
-		"authentication.xml": true, "authentication.api": false,
+		"authentication.xml": true, "authentication.api": false, "authentication.config": false,
 	}
 	if got.Create["cmd"] != "saveNewUser" || !reflect.DeepEqual(got.Create["data"], map[string]any{"userData": newData}) {
 		t.Fatalf("new user envelope = %#v", got.Create)
@@ -351,7 +352,7 @@ func TestUIAdminUsersGeneratedEnvelopesAndSafeRows(t *testing.T) {
 	editData := map[string]any{
 		"username": "renamed", "password": "", "confirm": "", "defaultUser": false,
 		"authentication.web": true, "authentication.pms": false, "authentication.m3u": true,
-		"authentication.xml": false, "authentication.api": true,
+		"authentication.xml": false, "authentication.api": true, "authentication.config": true,
 	}
 	if got.Edit["cmd"] != "saveUserData" || !reflect.DeepEqual(got.Edit["data"], map[string]any{"userData": map[string]any{"id-regular": editData}}) {
 		t.Fatalf("edit user envelope = %#v", got.Edit)
@@ -381,7 +382,7 @@ func TestUIAdminGeneratedUsersPopupControlsHaveVisibleProgrammaticLabels(t *test
 	if err := json.Unmarshal(output, &got); err != nil {
 		t.Fatalf("decode generated Users popup labels: %v\n%s", err, output)
 	}
-	wantNames := []string{"username", "password", "confirm", "authentication.web", "authentication.pms", "authentication.m3u", "authentication.xml", "authentication.api"}
+	wantNames := []string{"username", "password", "confirm", "authentication.web", "authentication.pms", "authentication.m3u", "authentication.xml", "authentication.api", "authentication.config"}
 	for mode, controls := range map[string][]map[string]any{"create": got.Create, "edit": got.Edit} {
 		if len(controls) != len(wantNames) {
 			t.Fatalf("%s Users controls = %#v, want %d labelled controls", mode, controls, len(wantNames))
@@ -422,13 +423,13 @@ func TestUIAdminUsersGeneratedResponsiveIdentityDetails(t *testing.T) {
 	if err := json.Unmarshal(output, &got); err != nil {
 		t.Fatalf("decode generated responsive Users row: %v\n%s", err, output)
 	}
-	if got.IdentityClass != "tf-user-identity" || got.ActionClass != "tf-user-actions" || got.DesktopPermissionCells != 5 {
+	if got.IdentityClass != "tf-user-identity" || got.ActionClass != "tf-user-actions" || got.DesktopPermissionCells != 6 {
 		t.Fatalf("Users identity/table vocabulary = identity %q action %q permission cells %d", got.IdentityClass, got.ActionClass, got.DesktopPermissionCells)
 	}
-	if got.DetailsTag != "DETAILS" || got.Summary != "Permissions" || len(got.Terms) != 5 || len(got.Descriptions) != 5 {
+	if got.DetailsTag != "DETAILS" || got.Summary != "Permissions" || len(got.Terms) != 6 || len(got.Descriptions) != 6 {
 		t.Fatalf("narrow Users permission disclosure = tag %q summary %q terms %#v descriptions %#v", got.DetailsTag, got.Summary, got.Terms, got.Descriptions)
 	}
-	for index, permission := range []string{"WEB", "PMS", "M3U", "XML", "API"} {
+	for index, permission := range []string{"WEB", "PMS", "M3U", "XML", "API", "CONFIG"} {
 		if got.Terms[index] != permission ||
 			(!strings.Contains(got.Descriptions[index], "Allowed") && !strings.Contains(got.Descriptions[index], "Denied")) ||
 			!strings.Contains(got.Descriptions[index], userPermissionDescriptionForTest(permission)) {
@@ -465,6 +466,8 @@ func userPermissionDescriptionForTest(label string) string {
 		return "generated XMLTV"
 	case "API":
 		return "API commands"
+	case "CONFIG":
+		return "private-LAN"
 	default:
 		return ""
 	}
@@ -652,6 +655,14 @@ func TestUIAdminScopedAssetsLanguageAndEmbeddingParity(t *testing.T) {
 		if _, exists := admin[key]; !exists {
 			t.Errorf("English admin language catalog is missing %q", key)
 		}
+	}
+	usersLanguage, ok := language["users"].(map[string]any)
+	if !ok {
+		t.Fatal("English language catalog has no Users copy")
+	}
+	configLanguage, ok := usersLanguage["config"].(map[string]any)
+	if !ok || configLanguage["title"] != "CONFIG Access" || !strings.Contains(configLanguage["description"].(string), "private-LAN") {
+		t.Fatalf("English CONFIG permission copy = %#v, want explicit private-LAN source-fetch authority", configLanguage)
 	}
 
 	indexBytes, err := os.ReadFile(filepath.Join("..", "html", "index.html"))
@@ -911,17 +922,17 @@ vm.runInContext(fs.readFileSync(process.argv[2], "utf8"), context);
 const createInput = {
   username: "new-user", password: "new-secret", confirm: "new-secret", defaultUser: false,
   "authentication.web": true, "authentication.pms": true, "authentication.m3u": false,
-  "authentication.xml": true, "authentication.api": false
+  "authentication.xml": true, "authentication.api": false, "authentication.config": false
 };
 const editInput = {
   username: "renamed", password: "", confirm: "", defaultUser: false,
   "authentication.web": true, "authentication.pms": false, "authentication.m3u": true,
-  "authentication.xml": false, "authentication.api": true
+  "authentication.xml": false, "authentication.api": true, "authentication.config": true
 };
 const record = {data: {
   username: "visible-user", defaultUser: true,
   "authentication.web": true, "authentication.pms": true, "authentication.m3u": false,
-  "authentication.xml": true, "authentication.api": false,
+  "authentication.xml": true, "authentication.api": false, "authentication.config": false,
   password: "must-not-render", _password: "$argon2id$must-not-render", _salt: "salt", _username: "digest"
 }};
 const row = context.userRowValues(record);
@@ -989,7 +1000,7 @@ const document = {
   getElementById(id) { return roots.concat(roots.flatMap(descendants)).find(item => item.id === id) || null; },
   addEventListener() {}, querySelectorAll() { return []; }, contains() { return true; }
 };
-const user = {username: "editor", defaultUser: false, "authentication.web": true, "authentication.pms": false, "authentication.m3u": true, "authentication.xml": false, "authentication.api": true};
+const user = {username: "editor", defaultUser: false, "authentication.web": true, "authentication.pms": false, "authentication.m3u": true, "authentication.xml": false, "authentication.api": true, "authentication.config": true};
 const context = {
   document, window: {}, console: {log() {}, warn() {}}, SERVER: {}, UNDO: {}, BULK_EDIT: false,
   getLocalData(type, id) { return type === "users" && id === "regular" ? {...user} : {}; },
@@ -1000,7 +1011,7 @@ vm.createContext(context);
 vm.runInContext(fs.readFileSync(process.argv[2], "utf8"), context);
 vm.runInContext(fs.readFileSync(process.argv[3], "utf8"), context);
 function snapshot() {
-  const wanted = ["username", "password", "confirm", "authentication.web", "authentication.pms", "authentication.m3u", "authentication.xml", "authentication.api"];
+  const wanted = ["username", "password", "confirm", "authentication.web", "authentication.pms", "authentication.m3u", "authentication.xml", "authentication.api", "authentication.config"];
   return wanted.map(name => {
     const control = popup.querySelector('[name="' + name + '"]');
     const labelledBy = control ? control.getAttribute("aria-labelledby") || "" : "";
@@ -1031,7 +1042,7 @@ function descendants(node) { return node.children.reduce((all, child) => all.con
 const document = {createElement(tag) { return new Element(tag); }, createTextNode(text) { const node = new Element("span"); node.textContent = text; return node; }};
 const context = {document, console: {log() {}, warn() {}}, openPopUp() {}, SERVER: {users: {user1: {data: {
   username: "alice", defaultUser: false, "authentication.web": true, "authentication.pms": false,
-  "authentication.m3u": true, "authentication.xml": false, "authentication.api": true
+  "authentication.m3u": true, "authentication.xml": false, "authentication.api": true, "authentication.config": true
 }}}}};
 vm.createContext(context);
 vm.runInContext(fs.readFileSync(process.argv[2], "utf8"), context);

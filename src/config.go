@@ -259,6 +259,14 @@ func configurationWizardRequired(settingsFile string) (bool, error) {
 
 // StartSystem : System wird gestartet
 func StartSystem(updateProviderFiles bool) (err error) {
+	return startSystem(updateProviderFiles, false)
+}
+
+func startSystemConfigLocked(updateProviderFiles bool) error {
+	return startSystem(updateProviderFiles, true)
+}
+
+func startSystem(updateProviderFiles, configLockHeld bool) (err error) {
 
 	setDeviceID()
 
@@ -302,6 +310,9 @@ func StartSystem(updateProviderFiles bool) (err error) {
 		return
 	}
 
+	if configLockHeld {
+		return buildXEPGWithResult(false)
+	}
 	buildXEPG(true)
 
 	return

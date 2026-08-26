@@ -5,6 +5,7 @@ var USER_PERMISSION_DEFINITIONS = [
     { key: "authentication.m3u", label: "M3U", description: "Authenticate requests for the generated M3U playlist." },
     { key: "authentication.xml", label: "XML", description: "Authenticate requests for the generated XMLTV guide." },
     { key: "authentication.api", label: "API", description: "Authenticate access to Threadfin's API commands." },
+    { key: "authentication.config", label: "CONFIG", description: "Authorize the typed configuration workflow, including source fetches from permitted private-LAN destinations." },
 ];
 function userActions(data) {
     var defaultUser = Boolean(data && data.defaultUser);

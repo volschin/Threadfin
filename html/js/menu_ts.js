@@ -49,7 +49,7 @@ class MainMenuItem extends MainMenu {
                 this.tableHeader = ["{{.filter.table.startingNumber}}", "{{.filter.table.name}}", "{{.filter.table.type}}", "{{.filter.table.filter}}"];
                 break;
             case "users":
-                this.tableHeader = ["{{.users.table.username}}", "{{.users.table.password}}", "{{.users.table.web}}", "{{.users.table.pms}}", "{{.users.table.m3u}}", "{{.users.table.xml}}", "{{.users.table.api}}"];
+                this.tableHeader = ["{{.users.table.username}}", "{{.users.table.password}}", "{{.users.table.web}}", "{{.users.table.pms}}", "{{.users.table.m3u}}", "{{.users.table.xml}}", "{{.users.table.api}}", "{{.users.table.config}}"];
                 break;
             case "mapping":
                 this.tableHeader = ["BULK", "{{.mapping.table.chNo}}", "{{.mapping.table.logo}}", "{{.mapping.table.channelName}}", "{{.mapping.table.playlist}}", "{{.mapping.table.groupTitle}}", "{{.mapping.table.xmltvFile}}", "{{.mapping.table.xmltvID}}"];
@@ -320,6 +320,16 @@ class Content {
                         cell.child = true;
                         cell.childType = "P";
                         if (data[key]["data"]["authentication.api"] == true) {
+                            cell.value = "✓";
+                        }
+                        else {
+                            cell.value = "-";
+                        }
+                        tr.appendChild(cell.createCell());
+                        var cell = new Cell();
+                        cell.child = true;
+                        cell.childType = "P";
+                        if (data[key]["data"]["authentication.config"] == true) {
                             cell.value = "✓";
                         }
                         else {
@@ -1539,6 +1549,11 @@ function openPopUp(dataType, element) {
             var input = content.createCheckbox(dbKey);
             input.checked = data[dbKey];
             content.appendRow("{{.users.api.title}}", input);
+            // Berechtigung CONFIG
+            var dbKey = "authentication.config";
+            var input = content.createCheckbox(dbKey);
+            input.checked = data[dbKey] == true;
+            content.appendRow("{{.users.config.title}}", input);
             // Interaktion
             content.createInteraction();
             // Löschen

@@ -206,7 +206,9 @@ func updateServerSettings(request RequestStruct) (settings SettingsStruct, err e
 				return
 			}
 
-			buildXEPG(false)
+			if err = buildXEPGWithResult(false); err != nil {
+				return
+			}
 
 		}
 
@@ -269,6 +271,10 @@ func updateServerSettings(request RequestStruct) (settings SettingsStruct, err e
 
 // Providerdaten speichern (WebUI)
 func saveFiles(request RequestStruct, fileType string) (err error) {
+	return saveFilesWithOptions(request, fileType, browserProviderFetchOptions())
+}
+
+func saveFilesWithOptions(request RequestStruct, fileType string, fetchOptions providerFetchOptions) (err error) {
 
 	var filesMap = make(map[string]interface{})
 	var newData = make(map[string]interface{})
@@ -334,7 +340,7 @@ func saveFiles(request RequestStruct, fileType string) (err error) {
 		if _, ok := data.(map[string]interface{})["new"]; ok {
 
 			reloadData = true
-			err = getProviderData(fileType, dataID)
+			err = getProviderDataWithOptions(fileType, dataID, fetchOptions)
 			delete(data.(map[string]interface{}), "new")
 
 			if err != nil {
@@ -363,7 +369,9 @@ func saveFiles(request RequestStruct, fileType string) (err error) {
 				return err
 			}
 
-			buildXEPG(false)
+			if err = buildXEPGWithResult(false); err != nil {
+				return err
+			}
 
 		}
 
@@ -376,6 +384,10 @@ func saveFiles(request RequestStruct, fileType string) (err error) {
 
 // Providerdaten manuell aktualisieren (WebUI)
 func updateFile(request RequestStruct, fileType string) (err error) {
+	return updateFileWithOptions(request, fileType, browserProviderFetchOptions())
+}
+
+func updateFileWithOptions(request RequestStruct, fileType string, fetchOptions providerFetchOptions) (err error) {
 
 	var updateData = make(map[string]interface{})
 
@@ -393,10 +405,10 @@ func updateFile(request RequestStruct, fileType string) (err error) {
 
 	for dataID := range updateData {
 
-		err = getProviderData(fileType, dataID)
+		err = getProviderDataWithOptions(fileType, dataID, fetchOptions)
 		if err == nil {
 			// For playlist updates, just update EPG data and Live Event channel names
-			updateXEPG(false)
+			err = updateXEPGWithResult(false)
 		}
 
 	}
@@ -513,7 +525,7 @@ func saveFilter(request RequestStruct) (settings SettingsStruct, err error) {
 		return
 	}
 
-	buildXEPG(false)
+	err = buildXEPGWithResult(false)
 
 	return
 }
@@ -594,6 +606,12 @@ func saveXEpgMapping(request RequestStruct) (result MappingSaveResult, err error
 
 // Benutzerdaten speichern (WebUI)
 func saveUserData(request RequestStruct) (err error) {
+	configMutationMutex.Lock()
+	defer configMutationMutex.Unlock()
+	return saveUserDataConfigLocked(request)
+}
+
+func saveUserDataConfigLocked(request RequestStruct) (err error) {
 
 	var userData = request.UserData
 
@@ -653,6 +671,12 @@ func saveUserData(request RequestStruct) (err error) {
 
 // Neuen Benutzer anlegen (WebUI)
 func saveNewUser(request RequestStruct) (err error) {
+	configMutationMutex.Lock()
+	defer configMutationMutex.Unlock()
+	return saveNewUserConfigLocked(request)
+}
+
+func saveNewUserConfigLocked(request RequestStruct) (err error) {
 
 	var data = request.UserData
 	var username = data["username"].(string)

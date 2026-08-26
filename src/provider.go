@@ -1,9 +1,12 @@
 package src
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"io"
 	"math"
+	"net"
 	"net/http"
 	"net/url"
 	"strings"
@@ -12,13 +15,62 @@ import (
 	m3u "threadfin/src/internal/m3u-parser"
 )
 
+const (
+	providerResponseBodyLimit    int64 = 64 * 1024 * 1024
+	configProviderMaximumTimeout       = 30 * time.Second
+)
+
+var (
+	errProviderResponseTooLarge = errors.New("provider response exceeds size limit")
+	errProviderProxyForbidden   = errors.New("provider proxy is not allowed")
+)
+
+type providerResolveFunc func(context.Context, string) ([]net.IP, error)
+type providerDialFunc func(context.Context, string, string) (net.Conn, error)
+
+type providerFetchOptions struct {
+	AllowLocal              bool
+	AllowProxy              bool
+	RedactSource            bool
+	PropagateProviderErrors bool
+	Resolve                 providerResolveFunc
+	Dial                    providerDialFunc
+	Transport               http.RoundTripper
+	Timeout                 time.Duration
+	MaxTimeout              time.Duration
+	Context                 context.Context
+}
+
+func browserProviderFetchOptions() providerFetchOptions {
+	return providerFetchOptions{AllowLocal: true, AllowProxy: true, Context: context.TODO()}
+}
+
+func configProviderFetchOptions(ctx context.Context) providerFetchOptions {
+	if ctx == nil {
+		ctx = context.TODO()
+	}
+	return providerFetchOptions{RedactSource: true, PropagateProviderErrors: true, Context: ctx, MaxTimeout: configProviderMaximumTimeout}
+}
+
+func providerSourceForLog(source string, options providerFetchOptions) string {
+	if options.RedactSource {
+		return "[configured source]"
+	}
+	return sanitizeProviderSourceForLog(source)
+}
+
 // fileType: Welcher Dateityp soll aktualisiert werden (m3u, hdhr, xml) | fileID: Update einer bestimmten Datei (Provider ID)
 func getProviderData(fileType, fileID string) (err error) {
+	return getProviderDataWithOptions(fileType, fileID, browserProviderFetchOptions())
+}
+
+func getProviderDataWithOptions(fileType, fileID string, fetchOptions providerFetchOptions) (err error) {
 
 	var fileExtension, serverFileName string
 	var body = make([]byte, 0)
 	var newProvider bool
 	var dataMap = make(map[string]interface{})
+	var providerErr error
 
 	var saveDateFromProvider = func(fileSource, serverFileName, id string, body []byte) (err error) {
 
@@ -93,14 +145,14 @@ func getProviderData(fileType, fileID string) (err error) {
 		}
 
 		// Datei extrahieren
-		body, err = extractGZIP(body, fileSource)
+		body, err = extractGZIP(body, providerSourceForLog(fileSource, fetchOptions))
 		if err != nil {
 			ShowError(err, 000)
 			return
 		}
 
 		// Daten überprüfen
-		showInfo("Check File:" + sanitizeProviderSourceForLog(fileSource))
+		showInfo("Check File:" + providerSourceForLog(fileSource, fetchOptions))
 
 		switch fileType {
 
@@ -208,22 +260,26 @@ func getProviderData(fileType, fileID string) (err error) {
 		case "hdhr":
 
 			// Laden vom HDHomeRun Tuner
-			showInfo("Tuner:" + sanitizeProviderSourceForLog(fileSource))
+			showInfo("Tuner:" + providerSourceForLog(fileSource, fetchOptions))
 			var tunerURL = "http://" + fileSource + "/lineup.json"
-			serverFileName, body, err = downloadFileFromServer(tunerURL, httpProxyUrl)
+			serverFileName, body, err = downloadFileFromServerWithOptions(tunerURL, httpProxyUrl, fetchOptions)
 
 		default:
 
 			if isRemoteProviderSource(fileSource) {
 
 				// Laden vom Remote Server
-				showInfo("Download:" + sanitizeProviderSourceForLog(fileSource))
-				serverFileName, body, err = downloadFileFromServer(fileSource, httpProxyUrl)
+				showInfo("Download:" + providerSourceForLog(fileSource, fetchOptions))
+				serverFileName, body, err = downloadFileFromServerWithOptions(fileSource, httpProxyUrl, fetchOptions)
 
 			} else {
+				if !fetchOptions.AllowLocal {
+					err = errors.New("local provider sources are not available for configuration actions")
+					break
+				}
 
 				// Laden einer lokalen Datei
-				showInfo("Open:" + sanitizeProviderSourceForLog(fileSource))
+				showInfo("Open:" + providerSourceForLog(fileSource, fetchOptions))
 
 				err = checkFile(fileSource)
 				if err == nil {
@@ -239,7 +295,7 @@ func getProviderData(fileType, fileID string) (err error) {
 
 			err = saveDateFromProvider(fileSource, serverFileName, dataID, body)
 			if err == nil {
-				showInfo("Save File:" + sanitizeProviderSourceForLog(fileSource) + " [ID: " + dataID + "]")
+				showInfo("Save File:" + providerSourceForLog(fileSource, fetchOptions) + " [ID: " + dataID + "]")
 			}
 
 		}
@@ -248,6 +304,7 @@ func getProviderData(fileType, fileID string) (err error) {
 
 			ShowError(err, 000)
 			var downloadErr = err
+			providerErr = errors.Join(providerErr, downloadErr)
 
 			if newProvider == false {
 
@@ -309,84 +366,201 @@ func getProviderData(fileType, fileID string) (err error) {
 
 		}
 
-		if err = saveSettings(Settings); err != nil {
-			return err
+		if saveErr := saveSettings(Settings); saveErr != nil {
+			if fetchOptions.PropagateProviderErrors {
+				return errors.Join(providerErr, saveErr)
+			}
+			return saveErr
 		}
 
 	Done:
 	}
 
-	return
+	if fetchOptions.PropagateProviderErrors {
+		return providerErr
+	}
+	return nil
 }
 
-func downloadFileFromServer(providerURL string, proxyUrl string) (filename string, body []byte, err error) {
-	_, err = url.ParseRequestURI(providerURL)
-	if err != nil {
-		err = fmt.Errorf("invalid provider source: %s", sanitizeProviderSourceForLog(providerURL))
-		return
+func providerDestinationAllowed(ip net.IP) bool {
+	if ip == nil || ip.IsLoopback() || ip.IsUnspecified() || ip.IsLinkLocalUnicast() || ip.IsMulticast() {
+		return false
 	}
+	for _, blocked := range []string{"100.100.100.200", "168.63.129.16", "fd00:ec2::254"} {
+		if ip.Equal(net.ParseIP(blocked)) {
+			return false
+		}
+	}
+	return true
+}
 
-	requestTimeout := configuredProviderRequestTimeout(Settings.BufferTimeout)
+func defaultProviderResolve(ctx context.Context, host string) ([]net.IP, error) {
+	return net.DefaultResolver.LookupIP(ctx, "ip", host)
+}
 
-	httpClient := &http.Client{Timeout: requestTimeout}
+func providerResolveAllowed(ctx context.Context, host string, resolve providerResolveFunc) ([]net.IP, error) {
+	trimmedHost := strings.TrimSuffix(strings.ToLower(strings.TrimSpace(host)), ".")
+	switch trimmedHost {
+	case "", "localhost", "metadata.google.internal", "metadata.azure.internal", "metadata.azure.com":
+		return nil, errors.New("provider destination is restricted")
+	}
+	if resolve == nil {
+		resolve = defaultProviderResolve
+	}
+	addresses, err := resolve(ctx, trimmedHost)
+	if err != nil || len(addresses) == 0 {
+		return nil, errors.New("provider destination could not be resolved")
+	}
+	for _, address := range addresses {
+		if !providerDestinationAllowed(address) {
+			return nil, errors.New("provider destination is restricted")
+		}
+	}
+	return addresses, nil
+}
 
-	if proxyUrl != "" {
-		proxyURL, err := url.Parse(proxyUrl)
+func providerSafeDialContext(resolve providerResolveFunc, dial providerDialFunc) providerDialFunc {
+	if dial == nil {
+		dialer := &net.Dialer{}
+		dial = dialer.DialContext
+	}
+	return func(ctx context.Context, network, address string) (net.Conn, error) {
+		host, port, err := net.SplitHostPort(address)
 		if err != nil {
-			return "", nil, err
+			return nil, errors.New("provider destination is invalid")
 		}
+		addresses, err := providerResolveAllowed(ctx, host, resolve)
+		if err != nil {
+			return nil, err
+		}
+		var lastErr error
+		for _, resolved := range addresses {
+			connection, dialErr := dial(ctx, network, net.JoinHostPort(resolved.String(), port))
+			if dialErr == nil {
+				return connection, nil
+			}
+			lastErr = dialErr
+		}
+		return nil, lastErr
+	}
+}
 
-		httpClient = &http.Client{
-			Timeout: requestTimeout,
-			Transport: &http.Transport{
-				Proxy: http.ProxyURL(proxyURL),
-			},
+func validateProviderURLDestination(ctx context.Context, providerURL *url.URL, resolve providerResolveFunc) error {
+	if providerURL == nil || (providerURL.Scheme != "http" && providerURL.Scheme != "https") || providerURL.Host == "" {
+		return errors.New("provider destination is invalid")
+	}
+	_, err := providerResolveAllowed(ctx, providerURL.Hostname(), resolve)
+	return err
+}
+
+func providerRedirectPolicy(resolve providerResolveFunc) func(*http.Request, []*http.Request) error {
+	return func(request *http.Request, via []*http.Request) error {
+		if len(via) >= 10 {
+			return errors.New("provider redirect limit exceeded")
+		}
+		if err := validateProviderURLDestination(request.Context(), request.URL, resolve); err != nil {
+			return errors.New("provider redirect destination is restricted")
+		}
+		return nil
+	}
+}
+
+func providerRedirectLimitPolicy(request *http.Request, via []*http.Request) error {
+	if len(via) >= 10 {
+		return errors.New("provider redirect limit exceeded")
+	}
+	return nil
+}
+
+func downloadFileFromServer(providerURL string, proxyURL string) (filename string, body []byte, err error) {
+	return downloadFileFromServerWithOptions(providerURL, proxyURL, browserProviderFetchOptions())
+}
+
+func downloadFileFromServerWithOptions(providerURL string, proxyURL string, options providerFetchOptions) (filename string, body []byte, err error) {
+	logSource := providerSourceForLog(providerURL, options)
+	parsedProviderURL, err := url.ParseRequestURI(providerURL)
+	if err != nil || parsedProviderURL.Host == "" || (parsedProviderURL.Scheme != "http" && parsedProviderURL.Scheme != "https") {
+		return "", nil, fmt.Errorf("invalid provider source: %s", logSource)
+	}
+	if proxyURL != "" && !options.AllowProxy {
+		return "", nil, errProviderProxyForbidden
+	}
+	requestTimeout := options.Timeout
+	if requestTimeout <= 0 {
+		requestTimeout = configuredProviderRequestTimeout(Settings.BufferTimeout)
+	}
+	if options.MaxTimeout > 0 && requestTimeout > options.MaxTimeout {
+		requestTimeout = options.MaxTimeout
+	}
+	requestContext := options.Context
+	if requestContext == nil {
+		requestContext = context.TODO()
+	}
+	requestContext, cancel := context.WithTimeout(requestContext, requestTimeout)
+	defer cancel()
+
+	resolve := options.Resolve
+	if resolve == nil {
+		resolve = defaultProviderResolve
+	}
+	proxied := proxyURL != ""
+	if !proxied {
+		if err := validateProviderURLDestination(requestContext, parsedProviderURL, resolve); err != nil {
+			return "", nil, errors.New("provider destination is restricted")
 		}
 	}
-
-	req, err := http.NewRequest("GET", providerURL, nil)
+	transport := options.Transport
+	if transport == nil {
+		httpTransport := &http.Transport{}
+		if proxied {
+			parsedProxyURL, parseErr := url.Parse(proxyURL)
+			if parseErr != nil || parsedProxyURL.Host == "" || (parsedProxyURL.Scheme != "http" && parsedProxyURL.Scheme != "https") {
+				return "", nil, errors.New("provider proxy is invalid")
+			}
+			httpTransport.Proxy = http.ProxyURL(parsedProxyURL)
+		} else {
+			httpTransport.DialContext = providerSafeDialContext(resolve, options.Dial)
+		}
+		transport = httpTransport
+	}
+	redirectPolicy := providerRedirectPolicy(resolve)
+	if proxied {
+		redirectPolicy = providerRedirectLimitPolicy
+	}
+	httpClient := &http.Client{Transport: transport, CheckRedirect: redirectPolicy}
+	req, err := http.NewRequestWithContext(requestContext, http.MethodGet, providerURL, nil)
 	if err != nil {
-		err = fmt.Errorf("invalid provider request for %s", sanitizeProviderSourceForLog(providerURL))
-		return
+		return "", nil, fmt.Errorf("invalid provider request for %s", logSource)
 	}
-
 	req.Header.Set("User-Agent", Settings.UserAgent)
-
 	resp, err := httpClient.Do(req)
 	if err != nil {
-		err = fmt.Errorf("provider request failed for %s", sanitizeProviderSourceForLog(providerURL))
-		return
+		return "", nil, fmt.Errorf("provider request failed for %s", logSource)
 	}
 	defer resp.Body.Close()
-
-	resp.Header.Set("User-Agent", Settings.UserAgent)
-
 	if resp.StatusCode != http.StatusOK {
-		err = fmt.Errorf("%d: %s %s", resp.StatusCode, sanitizeProviderSourceForLog(providerURL), http.StatusText(resp.StatusCode))
-		return
+		return "", nil, fmt.Errorf("%d: %s %s", resp.StatusCode, logSource, http.StatusText(resp.StatusCode))
 	}
-
-	// Get filename from the header
-	var index = strings.Index(resp.Header.Get("Content-Disposition"), "filename")
-
+	index := strings.Index(resp.Header.Get("Content-Disposition"), "filename")
 	if index > -1 {
-		var headerFilename = resp.Header.Get("Content-Disposition")[index:]
-		var value = strings.Split(headerFilename, `=`)
-		var f = strings.Replace(value[1], `"`, "", -1)
-		f = strings.Replace(f, `;`, "", -1)
-		filename = f
-		showInfo("Header filename:" + filename)
-	} else {
-		var cleanFilename = strings.SplitN(getFilenameFromPath(providerURL), "?", 2)
+		headerFilename := resp.Header.Get("Content-Disposition")[index:]
+		value := strings.SplitN(headerFilename, `=`, 2)
+		if len(value) == 2 {
+			filename = strings.ReplaceAll(strings.ReplaceAll(value[1], `"`, ""), `;`, "")
+		}
+	}
+	if filename == "" {
+		cleanFilename := strings.SplitN(getFilenameFromPath(providerURL), "?", 2)
 		filename = cleanFilename[0]
 	}
-
-	body, err = io.ReadAll(resp.Body)
+	body, err = io.ReadAll(io.LimitReader(resp.Body, providerResponseBodyLimit+1))
 	if err != nil {
-		return
+		return "", nil, errors.New("provider response could not be read")
 	}
-
-	return
+	if int64(len(body)) > providerResponseBodyLimit {
+		return "", nil, errProviderResponseTooLarge
+	}
+	return filename, body, nil
 }
 
 func isRemoteProviderSource(source string) bool {

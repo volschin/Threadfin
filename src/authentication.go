@@ -21,6 +21,7 @@ func activatedSystemAuthentication() (err error) {
 	defaults["authentication.pms"] = false
 	defaults["authentication.xml"] = false
 	defaults["authentication.api"] = false
+	defaults["authentication.config"] = false
 	err = authentication.SetDefaultUserData(defaults)
 
 	return
@@ -41,6 +42,7 @@ func createFirstUserForAuthentication(username, password string) (token string, 
 	userData["authentication.m3u"] = true
 	userData["authentication.xml"] = true
 	userData["authentication.api"] = false
+	userData["authentication.config"] = false
 	userData["defaultUser"] = true
 
 	userID, err := authentication.GetUserID(token)
