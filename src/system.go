@@ -34,9 +34,9 @@ func createSystemFolders() (err error) {
 
 	e := reflect.ValueOf(&System.Folder).Elem()
 
-	for i := 0; i < e.NumField(); i++ {
+	for _, field := range e.Fields() {
 
-		var folder = e.Field(i).Interface().(string)
+		var folder = field.Interface().(string)
 
 		err = checkFolder(folder)
 
