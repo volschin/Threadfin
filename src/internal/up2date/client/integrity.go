@@ -15,6 +15,8 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+
+	internalarchive "threadfin/src/internal/archive"
 )
 
 const (
@@ -194,7 +196,7 @@ func prepareVerifiedUpdate(client *http.Client, artifactURL, fileType, filename,
 		return "", emptyCleanup, errors.Join(err, cleanup())
 	}
 	cleanupPaths = append(cleanupPaths, extractDirectory)
-	if err := extractZIP(downloadPath, extractDirectory); err != nil {
+	if err := internalarchive.ExtractZIP(downloadPath, extractDirectory); err != nil {
 		return "", emptyCleanup, errors.Join(err, cleanup())
 	}
 	candidate := filepath.Join(extractDirectory, filepath.Base(filename))

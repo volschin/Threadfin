@@ -313,3 +313,50 @@ func TestPrepareVerifiedZipReturnsExpectedBinary(t *testing.T) {
 		t.Fatalf("zipped candidate = %q", got)
 	}
 }
+
+func TestPrepareVerifiedZipExtractionFailureLeavesNoTemporaryMaterial(t *testing.T) {
+	publicKey, privateKey, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var archiveBody bytes.Buffer
+	archiveWriter := zip.NewWriter(&archiveBody)
+	entry, err := archiveWriter.Create("../escaped.txt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := entry.Write([]byte("escaped")); err != nil {
+		t.Fatal(err)
+	}
+	if err := archiveWriter.Close(); err != nil {
+		t.Fatal(err)
+	}
+	artifact := archiveBody.Bytes()
+	digest := sha256.Sum256(artifact)
+	checksum := []byte(hex.EncodeToString(digest[:]) + "\n")
+	server := signedUpdateServer(t, artifact, checksum, ed25519.Sign(privateKey, checksum))
+	defer server.Close()
+
+	directory := t.TempDir()
+	_, cleanup, err := prepareVerifiedUpdate(
+		server.Client(),
+		server.URL+"/Threadfin_linux_amd64",
+		"zip",
+		"Threadfin_linux_amd64",
+		directory,
+		publicKey,
+	)
+	if err == nil {
+		t.Fatal("malicious verified ZIP was prepared")
+	}
+	if cleanupErr := cleanup(); cleanupErr != nil {
+		t.Fatalf("returned no-op cleanup failed: %v", cleanupErr)
+	}
+	entries, readErr := os.ReadDir(directory)
+	if readErr != nil {
+		t.Fatal(readErr)
+	}
+	if len(entries) != 0 {
+		t.Fatalf("temporary update material remains: %v", entries)
+	}
+}
