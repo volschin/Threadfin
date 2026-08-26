@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
+	"slices"
 	"strings"
 )
 
@@ -21,12 +22,10 @@ func makeInterfaceFromM3UOriginal(byteStream []byte) (allChannels []interface{},
 		var exceptForChannelName = `,([^\n]*|,[^\r]*)`
 		var lines = strings.Split(strings.Replace(channel, "\r\n", "\n", -1), "\n")
 
-		// Remove lines starting with # and empty lines
-		for i := len(lines) - 1; i >= 0; i-- {
-			if len(lines[i]) == 0 || lines[i][0:1] == "#" {
-				lines = append(lines[:i], lines[i+1:]...)
-			}
-		}
+		// Remove lines starting with # and empty lines.
+		lines = slices.DeleteFunc(lines, func(line string) bool {
+			return line == "" || strings.HasPrefix(line, "#")
+		})
 
 		// URL is always on the second line after #EXTINF
 		if len(lines) >= 2 {

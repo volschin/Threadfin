@@ -82,3 +82,48 @@ func checkStream(streamInterface []interface{}) (err error) {
 
 	return
 }
+
+func TestMakeInterfaceFromM3URemovesCommentsAndBlankLines(t *testing.T) {
+	tests := []struct {
+		name    string
+		content string
+		wantURL string
+	}{
+		{
+			name: "adjacent comments and blank lines",
+			content: "#EXTM3U\n" +
+				"#EXTINF:-1 tvg-id=\"one\" tvg-name=\"One\",One\n" +
+				"# first comment\n" +
+				"# second comment\n" +
+				"\n" +
+				"http://example.com/one\n",
+			wantURL: "http://example.com/one",
+		},
+		{
+			name: "no removable lines",
+			content: "#EXTM3U\n" +
+				"#EXTINF:-1 tvg-id=\"two\" tvg-name=\"Two\",Two\n" +
+				"http://example.com/two",
+			wantURL: "http://example.com/two",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			streams, err := MakeInterfaceFromM3U([]byte(tt.content))
+			if err != nil {
+				t.Fatalf("MakeInterfaceFromM3U() error = %v", err)
+			}
+			if len(streams) != 1 {
+				t.Fatalf("MakeInterfaceFromM3U() returned %d streams, want 1", len(streams))
+			}
+			stream, ok := streams[0].(map[string]string)
+			if !ok {
+				t.Fatalf("stream type = %T, want map[string]string", streams[0])
+			}
+			if got := stream["url"]; got != tt.wantURL {
+				t.Fatalf("stream URL = %q, want %q", got, tt.wantURL)
+			}
+		})
+	}
+}
