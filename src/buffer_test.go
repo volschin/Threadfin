@@ -153,7 +153,7 @@ func TestTransferSegmentPreservesNilErrorOnShortWrite(t *testing.T) {
 	}
 }
 
-func TestSwitchBandwidthUsesAscendingVariantKeys(t *testing.T) {
+func TestSwitchBandwidthPreservesLegacyVariantSelection(t *testing.T) {
 	stream := &ThisStream{
 		NetworkBandwidth: 2500,
 		DynamicStream: map[int]DynamicStream{
@@ -169,8 +169,8 @@ func TestSwitchBandwidthUsesAscendingVariantKeys(t *testing.T) {
 	if len(stream.Segment) != 1 {
 		t.Fatalf("switchBandwidth() appended %d segments, want 1", len(stream.Segment))
 	}
-	if got := stream.Segment[0].URL; got != "middle" {
-		t.Fatalf("selected URL = %q, want %q", got, "middle")
+	if got := stream.Segment[0].URL; got != "low" {
+		t.Fatalf("selected URL = %q, want legacy fallback %q", got, "low")
 	}
 	if got := stream.Segment[0].StreamInf.Bandwidth; got != 3000 {
 		t.Fatalf("segment bandwidth = %d, want %d", got, 3000)

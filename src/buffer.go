@@ -699,11 +699,10 @@ func switchBandwidth(stream *ThisStream) (err error) {
 
 	if len(bandwidth) > 0 {
 
-		dynamicStream = stream.DynamicStream[bandwidth[0]]
-
 		for i := range bandwidth {
 
 			segment.StreamInf.Bandwidth = stream.DynamicStream[bandwidth[i]].Bandwidth
+			dynamicStream = stream.DynamicStream[bandwidth[0]]
 
 			if stream.NetworkBandwidth == 0 {
 
