@@ -133,6 +133,23 @@ func createStreamID(stream map[int]ThisStream, ip, userAgent string) (streamID i
 	return
 }
 
+func transferSegment(
+	destination io.Writer,
+	segment io.ReadCloser,
+	beforeWrite func([]byte),
+) (inputErr, writeErr error) {
+	content, readErr := io.ReadAll(segment)
+	closeErr := segment.Close()
+	if inputErr = errors.Join(readErr, closeErr); inputErr != nil {
+		return inputErr, nil
+	}
+	if beforeWrite != nil {
+		beforeWrite(content)
+	}
+	_, writeErr = destination.Write(content)
+	return nil, writeErr
+}
+
 func bufferingStream(playlistID string, streamingURL string, backupStream1 *BackupStream, backupStream2 *BackupStream, backupStream3 *BackupStream, channelName string, w http.ResponseWriter, r *http.Request) {
 
 	time.Sleep(time.Duration(Settings.BufferTimeout) * time.Millisecond)
@@ -463,25 +480,23 @@ func bufferingStream(playlistID string, streamingURL string, backupStream1 *Back
 							showDebug(debug, 2)
 							return
 						}
-						buffer, readErr := io.ReadAll(file)
-						closeErr := file.Close()
-						if err = errors.Join(readErr, closeErr); err != nil {
-							ShowError(err, 0)
+						inputErr, writeErr := transferSegment(w, file, func(buffer []byte) {
+							debug = fmt.Sprintf("Buffer Status:Send to client (%s)", fileName)
+							showDebug(debug, 2)
+
+							if !streaming {
+								contentType := http.DetectContentType(buffer)
+								w.Header().Set("Content-type", contentType)
+								w.Header().Set("Content-Length", "0")
+								w.Header().Set("Connection", "close")
+							}
+						})
+						if inputErr != nil {
+							ShowError(inputErr, 0)
 							killClientConnection(streamID, playlistID, false)
 							return
 						}
-
-						debug = fmt.Sprintf("Buffer Status:Send to client (%s)", fileName)
-						showDebug(debug, 2)
-
-						if !streaming {
-							contentType := http.DetectContentType(buffer)
-							w.Header().Set("Content-type", contentType)
-							w.Header().Set("Content-Length", "0")
-							w.Header().Set("Connection", "close")
-						}
-
-						if _, err := w.Write(buffer); err != nil {
+						if writeErr != nil {
 							killClientConnection(streamID, playlistID, false)
 							return
 						}
