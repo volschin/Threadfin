@@ -79,6 +79,34 @@ func TestGroupedNavigationControlsUseScopedShellStyles(t *testing.T) {
 	}
 }
 
+func TestOpenMenuResponseRoutesOnceWithoutHistoryRestore(t *testing.T) {
+	network := readUITypeScript(t, "network_ts.ts")
+	if got := strings.Count(network, `openLegacyMenu(response["openMenu"])`); got != 1 {
+		t.Fatalf("openMenu adapter calls = %d, want exactly one", got)
+	}
+
+	menu := readUITypeScript(t, "menu_ts.ts")
+	createLayout := menu[strings.Index(menu, "function createLayout()"):strings.Index(menu, "function openThisMenu(")]
+	if !strings.Contains(createLayout, "restoreInitialDestinationFromHistory()") {
+		t.Fatal("createLayout does not limit history restoration to initial navigation")
+	}
+	if strings.Contains(createLayout, "restoreDestinationFromHistory()") {
+		t.Fatal("createLayout restores history directly after every response")
+	}
+
+	navigation := readUITypeScript(t, "navigation_ts.ts")
+	if !strings.Contains(navigation, "initialDestinationRestored") || !strings.Contains(navigation, "currentDestination !== undefined") {
+		t.Fatal("initial history restoration is not guarded after a destination has already rendered")
+	}
+}
+
+func TestHistoryRestorationRequiresVisibleDestination(t *testing.T) {
+	navigation := readUITypeScript(t, "navigation_ts.ts")
+	if !strings.Contains(navigation, "navigationDestinationIsKnown(destination) && navigationDestinationIsVisible(destination)") {
+		t.Fatal("history restoration can route a known destination that is not visible to this user")
+	}
+}
+
 func readUITypeScript(t *testing.T, name string) string {
 	t.Helper()
 	content, err := os.ReadFile(filepath.Join("..", "ts", name))

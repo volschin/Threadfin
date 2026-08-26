@@ -42,6 +42,7 @@ var legacyDestinationByMenuIndex: { [key: number]: AppDestination } = {
 }
 
 var currentDestination: AppDestination
+var initialDestinationRestored: boolean = false
 
 function renderNavigation(): void {
   var navigation = document.getElementById("main-menu")
@@ -243,9 +244,17 @@ function restoreDestinationFromHistory(): void {
   if (!destination && window.location.hash.length > 1) {
     destination = window.location.hash.slice(1)
   }
-  if (navigationDestinationIsKnown(destination)) {
+  if (navigationDestinationIsKnown(destination) && navigationDestinationIsVisible(destination)) {
     openDestination(destination, false)
   }
+}
+
+function restoreInitialDestinationFromHistory(): void {
+  if (initialDestinationRestored || currentDestination !== undefined) {
+    return
+  }
+  initialDestinationRestored = true
+  restoreDestinationFromHistory()
 }
 
 function navigationDestinationIsKnown(destination: string): destination is AppDestination {

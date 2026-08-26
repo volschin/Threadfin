@@ -916,7 +916,7 @@ function createLayout() {
         return;
     }
     renderNavigation();
-    restoreDestinationFromHistory();
+    restoreInitialDestinationFromHistory();
     return;
 }
 function openThisMenu(element) {

@@ -30,6 +30,7 @@ var legacyDestinationByMenuIndex = {
     7: "logout",
 };
 var currentDestination;
+var initialDestinationRestored = false;
 function renderNavigation() {
     var navigation = document.getElementById("main-menu");
     if (!navigation) {
@@ -210,9 +211,16 @@ function restoreDestinationFromHistory() {
     if (!destination && window.location.hash.length > 1) {
         destination = window.location.hash.slice(1);
     }
-    if (navigationDestinationIsKnown(destination)) {
+    if (navigationDestinationIsKnown(destination) && navigationDestinationIsVisible(destination)) {
         openDestination(destination, false);
     }
+}
+function restoreInitialDestinationFromHistory() {
+    if (initialDestinationRestored || currentDestination !== undefined) {
+        return;
+    }
+    initialDestinationRestored = true;
+    restoreDestinationFromHistory();
 }
 function navigationDestinationIsKnown(destination) {
     return navigationGroups.some(group => group.items.indexOf(destination) != -1);

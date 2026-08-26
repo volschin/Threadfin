@@ -1148,7 +1148,7 @@ function createLayout() {
 
 
   renderNavigation()
-  restoreDestinationFromHistory()
+  restoreInitialDestinationFromHistory()
 
   return
 }
