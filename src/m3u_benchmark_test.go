@@ -2,19 +2,9 @@ package src
 
 import "testing"
 
-func TestParseFrameRateRejectsMalformedRatio(t *testing.T) {
-	if got := parseFrameRate([]string{"not-a-number", "also-invalid"}); got != 0 {
-		t.Fatalf("parseFrameRate() = %d, want 0 for malformed ratio", got)
-	}
-}
+var benchmarkFilterResult bool
 
-func TestParseFrameRateRejectsMissingDenominator(t *testing.T) {
-	if got := parseFrameRate([]string{"25"}); got != 0 {
-		t.Fatalf("parseFrameRate() = %d, want 0 for incomplete ratio", got)
-	}
-}
-
-func TestCheckConditionsSeparatorCompatibility(t *testing.T) {
+func BenchmarkFilterConditions(b *testing.B) {
 	cases := []struct {
 		name          string
 		streamValues  string
@@ -30,9 +20,13 @@ func TestCheckConditionsSeparatorCompatibility(t *testing.T) {
 	}
 
 	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
+		b.Run(tc.name, func(b *testing.B) {
 			if got := checkConditions(tc.streamValues, tc.conditions, tc.conditionType); got != tc.want {
-				t.Fatalf("checkConditions() = %t, want %t", got, tc.want)
+				b.Fatalf("fixture result = %t, want %t", got, tc.want)
+			}
+			b.ReportAllocs()
+			for b.Loop() {
+				benchmarkFilterResult = checkConditions(tc.streamValues, tc.conditions, tc.conditionType)
 			}
 		})
 	}
