@@ -4,3 +4,4 @@ threadfin
 threadfin.exe
 .idea/**
 .worktrees/
+/.pgo-pilot/
