@@ -10,6 +10,9 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
+	"strings"
+	"time"
 )
 
 type metricSummary struct {
@@ -34,6 +37,44 @@ func atMostPercent(got, limit float64) bool {
 
 func atLeastPercent(got, limit float64) bool {
 	return got >= limit || math.Abs(got-limit) <= percentageComparisonTolerance
+}
+
+func isLowerHex(value string, length int) bool {
+	if len(value) != length {
+		return false
+	}
+	for _, character := range value {
+		if (character < '0' || character > '9') && (character < 'a' || character > 'f') {
+			return false
+		}
+	}
+	return true
+}
+
+func parseUTCTimestamp(value string) (time.Time, bool) {
+	if !strings.HasSuffix(value, "Z") {
+		return time.Time{}, false
+	}
+	parsed, err := time.Parse(time.RFC3339Nano, value)
+	return parsed, err == nil && !parsed.IsZero()
+}
+
+func isGo127Version(value string) bool {
+	patch, found := strings.CutPrefix(value, "go1.27.")
+	if !found || patch == "" || (len(patch) > 1 && patch[0] == '0') {
+		return false
+	}
+	_, err := strconv.ParseUint(patch, 10, 32)
+	return err == nil
+}
+
+func validResultContract(result runResult) bool {
+	_, startedOK := parseUTCTimestamp(result.StartedAtUTC)
+	_, guideStartOK := parseUTCTimestamp(result.GuideStartUTC)
+	return result.SchemaVersion == 1 && startedOK && guideStartOK &&
+		isLowerHex(result.GitCommit, 40) && isGo127Version(result.GoVersion) && result.GOAMD64 == "v1" &&
+		isLowerHex(result.BinarySHA256, 64) && isLowerHex(result.PlaylistSHA256, 64) && isLowerHex(result.GuideSHA256, 64) &&
+		(result.ProfileSHA256 == "" || isLowerHex(result.ProfileSHA256, 64))
 }
 
 func hasMinimumStreamSuccesses(attempts, successes int) bool {
@@ -92,8 +133,12 @@ func screenSession(results []runResult) sessionSummary {
 	commits, goVersions, goamd64s := map[string]bool{}, map[string]bool{}, map[string]bool{}
 	playlists, guides, starts := map[string]bool{}, map[string]bool{}, map[string]bool{}
 	offHashes, pgoHashes := map[string]bool{}, map[string]bool{}
-	validRuns := true
+	validRuns, validContracts := true, true
 	for _, result := range results {
+		if !validResultContract(result) {
+			validContracts = false
+			validRuns = false
+		}
 		if result.Pair < 1 || result.Pair > 5 || result.Sequence < 1 || result.Sequence > 10 || sequences[result.Sequence] {
 			validRuns = false
 			continue
@@ -136,6 +181,9 @@ func screenSession(results []runResult) sessionSummary {
 		} else {
 			validRuns = validRuns && second == 2*i+1 && first == 2*i+2
 		}
+	}
+	if !validContracts {
+		fail("valid_result_contract")
 	}
 	if !validRuns {
 		fail("valid_complete_runs")
@@ -208,6 +256,79 @@ func screenSession(results []runResult) sessionSummary {
 	return summary
 }
 
+type sessionProvenance struct {
+	GitCommit      string
+	GoVersion      string
+	GOAMD64        string
+	OffBinary      string
+	PGOBinary      string
+	PlaylistSHA256 string
+	GuideSHA256    string
+	GuideStartUTC  string
+	FirstStartedAt time.Time
+	LastStartedAt  time.Time
+}
+
+func provenanceForSession(results []runResult) (sessionProvenance, bool) {
+	if len(results) != 10 {
+		return sessionProvenance{}, false
+	}
+	ordered := append([]runResult(nil), results...)
+	slices.SortFunc(ordered, func(a, b runResult) int { return a.Sequence - b.Sequence })
+	provenance := sessionProvenance{
+		GitCommit:      ordered[0].GitCommit,
+		GoVersion:      ordered[0].GoVersion,
+		GOAMD64:        ordered[0].GOAMD64,
+		PlaylistSHA256: ordered[0].PlaylistSHA256,
+		GuideSHA256:    ordered[0].GuideSHA256,
+		GuideStartUTC:  ordered[0].GuideStartUTC,
+	}
+	for index, result := range ordered {
+		if result.Sequence != index+1 || result.GitCommit != provenance.GitCommit || result.GoVersion != provenance.GoVersion ||
+			result.GOAMD64 != provenance.GOAMD64 || result.PlaylistSHA256 != provenance.PlaylistSHA256 ||
+			result.GuideSHA256 != provenance.GuideSHA256 || result.GuideStartUTC != provenance.GuideStartUTC {
+			return sessionProvenance{}, false
+		}
+		startedAt, timestampOK := parseUTCTimestamp(result.StartedAtUTC)
+		if !timestampOK || (index > 0 && !startedAt.After(provenance.LastStartedAt)) {
+			return sessionProvenance{}, false
+		}
+		if index == 0 {
+			provenance.FirstStartedAt = startedAt
+		}
+		provenance.LastStartedAt = startedAt
+		switch result.Variant {
+		case "off":
+			if provenance.OffBinary != "" && provenance.OffBinary != result.BinarySHA256 {
+				return sessionProvenance{}, false
+			}
+			provenance.OffBinary = result.BinarySHA256
+		case "pgo":
+			if provenance.PGOBinary != "" && provenance.PGOBinary != result.BinarySHA256 {
+				return sessionProvenance{}, false
+			}
+			provenance.PGOBinary = result.BinarySHA256
+		default:
+			return sessionProvenance{}, false
+		}
+	}
+	return provenance, provenance.OffBinary != "" && provenance.PGOBinary != ""
+}
+
+func matchingOrderedSessions(first, second []runResult) bool {
+	firstProvenance, firstOK := provenanceForSession(first)
+	secondProvenance, secondOK := provenanceForSession(second)
+	return firstOK && secondOK && secondProvenance.FirstStartedAt.After(firstProvenance.LastStartedAt) &&
+		firstProvenance.GitCommit == secondProvenance.GitCommit &&
+		firstProvenance.GoVersion == secondProvenance.GoVersion &&
+		firstProvenance.GOAMD64 == secondProvenance.GOAMD64 &&
+		firstProvenance.OffBinary == secondProvenance.OffBinary &&
+		firstProvenance.PGOBinary == secondProvenance.PGOBinary &&
+		firstProvenance.PlaylistSHA256 == secondProvenance.PlaylistSHA256 &&
+		firstProvenance.GuideSHA256 == secondProvenance.GuideSHA256 &&
+		firstProvenance.GuideStartUTC == secondProvenance.GuideStartUTC
+}
+
 type comparison struct {
 	Verdict  string           `json:"verdict"`
 	Sessions []sessionSummary `json:"sessions"`
@@ -233,6 +354,15 @@ func readSession(path string) ([]runResult, error) {
 	return results, scanner.Err()
 }
 
+func sameSessionFile(firstPath, secondPath string) bool {
+	if filepath.Clean(firstPath) == filepath.Clean(secondPath) {
+		return true
+	}
+	firstInfo, firstErr := os.Stat(firstPath)
+	secondInfo, secondErr := os.Stat(secondPath)
+	return firstErr == nil && secondErr == nil && os.SameFile(firstInfo, secondInfo)
+}
+
 func compareSessions(firstPath, secondPath, outputPath string) (comparison, error) {
 	if !filepath.IsAbs(firstPath) || !filepath.IsAbs(secondPath) || !filepath.IsAbs(outputPath) {
 		return comparison{}, errors.New("session and comparison paths must be absolute")
@@ -246,7 +376,8 @@ func compareSessions(firstPath, secondPath, outputPath string) (comparison, erro
 		return comparison{}, err
 	}
 	result := comparison{Verdict: "NO_ADOPT", Sessions: []sessionSummary{screenSession(first), screenSession(second)}}
-	if len(result.Sessions[0].FailedPredicates) == 0 && len(result.Sessions[1].FailedPredicates) == 0 {
+	if len(result.Sessions[0].FailedPredicates) == 0 && len(result.Sessions[1].FailedPredicates) == 0 &&
+		!sameSessionFile(firstPath, secondPath) && matchingOrderedSessions(first, second) {
 		result.Verdict = "PILOT_SUPPORTS_SEPARATE_OPERATIONAL_REVIEW"
 	}
 	body, err := json.Marshal(result)

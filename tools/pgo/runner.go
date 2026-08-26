@@ -904,7 +904,7 @@ func run(ctx context.Context, config runConfig) (result runResult, err error) {
 		BinarySHA256:              binaryHash,
 		BinarySizeBytes:           binaryInfo.Size(),
 		ProfileSHA256:             profileHash,
-		PlaylistSHA256:            bytesSHA256(fixture.playlistBytes()),
+		PlaylistSHA256:            bytesSHA256(fixture.playlistProvenanceBytes()),
 		GuideSHA256:               bytesSHA256(fixture.guideBytes()),
 		GuideStartUTC:             config.GuideStart.Format(time.RFC3339),
 		PlaylistEntries:           playlistEntries,

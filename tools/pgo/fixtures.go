@@ -22,11 +22,12 @@ import (
 )
 
 const (
-	playlistEntryCount = 100_000
-	xmltvChannelCount  = 100
-	xmltvProgramCount  = 10_000
-	streamChannelCount = 4
-	fixtureSeed        = 20260826
+	playlistEntryCount        = 100_000
+	xmltvChannelCount         = 100
+	xmltvProgramCount         = 10_000
+	streamChannelCount        = 4
+	fixtureSeed               = 20260826
+	playlistProvenanceBaseURL = "http://127.0.0.1:0"
 )
 
 func writePlaylist(w io.Writer, baseURL string) error {
@@ -137,8 +138,11 @@ type fixtureSet struct {
 	observed  fixtureSnapshot
 }
 
-func (f *fixtureSet) baseURL() string           { return f.server.URL }
-func (f *fixtureSet) playlistBytes() []byte     { return append([]byte(nil), f.playlist...) }
+func (f *fixtureSet) baseURL() string       { return f.server.URL }
+func (f *fixtureSet) playlistBytes() []byte { return append([]byte(nil), f.playlist...) }
+func (f *fixtureSet) playlistProvenanceBytes() []byte {
+	return bytes.ReplaceAll(f.playlist, []byte(f.server.URL), []byte(playlistProvenanceBaseURL))
+}
 func (f *fixtureSet) guideBytes() []byte        { return append([]byte(nil), f.guide...) }
 func (f *fixtureSet) snapshot() fixtureSnapshot { f.mu.Lock(); defer f.mu.Unlock(); return f.observed }
 func (f *fixtureSet) Close() {

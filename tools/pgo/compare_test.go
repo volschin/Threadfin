@@ -6,16 +6,19 @@ import (
 	"encoding/json"
 	"math"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
+	"time"
 )
 
 func baselineResult(variant string, pair, sequence int) runResult {
 	result := runResult{
 		SchemaVersion: 1, Variant: variant, Pair: pair, Sequence: sequence,
-		GitCommit: strings.Repeat("a", 40), GoVersion: "go1.27.0", GOAMD64: "v1",
+		StartedAtUTC: time.Date(2026, 8, 27, 1, 0, 0, 0, time.UTC).Add(time.Duration(sequence-1) * time.Minute).Format(time.RFC3339Nano),
+		GitCommit:    strings.Repeat("a", 40), GoVersion: "go1.27.0", GOAMD64: "v1",
 		BinarySHA256:    strings.Repeat(map[string]string{"off": "b", "pgo": "c"}[variant], 64),
 		BinarySizeBytes: 10_000_000,
 		PlaylistSHA256:  strings.Repeat("d", 64), GuideSHA256: strings.Repeat("e", 64),
@@ -39,6 +42,10 @@ func baselineResult(variant string, pair, sequence int) runResult {
 }
 
 func passingSession() []runResult {
+	return passingSessionAt(time.Date(2026, 8, 27, 1, 0, 0, 0, time.UTC))
+}
+
+func passingSessionAt(start time.Time) []runResult {
 	results := make([]runResult, 0, 10)
 	sequence := 0
 	for pair := 1; pair <= 5; pair++ {
@@ -48,7 +55,9 @@ func passingSession() []runResult {
 		}
 		for _, variant := range order {
 			sequence++
-			results = append(results, baselineResult(variant, pair, sequence))
+			result := baselineResult(variant, pair, sequence)
+			result.StartedAtUTC = start.Add(time.Duration(sequence-1) * time.Minute).Format(time.RFC3339Nano)
+			results = append(results, result)
 		}
 	}
 	return results
@@ -73,6 +82,59 @@ func TestHasMinimumStreamSuccesses(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			if got := hasMinimumStreamSuccesses(test.attempts, test.successes); got != test.want {
 				t.Fatalf("hasMinimumStreamSuccesses(%d, %d) = %t, want %t", test.attempts, test.successes, got, test.want)
+			}
+		})
+	}
+}
+
+func TestResultContractProvenance(t *testing.T) {
+	tests := []struct {
+		name   string
+		mutate func(*runResult)
+		want   bool
+	}{
+		{name: "valid without optional profile hash", mutate: func(*runResult) {}, want: true},
+		{name: "valid with profile hash", mutate: func(result *runResult) { result.ProfileSHA256 = strings.Repeat("f", 64) }, want: true},
+		{name: "missing schema", mutate: func(result *runResult) { result.SchemaVersion = 0 }},
+		{name: "unknown schema", mutate: func(result *runResult) { result.SchemaVersion = 2 }},
+		{name: "missing started timestamp", mutate: func(result *runResult) { result.StartedAtUTC = "" }},
+		{name: "malformed started timestamp", mutate: func(result *runResult) { result.StartedAtUTC = "not-a-time" }},
+		{name: "non UTC started timestamp", mutate: func(result *runResult) { result.StartedAtUTC = "2026-08-27T03:00:00+02:00" }},
+		{name: "missing guide timestamp", mutate: func(result *runResult) { result.GuideStartUTC = "" }},
+		{name: "malformed guide timestamp", mutate: func(result *runResult) { result.GuideStartUTC = "2026-08-27" }},
+		{name: "non UTC guide timestamp", mutate: func(result *runResult) { result.GuideStartUTC = "2026-08-27T02:00:00+02:00" }},
+		{name: "missing commit", mutate: func(result *runResult) { result.GitCommit = "" }},
+		{name: "malformed commit", mutate: func(result *runResult) { result.GitCommit = strings.Repeat("g", 40) }},
+		{name: "short commit", mutate: func(result *runResult) { result.GitCommit = strings.Repeat("a", 39) }},
+		{name: "missing Go version", mutate: func(result *runResult) { result.GoVersion = "" }},
+		{name: "wrong Go version", mutate: func(result *runResult) { result.GoVersion = "go1.26.9" }},
+		{name: "signed Go patch", mutate: func(result *runResult) { result.GoVersion = "go1.27.+1" }},
+		{name: "noncanonical Go patch", mutate: func(result *runResult) { result.GoVersion = "go1.27.01" }},
+		{name: "missing GOAMD64", mutate: func(result *runResult) { result.GOAMD64 = "" }},
+		{name: "wrong GOAMD64", mutate: func(result *runResult) { result.GOAMD64 = "v2" }},
+		{name: "missing binary hash", mutate: func(result *runResult) { result.BinarySHA256 = "" }},
+		{name: "malformed binary hash", mutate: func(result *runResult) { result.BinarySHA256 = strings.Repeat("g", 64) }},
+		{name: "missing playlist hash", mutate: func(result *runResult) { result.PlaylistSHA256 = "" }},
+		{name: "malformed playlist hash", mutate: func(result *runResult) { result.PlaylistSHA256 = strings.Repeat("d", 63) }},
+		{name: "missing guide hash", mutate: func(result *runResult) { result.GuideSHA256 = "" }},
+		{name: "malformed guide hash", mutate: func(result *runResult) { result.GuideSHA256 = strings.Repeat("e", 65) }},
+		{name: "malformed optional profile hash", mutate: func(result *runResult) { result.ProfileSHA256 = strings.Repeat("f", 63) }},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			result := baselineResult("off", 1, 1)
+			test.mutate(&result)
+			if got := validResultContract(result); got != test.want {
+				t.Fatalf("validResultContract() = %t, want %t", got, test.want)
+			}
+			if test.want {
+				return
+			}
+			rows := passingSession()
+			test.mutate(&rows[0])
+			got := screenSession(rows)
+			if !slices.Contains(got.FailedPredicates, "valid_result_contract") {
+				t.Fatalf("failures = %v", got.FailedPredicates)
 			}
 		})
 	}
@@ -366,8 +428,10 @@ func TestCompareSessionsRequiresBothPassingSessions(t *testing.T) {
 	firstPath := filepath.Join(directory, "first.jsonl")
 	secondPath := filepath.Join(directory, "second.jsonl")
 	outputPath := filepath.Join(directory, "comparison.json")
-	writeSession(t, firstPath, passingSession())
-	writeSession(t, secondPath, passingSession())
+	first := passingSession()
+	second := passingSessionAt(time.Date(2026, 8, 27, 2, 0, 0, 0, time.UTC))
+	writeSession(t, firstPath, first)
+	writeSession(t, secondPath, second)
 
 	got, err := compareSessions(firstPath, secondPath, outputPath)
 	if err != nil {
@@ -389,6 +453,114 @@ func TestCompareSessionsRequiresBothPassingSessions(t *testing.T) {
 	}
 	if len(got.Sessions[0].FailedPredicates) != 0 || len(got.Sessions[1].FailedPredicates) == 0 {
 		t.Fatalf("session failures = %#v", got.Sessions)
+	}
+}
+
+func TestCompareSessionsRejectsReusedOrUnrelatedSessions(t *testing.T) {
+	firstStart := time.Date(2026, 8, 27, 1, 0, 0, 0, time.UTC)
+	tests := []struct {
+		name       string
+		samePath   bool
+		secondRows func() []runResult
+	}{
+		{name: "same path", samePath: true, secondRows: func() []runResult { return nil }},
+		{name: "copied session", secondRows: func() []runResult { return passingSessionAt(firstStart) }},
+		{name: "sessions out of order", secondRows: func() []runResult { return passingSessionAt(firstStart.Add(-time.Hour)) }},
+		{name: "different commit", secondRows: func() []runResult {
+			rows := passingSessionAt(firstStart.Add(time.Hour))
+			for i := range rows {
+				rows[i].GitCommit = strings.Repeat("f", 40)
+			}
+			return rows
+		}},
+		{name: "different Go toolchain", secondRows: func() []runResult {
+			rows := passingSessionAt(firstStart.Add(time.Hour))
+			for i := range rows {
+				rows[i].GoVersion = "go1.27.1"
+			}
+			return rows
+		}},
+		{name: "different off binary", secondRows: func() []runResult {
+			rows := passingSessionAt(firstStart.Add(time.Hour))
+			for i := range rows {
+				if rows[i].Variant == "off" {
+					rows[i].BinarySHA256 = strings.Repeat("1", 64)
+				}
+			}
+			return rows
+		}},
+		{name: "different PGO binary", secondRows: func() []runResult {
+			rows := passingSessionAt(firstStart.Add(time.Hour))
+			for i := range rows {
+				if rows[i].Variant == "pgo" {
+					rows[i].BinarySHA256 = strings.Repeat("2", 64)
+				}
+			}
+			return rows
+		}},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			directory := t.TempDir()
+			firstPath := filepath.Join(directory, "first.jsonl")
+			secondPath := filepath.Join(directory, "second.jsonl")
+			outputPath := filepath.Join(directory, "comparison.json")
+			writeSession(t, firstPath, passingSessionAt(firstStart))
+			if test.samePath {
+				secondPath = firstPath
+			} else {
+				writeSession(t, secondPath, test.secondRows())
+			}
+
+			got, err := compareSessions(firstPath, secondPath, outputPath)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got.Verdict != "NO_ADOPT" {
+				t.Fatalf("verdict = %q", got.Verdict)
+			}
+			for _, session := range got.Sessions {
+				if len(session.FailedPredicates) != 0 {
+					t.Fatalf("session failures = %v; expected cross-session rejection", session.FailedPredicates)
+				}
+			}
+		})
+	}
+}
+
+func TestRunScriptConstrainsSessionPathsToRunRoot(t *testing.T) {
+	script, err := filepath.Abs("run-linux-amd64.sh")
+	if err != nil {
+		t.Fatal(err)
+	}
+	runRoot := t.TempDir()
+	sessionsDir := filepath.Join(runRoot, "sessions")
+	if err := os.Mkdir(sessionsDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	inside := filepath.Join(sessionsDir, "inside.jsonl")
+	outside := filepath.Join(t.TempDir(), "outside.jsonl")
+	for _, path := range []string{inside, outside} {
+		if err := os.WriteFile(path, []byte("session\n"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	escapingLink := filepath.Join(sessionsDir, "escaping.jsonl")
+	if err := os.Symlink(outside, escapingLink); err != nil {
+		t.Fatal(err)
+	}
+
+	check := func(path string) error {
+		command := exec.Command("bash", "-c", `source "$1"; require_session_path "$2" "$3" >/dev/null`, "bash", script, runRoot, path)
+		return command.Run()
+	}
+	if err := check(inside); err != nil {
+		t.Fatalf("inside session path rejected: %v", err)
+	}
+	for _, path := range []string{outside, escapingLink} {
+		if err := check(path); err == nil {
+			t.Fatalf("session path outside run root accepted: %s", path)
+		}
 	}
 }
 

@@ -7,6 +7,8 @@ import (
 	"encoding/json"
 	"encoding/xml"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"reflect"
 	"testing"
 	"time"
@@ -57,6 +59,34 @@ func TestFixtureCardinalityAndDeterminism(t *testing.T) {
 	}
 	if len(guide.Channels) != xmltvChannelCount || len(guide.Programmes) != xmltvProgramCount {
 		t.Fatalf("guide cardinality = %d/%d", len(guide.Channels), len(guide.Programmes))
+	}
+}
+
+func TestPlaylistProvenanceIgnoresEphemeralServerEndpoint(t *testing.T) {
+	firstServer := httptest.NewServer(http.NotFoundHandler())
+	t.Cleanup(firstServer.Close)
+	secondServer := httptest.NewServer(http.NotFoundHandler())
+	t.Cleanup(secondServer.Close)
+
+	newFixture := func(server *httptest.Server) *fixtureSet {
+		t.Helper()
+		var playlist bytes.Buffer
+		if err := writePlaylist(&playlist, server.URL); err != nil {
+			t.Fatal(err)
+		}
+		return &fixtureSet{server: server, playlist: playlist.Bytes()}
+	}
+	first, second := newFixture(firstServer), newFixture(secondServer)
+
+	if bytes.Equal(first.playlistBytes(), second.playlistBytes()) {
+		t.Fatal("operational playlists unexpectedly use the same endpoint")
+	}
+	if !bytes.Contains(first.playlistBytes(), []byte(firstServer.URL+"/stream/0.ts?channel=0")) ||
+		!bytes.Contains(second.playlistBytes(), []byte(secondServer.URL+"/stream/0.ts?channel=0")) {
+		t.Fatal("operational playlist does not retain its fixture server endpoint")
+	}
+	if got, want := bytesSHA256(first.playlistProvenanceBytes()), bytesSHA256(second.playlistProvenanceBytes()); got != want {
+		t.Fatalf("playlist provenance hash differs across ephemeral endpoints: %s != %s", got, want)
 	}
 }
 

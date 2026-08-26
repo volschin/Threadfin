@@ -8,6 +8,15 @@ cd "$ROOT"
 fail() { printf 'NO_ADOPT: %s\n' "$*" >&2; exit 1; }
 need() { command -v "$1" >/dev/null 2>&1 || fail "missing command: $1"; }
 sha() { sha256sum "$1" | cut -d' ' -f1; }
+require_session_path() {
+  local out=$1 supplied=$2 session_root resolved
+  session_root=$(realpath -e -- "$out/sessions") || fail "missing sessions directory under run root: $out"
+  resolved=$(realpath -e -- "$supplied") || fail "missing session: $supplied"
+  case "$resolved" in
+    "$session_root"/*) printf '%s\n' "$resolved" ;;
+    *) fail "session path is outside run root: $supplied" ;;
+  esac
+}
 
 preflight() {
   local final_commit
@@ -20,7 +29,7 @@ preflight() {
   final_commit=${THREADFIN_PGO_FINAL_COMMIT:-}
   [[ "$final_commit" =~ ^[0-9a-f]{40}$ ]] || fail "THREADFIN_PGO_FINAL_COMMIT must assert the reviewed final Workstreams 1-6 commit"
   test "$final_commit" = "$(git rev-parse HEAD)" || fail "HEAD does not match THREADFIN_PGO_FINAL_COMMIT"
-  for command in go git ffmpeg sha256sum cmp grep stat uname; do need "$command"; done
+  for command in go git ffmpeg sha256sum cmp grep realpath stat uname; do need "$command"; done
   cpus=$(getconf _NPROCESSORS_ONLN)
   test "$cpus" -ge 4 || fail "at least four logical CPUs are required"
 }
@@ -112,14 +121,19 @@ session() {
 
 compare() {
   preflight
-  local out=$1 first=$2 second=$3 summary="$out/summary.json"
+  local out=$1 first second summary
+  first=$(require_session_path "$out" "$2")
+  second=$(require_session_path "$out" "$3")
+  summary="$out/summary.json"
   "$out/bin/pgo-pilot" compare -session "$first" -session "$second" -output "$summary"
   printf '%s\n' "$summary"
 }
 
-case "${1:-}" in
-  capture) test "$#" -eq 1 || fail 'usage: run-linux-amd64.sh capture'; capture ;;
-  session) test "$#" -eq 3 || fail 'usage: run-linux-amd64.sh session RUN_ROOT NAME'; session "$2" "$3" ;;
-  compare) test "$#" -eq 4 || fail 'usage: run-linux-amd64.sh compare RUN_ROOT SESSION_1 SESSION_2'; compare "$2" "$3" "$4" ;;
-  *) fail 'usage: run-linux-amd64.sh capture|session|compare' ;;
-esac
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+  case "${1:-}" in
+    capture) test "$#" -eq 1 || fail 'usage: run-linux-amd64.sh capture'; capture ;;
+    session) test "$#" -eq 3 || fail 'usage: run-linux-amd64.sh session RUN_ROOT NAME'; session "$2" "$3" ;;
+    compare) test "$#" -eq 4 || fail 'usage: run-linux-amd64.sh compare RUN_ROOT SESSION_1 SESSION_2'; compare "$2" "$3" "$4" ;;
+    *) fail 'usage: run-linux-amd64.sh capture|session|compare' ;;
+  esac
+fi
