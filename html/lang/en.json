@@ -22,6 +22,44 @@
       "logout": "Logout"
     }
   },
+  "appShell": {
+    "groups": {
+      "sources": {
+        "label": "Sources",
+        "description": "Import playlists and guide data."
+      },
+      "lineup": {
+        "label": "Lineup",
+        "description": "Select and map channels for delivery."
+      },
+      "delivery": {
+        "label": "Delivery",
+        "description": "Connect clients and manage access."
+      },
+      "system": {
+        "label": "System",
+        "description": "Monitor activity and maintain Threadfin."
+      },
+      "account": {
+        "label": "Account",
+        "description": "Manage the current session."
+      }
+    },
+    "screens": {
+      "overview": {
+        "label": "Overview",
+        "description": "See where channels are in the path from sources to client-ready outputs."
+      },
+      "connections": {
+        "label": "Connections",
+        "description": "Copy the addresses and output URLs needed by your TV client."
+      },
+      "activity": {
+        "label": "Activity",
+        "description": "Review current streams and available connection capacity."
+      }
+    }
+  },
   "confirm": {
     "restore": "All data will be replaced with those from the backup. Should the files be restored?"
   },
