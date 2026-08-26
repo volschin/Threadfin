@@ -1073,25 +1073,8 @@ func createXMLTVFile() (err error) {
 		}
 	}
 
-	sort.Slice(entries, func(i, j int) bool {
-		chI := entries[i].ch.TvgChno
-		chJ := entries[j].ch.TvgChno
-
-		numI, errI := strconv.ParseFloat(chI, 64)
-		numJ, errJ := strconv.ParseFloat(chJ, 64)
-
-		if errI == nil && errJ == nil {
-			return numI < numJ
-		}
-
-		if errI == nil && errJ != nil {
-			return true
-		}
-		if errI != nil && errJ == nil {
-			return false
-		}
-
-		return chI < chJ
+	slices.SortFunc(entries, func(a, b channelEntry) int {
+		return compareChannelNumbers(a.ch, b.ch)
 	})
 
 	for _, e := range entries {

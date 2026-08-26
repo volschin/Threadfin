@@ -44,6 +44,44 @@ func TestParseGroupCountLabel(t *testing.T) {
 	}
 }
 
+func TestCompareChannelNumbers(t *testing.T) {
+	tests := []struct {
+		name  string
+		left  string
+		right string
+		want  int
+	}{
+		{name: "numeric order", left: "2", right: "10", want: -1},
+		{name: "numeric equality", left: "2", right: "2.0", want: 0},
+		{name: "number before text", left: "2", right: "alpha", want: -1},
+		{name: "text after number", left: "alpha", right: "2", want: 1},
+		{name: "lexical order", left: "alpha", right: "beta", want: -1},
+		{name: "lexical equality", left: "alpha", right: "alpha", want: 0},
+		{name: "NaN retains numeric equivalence", left: "NaN", right: "2", want: 0},
+		{name: "NaN is parsed before text", left: "NaN", right: "alpha", want: -1},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := compareChannelNumbers(
+				XEPGChannelStruct{TvgChno: tt.left},
+				XEPGChannelStruct{TvgChno: tt.right},
+			)
+			if got != tt.want {
+				t.Fatalf("compareChannelNumbers(%q, %q) = %d, want %d", tt.left, tt.right, got, tt.want)
+			}
+
+			reverse := compareChannelNumbers(
+				XEPGChannelStruct{TvgChno: tt.right},
+				XEPGChannelStruct{TvgChno: tt.left},
+			)
+			if reverse != -tt.want {
+				t.Fatalf("compareChannelNumbers(%q, %q) = %d, want %d", tt.right, tt.left, reverse, -tt.want)
+			}
+		})
+	}
+}
+
 func TestCheckConditionsSeparatorCompatibility(t *testing.T) {
 	cases := []struct {
 		name          string

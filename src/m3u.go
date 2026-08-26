@@ -11,7 +11,6 @@ import (
 	"path"
 	"regexp"
 	"slices"
-	"sort"
 	"strconv"
 	"strings"
 
@@ -206,6 +205,32 @@ func parseGroupCountLabel(label string) (name string, count int, ok bool) {
 	return name, count, true
 }
 
+func compareChannelNumbers(a, b XEPGChannelStruct) int {
+	aNumber, aErr := strconv.ParseFloat(a.TvgChno, 64)
+	bNumber, bErr := strconv.ParseFloat(b.TvgChno, 64)
+
+	switch {
+	case aErr == nil && bErr == nil:
+		if aNumber < bNumber {
+			return -1
+		}
+		if aNumber > bNumber {
+			return 1
+		}
+		return 0
+	case aErr == nil:
+		return -1
+	case bErr == nil:
+		return 1
+	case a.TvgChno < b.TvgChno:
+		return -1
+	case a.TvgChno > b.TvgChno:
+		return 1
+	default:
+		return 0
+	}
+}
+
 // Threadfin M3U Datei erstellen
 func buildM3U(groups []string) (m3u string, err error) {
 
@@ -296,29 +321,8 @@ func buildM3U(groups []string) (m3u string, err error) {
 	}
 
 	// Sort entries by tvg-chno numerically
-	sort.Slice(entries, func(i, j int) bool {
-		chI := entries[i].ch.TvgChno
-		chJ := entries[j].ch.TvgChno
-
-		// Try to parse as numbers for proper numeric sorting
-		numI, errI := strconv.ParseFloat(chI, 64)
-		numJ, errJ := strconv.ParseFloat(chJ, 64)
-
-		// If both are numbers, sort numerically
-		if errI == nil && errJ == nil {
-			return numI < numJ
-		}
-
-		// If one is a number and other isn't, number comes first
-		if errI == nil && errJ != nil {
-			return true
-		}
-		if errI != nil && errJ == nil {
-			return false
-		}
-
-		// If both are strings, sort alphabetically
-		return chI < chJ
+	slices.SortFunc(entries, func(a, b channelEntry) int {
+		return compareChannelNumbers(a.ch, b.ch)
 	})
 
 	// Avoid duplicate exact stream URLs within the same group and cap per-group by expected minus deactivated
