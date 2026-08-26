@@ -3,10 +3,12 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
 	"os/exec"
+	"os/signal"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -28,6 +30,60 @@ func TestReadRSS(t *testing.T) {
 	}
 	if _, err := readRSS([]byte("VmRSS:\tnot-a-number kB\n")); err == nil {
 		t.Fatal("bad VmRSS accepted")
+	}
+}
+
+func TestSamplePeakRSSRejectsMissingStatusBeforeCleanup(t *testing.T) {
+	process := &processState{done: make(chan struct{}), stderrPath: filepath.Join(t.TempDir(), "stderr.log")}
+	cleanupStarted := make(chan struct{})
+	sample := <-samplePeakRSS(context.Background(), 1<<30, process, cleanupStarted)
+	if !errors.Is(sample.Err, os.ErrNotExist) {
+		t.Fatalf("missing status error = %v", sample.Err)
+	}
+}
+
+func TestSamplePeakRSSAllowsMissingStatusAfterCleanupStarts(t *testing.T) {
+	process := &processState{done: make(chan struct{}), stderrPath: filepath.Join(t.TempDir(), "stderr.log")}
+	cleanupStarted := make(chan struct{})
+	close(cleanupStarted)
+	sample := <-samplePeakRSS(context.Background(), 1<<30, process, cleanupStarted)
+	if sample.Err != nil {
+		t.Fatalf("missing status after cleanup = %v", sample.Err)
+	}
+}
+
+func TestEarlyProcessExitIncludesStatusAndStderrPath(t *testing.T) {
+	stderrPath := filepath.Join(t.TempDir(), "persisted.stderr.log")
+	process := &processState{done: make(chan struct{}), waitErr: errors.New("exit status 23"), stderrPath: stderrPath}
+	close(process.done)
+	_, err := waitFixtureSnapshot(context.Background(), &fixtureSet{}, process, func(fixtureSnapshot) bool { return false })
+	if err == nil {
+		t.Fatal("early exit accepted")
+	}
+	for _, want := range []string{"exit status 23", stderrPath} {
+		if !strings.Contains(err.Error(), want) {
+			t.Fatalf("error %q does not contain %q", err, want)
+		}
+	}
+}
+
+func TestSIGTERMIsAcceptedOnlyAfterCleanupStarts(t *testing.T) {
+	if os.Getenv("THREADFIN_PGO_SIGTERM_HELPER") == "1" {
+		_ = syscall.Kill(os.Getpid(), syscall.SIGTERM)
+		os.Exit(3)
+	}
+	command := exec.Command(os.Args[0], "-test.run=^TestSIGTERMIsAcceptedOnlyAfterCleanupStarts$")
+	command.Env = append(os.Environ(), "THREADFIN_PGO_SIGTERM_HELPER=1")
+	if err := command.Start(); err != nil {
+		t.Fatal(err)
+	}
+	process := startProcessWait(command, filepath.Join(t.TempDir(), "stderr.log"))
+	<-process.done
+	if err := validateProcessExit(process, true, false); err == nil {
+		t.Fatal("SIGTERM before cleanup accepted")
+	}
+	if err := validateProcessExit(process, false, false); err != nil {
+		t.Fatalf("SIGTERM after cleanup rejected: %v", err)
 	}
 }
 
@@ -110,6 +166,138 @@ func TestTerminateProcessGroupKillsDescendantAndWaitsOnce(t *testing.T) {
 		time.Sleep(10 * time.Millisecond)
 	}
 	t.Fatalf("descendant %d still exists", childPID)
+}
+
+func TestTerminateProcessGroupForcedKillWaitsForParentAndGroup(t *testing.T) {
+	if os.Getenv("THREADFIN_PGO_FORCED_HELPER") == "1" {
+		signal.Ignore(syscall.SIGTERM)
+		child := exec.Command("sleep", "60")
+		if err := child.Start(); err != nil {
+			os.Exit(2)
+		}
+		if err := os.WriteFile(os.Getenv("THREADFIN_PGO_CHILD_PID"), []byte(strconv.Itoa(child.Process.Pid)), 0o600); err != nil {
+			os.Exit(2)
+		}
+		_ = child.Wait()
+		os.Exit(0)
+	}
+	pidFile := filepath.Join(t.TempDir(), "child.pid")
+	cmd := exec.Command(os.Args[0], "-test.run=^TestTerminateProcessGroupForcedKillWaitsForParentAndGroup$")
+	cmd.Env = append(os.Environ(), "THREADFIN_PGO_FORCED_HELPER=1", "THREADFIN_PGO_CHILD_PID="+pidFile)
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
+	if err := cmd.Start(); err != nil {
+		t.Fatal(err)
+	}
+	done := make(chan struct{})
+	go func() { _ = cmd.Wait(); close(done) }()
+	t.Cleanup(func() {
+		_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+		select {
+		case <-done:
+		case <-time.After(2 * time.Second):
+		}
+	})
+	var childPID int
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		body, err := os.ReadFile(pidFile)
+		if err == nil {
+			childPID, _ = strconv.Atoi(string(body))
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if childPID == 0 {
+		t.Fatal("helper did not publish child PID")
+	}
+	forced, err := terminateProcessGroup(cmd.Process.Pid, done)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !forced {
+		t.Fatal("SIGKILL was not required")
+	}
+	select {
+	case <-done:
+	default:
+		t.Fatal("parent was not reaped")
+	}
+	if err := syscall.Kill(-cmd.Process.Pid, 0); !errors.Is(err, syscall.ESRCH) {
+		t.Fatalf("process group still exists: %v", err)
+	}
+	if err := syscall.Kill(childPID, 0); !errors.Is(err, syscall.ESRCH) {
+		t.Fatalf("descendant %d still exists: %v", childPID, err)
+	}
+}
+
+func TestWaitForStableProviderRequiresTwoValidatedSamples(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "M1000.m3u")
+	provider := "#EXTM3U\n" + strings.Repeat("#EXTINF:-1,fixture\nhttp://fixture.invalid/stream/0.ts\n", playlistEntryCount)
+	if err := os.WriteFile(path, []byte(provider), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	process := runningProcessState(t)
+	started := time.Now()
+	_, entries, err := waitForStableProvider(context.Background(), path, process)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if entries != playlistEntryCount {
+		t.Fatalf("entries = %d", entries)
+	}
+	if elapsed := time.Since(started); elapsed < 350*time.Millisecond {
+		t.Fatalf("provider accepted without two 200ms samples after %s", elapsed)
+	}
+}
+
+func TestWaitForStableProviderRejectsStableWrongEntryCount(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "M1000.m3u")
+	provider := "#EXTM3U\n" + strings.Repeat("#EXTINF:-1,fixture\nhttp://fixture.invalid/stream/0.ts\n", playlistEntryCount-1)
+	if err := os.WriteFile(path, []byte(provider), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 550*time.Millisecond)
+	defer cancel()
+	if _, _, err := waitForStableProvider(ctx, path, runningProcessState(t)); err == nil {
+		t.Fatal("stable provider with wrong entry count accepted")
+	}
+}
+
+func TestWaitForPlaylistImportRequiresFixtureFinish(t *testing.T) {
+	fixture := &fixtureSet{}
+	fixture.observed.PlaylistStarted = time.Now().UTC()
+	path := filepath.Join(t.TempDir(), "M1000.m3u")
+	provider := "#EXTM3U\n" + strings.Repeat("#EXTINF:-1,fixture\nhttp://fixture.invalid/stream/0.ts\n", playlistEntryCount)
+	if err := os.WriteFile(path, []byte(provider), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+	if _, _, _, err := waitForPlaylistImport(ctx, fixture, path, runningProcessState(t)); err == nil {
+		t.Fatal("playlist import accepted before fixture response finished")
+	}
+}
+
+func TestGeneratedReadinessRequiresBothProviderResponses(t *testing.T) {
+	fixture := &fixtureSet{}
+	fixture.observed.GuideFinished = time.Now().UTC()
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+	if _, err := waitForProviderResponses(ctx, fixture, runningProcessState(t)); err == nil {
+		t.Fatal("generated readiness accepted before playlist response finished")
+	}
+}
+
+func TestReadinessDeadlinesRemainIndependent(t *testing.T) {
+	if playlistImportTimeout != 2*time.Minute {
+		t.Fatalf("playlist deadline = %s", playlistImportTimeout)
+	}
+	if guideResponseTimeout != 2*time.Minute {
+		t.Fatalf("guide response deadline = %s", guideResponseTimeout)
+	}
+	if generatedArtifactsTimeout != 3*time.Minute {
+		t.Fatalf("generated artifact deadline = %s", generatedArtifactsTimeout)
+	}
 }
 
 func TestWriteRunResultDoesNotPublishOnParentError(t *testing.T) {
@@ -196,15 +384,24 @@ func TestSignalAndReadMetricsRejectsMissingOrMalformedPublication(t *testing.T) 
 			if err := target.Start(); err != nil {
 				t.Fatal(err)
 			}
+			process := startProcessWait(target, filepath.Join(t.TempDir(), "stderr.log"))
 			t.Cleanup(func() {
 				_ = target.Process.Kill()
-				_ = target.Wait()
+				select {
+				case <-process.done:
+				case <-time.After(2 * time.Second):
+				}
 			})
-			if _, err := signalAndReadMetrics(target.Process.Pid, path); err == nil {
+			if _, err := signalAndReadMetrics(target.Process.Pid, path, process); err == nil {
 				t.Fatal("invalid runtime metrics accepted")
 			}
 		})
 	}
+}
+
+func runningProcessState(t *testing.T) *processState {
+	t.Helper()
+	return &processState{done: make(chan struct{}), stderrPath: filepath.Join(t.TempDir(), "stderr.log")}
 }
 
 func generatedStreamPlaylist(port string) string {

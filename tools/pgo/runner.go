@@ -107,6 +107,62 @@ type rssSample struct {
 	Err  error
 }
 
+const (
+	playlistImportTimeout     = 2 * time.Minute
+	guideResponseTimeout      = 2 * time.Minute
+	generatedArtifactsTimeout = 3 * time.Minute
+)
+
+type processState struct {
+	done       chan struct{}
+	waitErr    error
+	stderrPath string
+}
+
+func startProcessWait(command *exec.Cmd, stderrPath string) *processState {
+	process := &processState{done: make(chan struct{}), stderrPath: stderrPath}
+	go func() {
+		process.waitErr = command.Wait()
+		close(process.done)
+	}()
+	return process
+}
+
+func (process *processState) exitError(stage string) error {
+	status := "exit status 0"
+	if process.waitErr != nil {
+		status = process.waitErr.Error()
+	}
+	return fmt.Errorf("Threadfin exited %s: %s; stderr: %s", stage, status, process.stderrPath)
+}
+
+func channelClosed(channel <-chan struct{}) bool {
+	select {
+	case <-channel:
+		return true
+	default:
+		return false
+	}
+}
+
+func validateProcessExit(process *processState, exitedBeforeCleanup, forced bool) error {
+	if exitedBeforeCleanup {
+		return process.exitError("before cleanup began")
+	}
+	if forced {
+		return fmt.Errorf("process group required SIGKILL; stderr: %s", process.stderrPath)
+	}
+	var exitError *exec.ExitError
+	if !errors.As(process.waitErr, &exitError) {
+		return process.exitError("during cleanup with unexpected status")
+	}
+	waitStatus, ok := exitError.Sys().(syscall.WaitStatus)
+	if !ok || !waitStatus.Signaled() || waitStatus.Signal() != syscall.SIGTERM {
+		return process.exitError("during cleanup with unexpected status")
+	}
+	return nil
+}
+
 func percentile95(samples []time.Duration) (time.Duration, error) {
 	if len(samples) == 0 {
 		return 0, errors.New("p95 requires at least one sample")
@@ -137,13 +193,8 @@ func terminateProcessGroup(pgid int, processDone <-chan struct{}) (bool, error) 
 		return false, termErr
 	}
 	deadline := time.Now().Add(5 * time.Second)
-	parentDone := false
 	for time.Now().Before(deadline) {
-		select {
-		case <-processDone:
-			parentDone = true
-		default:
-		}
+		parentDone := channelClosed(processDone)
 		groupErr := syscall.Kill(-pgid, 0)
 		if groupErr != nil && !errors.Is(groupErr, syscall.ESRCH) {
 			return false, groupErr
@@ -157,23 +208,33 @@ func terminateProcessGroup(pgid int, processDone <-chan struct{}) (bool, error) 
 	if killErr != nil && !errors.Is(killErr, syscall.ESRCH) {
 		return true, killErr
 	}
-	select {
-	case <-processDone:
-		return true, nil
-	case <-time.After(5 * time.Second):
+	deadline = time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		parentDone := channelClosed(processDone)
+		groupErr := syscall.Kill(-pgid, 0)
+		if groupErr != nil && !errors.Is(groupErr, syscall.ESRCH) {
+			return true, groupErr
+		}
+		if parentDone && errors.Is(groupErr, syscall.ESRCH) {
+			return true, nil
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if !channelClosed(processDone) {
 		return true, errors.New("Threadfin parent was not reaped after SIGKILL")
 	}
+	return true, errors.New("Threadfin process group still exists after SIGKILL")
 }
 
-func waitForGeneratedArtifacts(ctx context.Context, configDir, port string, processDone <-chan struct{}) (generatedArtifacts, error) {
-	deadline, cancel := context.WithTimeout(ctx, 3*time.Minute)
+func waitForGeneratedArtifacts(ctx context.Context, configDir, port string, process *processState) (generatedArtifacts, error) {
+	deadline, cancel := context.WithTimeout(ctx, generatedArtifactsTimeout)
 	defer cancel()
 	ticker := time.NewTicker(200 * time.Millisecond)
 	defer ticker.Stop()
 	for {
 		select {
-		case <-processDone:
-			return generatedArtifacts{}, errors.New("Threadfin exited before generated artifacts were ready")
+		case <-process.done:
+			return generatedArtifacts{}, process.exitError("before generated artifacts were ready")
 		case <-deadline.Done():
 			return generatedArtifacts{}, fmt.Errorf("generated artifacts: %w", deadline.Err())
 		case <-ticker.C:
@@ -264,18 +325,18 @@ func inspectGeneratedArtifacts(configDir, port string) (generatedArtifacts, bool
 	return generatedArtifacts{entries, len(guide.Channels), len(guide.Programmes), urls}, true, nil
 }
 
-func waitForStableProvider(ctx context.Context, path string, processDone <-chan struct{}) (time.Time, error) {
-	deadline, cancel := context.WithTimeout(ctx, 2*time.Minute)
+func waitForStableProvider(ctx context.Context, path string, process *processState) (time.Time, int, error) {
+	deadline, cancel := context.WithTimeout(ctx, playlistImportTimeout)
 	defer cancel()
 	ticker := time.NewTicker(200 * time.Millisecond)
 	defer ticker.Stop()
 	var previous int64 = -1
 	for {
 		select {
-		case <-processDone:
-			return time.Time{}, errors.New("Threadfin exited during playlist import")
+		case <-process.done:
+			return time.Time{}, 0, process.exitError("during playlist import")
 		case <-deadline.Done():
-			return time.Time{}, fmt.Errorf("playlist import: %w", deadline.Err())
+			return time.Time{}, 0, fmt.Errorf("playlist import: %w", deadline.Err())
 		case now := <-ticker.C:
 			info, err := os.Stat(path)
 			if errors.Is(err, os.ErrNotExist) {
@@ -283,54 +344,109 @@ func waitForStableProvider(ctx context.Context, path string, processDone <-chan 
 				continue
 			}
 			if err != nil {
-				return time.Time{}, err
+				return time.Time{}, 0, err
 			}
 			if info.Size() > 0 && info.Size() == previous {
-				return now.UTC(), nil
+				body, readErr := os.ReadFile(path)
+				if errors.Is(readErr, os.ErrNotExist) {
+					previous = -1
+					continue
+				}
+				if readErr != nil {
+					return time.Time{}, 0, readErr
+				}
+				entries := bytes.Count(body, []byte("#EXTINF:"))
+				if entries == playlistEntryCount {
+					return now.UTC(), entries, nil
+				}
 			}
 			previous = info.Size()
 		}
 	}
 }
 
-func signalAndReadMetrics(pid int, path string) (runtimeMetrics, error) {
-	if err := syscall.Kill(pid, syscall.SIGUSR1); err != nil {
-		return runtimeMetrics{}, err
+func waitForPlaylistImport(ctx context.Context, fixture *fixtureSet, path string, process *processState) (fixtureSnapshot, time.Time, int, error) {
+	deadline, cancel := context.WithTimeout(ctx, playlistImportTimeout)
+	defer cancel()
+	observation, err := waitFixtureSnapshot(deadline, fixture, process, func(snapshot fixtureSnapshot) bool {
+		return !snapshot.PlaylistStarted.IsZero() && !snapshot.PlaylistFinished.IsZero()
+	})
+	if err != nil {
+		return fixtureSnapshot{}, time.Time{}, 0, err
 	}
-	deadline := time.Now().Add(15 * time.Second)
-	for time.Now().Before(deadline) {
-		body, err := os.ReadFile(path)
-		if errors.Is(err, os.ErrNotExist) {
-			time.Sleep(50 * time.Millisecond)
-			continue
-		}
-		if err != nil {
-			return runtimeMetrics{}, err
-		}
-		var metrics runtimeMetrics
-		if err := json.Unmarshal(body, &metrics); err != nil {
-			time.Sleep(50 * time.Millisecond)
-			continue
-		}
-		if metrics.StopReason != "signal" {
-			return runtimeMetrics{}, fmt.Errorf("profile stop reason = %q", metrics.StopReason)
-		}
-		return metrics, nil
+	finished, entries, err := waitForStableProvider(deadline, path, process)
+	if err != nil {
+		return fixtureSnapshot{}, time.Time{}, 0, err
 	}
-	return runtimeMetrics{}, errors.New("runtime metrics were not published within 15 seconds")
+	return observation, finished, entries, nil
 }
 
-func finishProcess(cmd *exec.Cmd, processDone <-chan struct{}) (float64, bool, error) {
-	forced, err := terminateProcessGroup(cmd.Process.Pid, processDone)
+func waitForProviderResponses(ctx context.Context, fixture *fixtureSet, process *processState) (fixtureSnapshot, error) {
+	deadline, cancel := context.WithTimeout(ctx, guideResponseTimeout)
+	defer cancel()
+	observation, err := waitFixtureSnapshot(deadline, fixture, process, func(snapshot fixtureSnapshot) bool {
+		return !snapshot.PlaylistFinished.IsZero() && !snapshot.GuideFinished.IsZero()
+	})
 	if err != nil {
-		return 0, forced, err
+		return fixtureSnapshot{}, fmt.Errorf("provider responses: %w", err)
 	}
-	<-processDone
+	return observation, nil
+}
+
+func signalAndReadMetrics(pid int, path string, process *processState) (runtimeMetrics, error) {
+	if err := syscall.Kill(pid, syscall.SIGUSR1); err != nil {
+		if channelClosed(process.done) {
+			return runtimeMetrics{}, process.exitError("before runtime metrics were requested")
+		}
+		return runtimeMetrics{}, err
+	}
+	deadline := time.NewTimer(15 * time.Second)
+	defer deadline.Stop()
+	ticker := time.NewTicker(50 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-process.done:
+			return runtimeMetrics{}, process.exitError("before runtime metrics were published")
+		case <-deadline.C:
+			return runtimeMetrics{}, errors.New("runtime metrics were not published within 15 seconds")
+		case <-ticker.C:
+			body, err := os.ReadFile(path)
+			if errors.Is(err, os.ErrNotExist) {
+				continue
+			}
+			if err != nil {
+				return runtimeMetrics{}, err
+			}
+			var metrics runtimeMetrics
+			if err := json.Unmarshal(body, &metrics); err != nil {
+				continue
+			}
+			if metrics.StopReason != "signal" {
+				return runtimeMetrics{}, fmt.Errorf("profile stop reason = %q", metrics.StopReason)
+			}
+			return metrics, nil
+		}
+	}
+}
+
+func finishProcess(cmd *exec.Cmd, process *processState, cleanupStarted chan struct{}, cleanupOnce *sync.Once) (float64, bool, bool, error) {
+	cleanupAlreadyStarted := channelClosed(cleanupStarted)
+	exitedBeforeCleanup := !cleanupAlreadyStarted && channelClosed(process.done)
+	cleanupOnce.Do(func() { close(cleanupStarted) })
+	forced, err := terminateProcessGroup(cmd.Process.Pid, process.done)
+	if err != nil {
+		return 0, forced, false, err
+	}
+	cleanupSucceeded := true
 	if cmd.ProcessState == nil {
-		return 0, forced, errors.New("Threadfin process was not reaped")
+		return 0, forced, cleanupSucceeded, errors.New("Threadfin process was not reaped")
 	}
 	cpu := cmd.ProcessState.UserTime() + cmd.ProcessState.SystemTime()
-	return cpu.Seconds(), forced, nil
+	if err := validateProcessExit(process, exitedBeforeCleanup, forced); err != nil {
+		return cpu.Seconds(), forced, cleanupSucceeded, err
+	}
+	return cpu.Seconds(), forced, cleanupSucceeded, nil
 }
 
 func fileSHA256(path string) (string, error) {
@@ -433,7 +549,7 @@ func pilotEnvironment(metricsPath, profilePath string) []string {
 	return environment
 }
 
-func waitFixtureSnapshot(ctx context.Context, fixture *fixtureSet, processDone <-chan struct{}, ready func(fixtureSnapshot) bool) (fixtureSnapshot, error) {
+func waitFixtureSnapshot(ctx context.Context, fixture *fixtureSet, process *processState, ready func(fixtureSnapshot) bool) (fixtureSnapshot, error) {
 	ticker := time.NewTicker(20 * time.Millisecond)
 	defer ticker.Stop()
 	for {
@@ -444,14 +560,14 @@ func waitFixtureSnapshot(ctx context.Context, fixture *fixtureSet, processDone <
 		select {
 		case <-ctx.Done():
 			return fixtureSnapshot{}, ctx.Err()
-		case <-processDone:
-			return fixtureSnapshot{}, errors.New("Threadfin exited before fixture observation")
+		case <-process.done:
+			return fixtureSnapshot{}, process.exitError("before fixture observation")
 		case <-ticker.C:
 		}
 	}
 }
 
-func samplePeakRSS(ctx context.Context, pid int, processDone <-chan struct{}) <-chan rssSample {
+func samplePeakRSS(ctx context.Context, pid int, process *processState, cleanupStarted <-chan struct{}) <-chan rssSample {
 	result := make(chan rssSample, 1)
 	go func() {
 		ticker := time.NewTicker(100 * time.Millisecond)
@@ -468,7 +584,17 @@ func samplePeakRSS(ctx context.Context, pid int, processDone <-chan struct{}) <-
 				if current > peak {
 					peak = current
 				}
-			} else if !errors.Is(err, os.ErrNotExist) {
+			} else if errors.Is(err, os.ErrNotExist) {
+				if channelClosed(cleanupStarted) {
+					result <- rssSample{Peak: peak}
+					return
+				}
+				if channelClosed(process.done) {
+					err = fmt.Errorf("%w: %v", err, process.exitError("before RSS cleanup"))
+				}
+				result <- rssSample{peak, err}
+				return
+			} else {
 				result <- rssSample{peak, err}
 				return
 			}
@@ -476,8 +602,12 @@ func samplePeakRSS(ctx context.Context, pid int, processDone <-chan struct{}) <-
 			case <-ctx.Done():
 				result <- rssSample{Peak: peak}
 				return
-			case <-processDone:
-				result <- rssSample{Peak: peak}
+			case <-process.done:
+				if channelClosed(cleanupStarted) {
+					result <- rssSample{Peak: peak}
+				} else {
+					result <- rssSample{peak, process.exitError("during RSS sampling")}
+				}
 				return
 			case <-ticker.C:
 			}
@@ -486,12 +616,21 @@ func samplePeakRSS(ctx context.Context, pid int, processDone <-chan struct{}) <-
 	return result
 }
 
-func driveStreams(ctx context.Context, urls []string, fixture *fixtureSet, duration time.Duration, clients int, sampleBytes int64) (streamLoadResult, error) {
+func driveStreams(ctx context.Context, urls []string, fixture *fixtureSet, process *processState, duration time.Duration, clients int, sampleBytes int64) (streamLoadResult, error) {
 	if len(urls) != streamChannelCount {
 		return streamLoadResult{}, errors.New("four generated stream URLs are required")
 	}
 	loadCtx, cancel := context.WithTimeout(ctx, duration)
 	defer cancel()
+	monitorDone := make(chan struct{})
+	go func() {
+		select {
+		case <-process.done:
+			cancel()
+		case <-monitorDone:
+		}
+	}()
+	defer close(monitorDone)
 	client := &http.Client{
 		Transport: &http.Transport{MaxIdleConns: clients, MaxIdleConnsPerHost: clients, IdleConnTimeout: time.Second},
 		CheckRedirect: func(*http.Request, []*http.Request) error {
@@ -543,6 +682,9 @@ func driveStreams(ctx context.Context, urls []string, fixture *fixtureSet, durat
 		}()
 	}
 	group.Wait()
+	if channelClosed(process.done) {
+		return result, process.exitError("during stream load")
+	}
 	if result.Attempts == 0 || 100*result.Successes < 99*result.Attempts {
 		return result, fmt.Errorf("stream success = %d/%d", result.Successes, result.Attempts)
 	}
@@ -638,12 +780,14 @@ func run(ctx context.Context, config runConfig) (result runResult, err error) {
 	}
 
 	stem := strings.TrimSuffix(config.Output, filepath.Ext(config.Output))
-	stdoutFile, err := os.OpenFile(stem+".stdout.log", os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
+	stdoutPath := stem + ".stdout.log"
+	stderrPath := stem + ".stderr.log"
+	stdoutFile, err := os.OpenFile(stdoutPath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
 	if err != nil {
 		return runResult{}, err
 	}
 	defer stdoutFile.Close()
-	stderrFile, err := os.OpenFile(stem+".stderr.log", os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
+	stderrFile, err := os.OpenFile(stderrPath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
 	if err != nil {
 		return runResult{}, err
 	}
@@ -660,55 +804,44 @@ func run(ctx context.Context, config runConfig) (result runResult, err error) {
 	if err := command.Start(); err != nil {
 		return runResult{}, err
 	}
-	processDone := make(chan struct{})
-	var processErr error
-	go func() {
-		processErr = command.Wait()
-		close(processDone)
-	}()
-	cleaned := false
+	process := startProcessWait(command, stderrPath)
+	cleanupStarted := make(chan struct{})
+	var cleanupOnce sync.Once
+	cleanupComplete := false
 	defer func() {
-		if !cleaned {
-			_, _ = terminateProcessGroup(command.Process.Pid, processDone)
+		if cleanupComplete {
+			return
 		}
-		select {
-		case <-processDone:
-		case <-time.After(5 * time.Second):
+		_, _, succeeded, cleanupErr := finishProcess(command, process, cleanupStarted, &cleanupOnce)
+		if succeeded {
+			cleanupComplete = true
+		}
+		if cleanupErr != nil {
+			err = errors.Join(err, fmt.Errorf("cleanup: %w", cleanupErr))
 		}
 	}()
 	rssCtx, cancelRSS := context.WithCancel(ctx)
-	rssResult := samplePeakRSS(rssCtx, command.Process.Pid, processDone)
+	rssResult := samplePeakRSS(rssCtx, command.Process.Pid, process, cleanupStarted)
 	defer cancelRSS()
 
-	importCtx, cancelImport := context.WithTimeout(ctx, 2*time.Minute)
-	playlistObservation, err := waitFixtureSnapshot(importCtx, fixture, processDone, func(snapshot fixtureSnapshot) bool {
-		return !snapshot.PlaylistStarted.IsZero()
-	})
-	if err != nil {
-		cancelImport()
-		return runResult{}, err
-	}
-	playlistFinished, err := waitForStableProvider(importCtx, filepath.Join(configDir, "data", "M1000.m3u"), processDone)
-	cancelImport()
+	playlistObservation, playlistFinished, playlistEntries, err := waitForPlaylistImport(ctx, fixture, filepath.Join(configDir, "data", "M1000.m3u"), process)
 	if err != nil {
 		return runResult{}, err
 	}
-	guideObservation, err := waitFixtureSnapshot(ctx, fixture, processDone, func(snapshot fixtureSnapshot) bool {
-		return !snapshot.GuideFinished.IsZero()
-	})
+	guideObservation, err := waitForProviderResponses(ctx, fixture, process)
 	if err != nil {
 		return runResult{}, err
 	}
-	artifacts, err := waitForGeneratedArtifacts(ctx, configDir, port, processDone)
+	artifacts, err := waitForGeneratedArtifacts(ctx, configDir, port, process)
 	if err != nil {
 		return runResult{}, err
 	}
 	xepgFinished := time.Now().UTC()
-	load, err := driveStreams(ctx, artifacts.StreamURLs, fixture, config.StreamDuration, config.Clients, config.SampleBytes)
+	load, err := driveStreams(ctx, artifacts.StreamURLs, fixture, process, config.StreamDuration, config.Clients, config.SampleBytes)
 	if err != nil {
 		return runResult{}, err
 	}
-	runtimeData, err := signalAndReadMetrics(command.Process.Pid, metricsPath)
+	runtimeData, err := signalAndReadMetrics(command.Process.Pid, metricsPath, process)
 	if err != nil {
 		return runResult{}, err
 	}
@@ -718,15 +851,13 @@ func run(ctx context.Context, config runConfig) (result runResult, err error) {
 			return runResult{}, errors.New("CPU profile was not published")
 		}
 	}
-	cpuSeconds, forced, err := finishProcess(command, processDone)
-	cleaned = true
+	cpuSeconds, _, succeeded, err := finishProcess(command, process, cleanupStarted, &cleanupOnce)
+	if succeeded {
+		cleanupComplete = true
+	}
 	if err != nil {
 		return runResult{}, err
 	}
-	if forced {
-		return runResult{}, errors.New("process group required SIGKILL")
-	}
-	_ = processErr
 	cancelRSS()
 	rss := <-rssResult
 	if rss.Err != nil {
@@ -776,12 +907,12 @@ func run(ctx context.Context, config runConfig) (result runResult, err error) {
 		PlaylistSHA256:            bytesSHA256(fixture.playlistBytes()),
 		GuideSHA256:               bytesSHA256(fixture.guideBytes()),
 		GuideStartUTC:             config.GuideStart.Format(time.RFC3339),
-		PlaylistEntries:           artifacts.PlaylistEntries,
+		PlaylistEntries:           playlistEntries,
 		XMLTVChannels:             artifacts.XMLTVChannels,
 		XMLTVPrograms:             artifacts.XMLTVPrograms,
 		PlaylistImportSeconds:     playlistDuration.Seconds(),
 		XEPGGenerationSeconds:     xepgDuration.Seconds(),
-		PlaylistEntriesPerSecond:  float64(artifacts.PlaylistEntries) / playlistDuration.Seconds(),
+		PlaylistEntriesPerSecond:  float64(playlistEntries) / playlistDuration.Seconds(),
 		XEPGProgramsPerSecond:     float64(artifacts.XMLTVPrograms) / xepgDuration.Seconds(),
 		StreamAttempts:            load.Attempts,
 		StreamSuccesses:           load.Successes,
