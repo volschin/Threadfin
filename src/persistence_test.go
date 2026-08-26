@@ -28,8 +28,7 @@ func TestSetProviderCompatibilityReturnsSettingsPersistenceError(t *testing.T) {
 	System.File.Settings = filepath.Join(t.TempDir(), "missing", "settings.json")
 
 	err := setProviderCompatibility("provider", "m3u", map[string]int{"streams": 1})
-	var pathErr *os.PathError
-	if !errors.As(err, &pathErr) {
+	if _, ok := errors.AsType[*os.PathError](err); !ok {
 		t.Fatalf("setProviderCompatibility() error = %v, want persistence path error", err)
 	}
 }
@@ -40,8 +39,7 @@ func TestGetGuideNumberPMSReturnsPersistenceErrorAndRollsBackID(t *testing.T) {
 	System.File.PMS = filepath.Join(t.TempDir(), "missing", "pms.json")
 
 	id, err := getGuideNumberPMS("channel")
-	var pathErr *os.PathError
-	if !errors.As(err, &pathErr) {
+	if _, ok := errors.AsType[*os.PathError](err); !ok {
 		t.Fatalf("getGuideNumberPMS() error = %v, want persistence path error", err)
 	}
 	if id != "" {
@@ -59,8 +57,7 @@ func TestGetLineupReturnsStreamingURLPersistenceError(t *testing.T) {
 	System.File.URLS = filepath.Join(t.TempDir(), "missing", "urls.json")
 
 	_, err := getLineup()
-	var pathErr *os.PathError
-	if !errors.As(err, &pathErr) {
+	if _, ok := errors.AsType[*os.PathError](err); !ok {
 		t.Fatalf("getLineup() error = %v, want persistence path error", err)
 	}
 }
@@ -71,8 +68,7 @@ func TestCreateXEPGDatabaseReturnsStreamingURLPersistenceError(t *testing.T) {
 	System.File.URLS = filepath.Join(t.TempDir(), "missing", "urls.json")
 
 	err := createXEPGDatabase()
-	var pathErr *os.PathError
-	if !errors.As(err, &pathErr) {
+	if _, ok := errors.AsType[*os.PathError](err); !ok {
 		t.Fatalf("createXEPGDatabase() error = %v, want persistence path error", err)
 	}
 }
@@ -90,8 +86,7 @@ func TestResetStreamingURLCachePreservesMemoryOnPersistenceError(t *testing.T) {
 	target := filepath.Join(t.TempDir(), "missing", "urls.json")
 
 	err := resetStreamingURLCache(target)
-	var pathErr *os.PathError
-	if !errors.As(err, &pathErr) {
+	if _, ok := errors.AsType[*os.PathError](err); !ok {
 		t.Fatalf("resetStreamingURLCache() error = %v, want persistence path error", err)
 	}
 	if _, ok := Data.Cache.StreamingURLS["existing"]; !ok {
@@ -107,8 +102,7 @@ func TestCreateM3UFileReturnsStreamingURLPersistenceError(t *testing.T) {
 	Data.Cache.StreamingURLS = make(map[string]StreamInfo)
 
 	err := createM3UFile()
-	var pathErr *os.PathError
-	if !errors.As(err, &pathErr) {
+	if _, ok := errors.AsType[*os.PathError](err); !ok {
 		t.Fatalf("createM3UFile() error = %v, want persistence path error", err)
 	}
 }

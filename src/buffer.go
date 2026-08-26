@@ -1209,8 +1209,7 @@ func terminateProcess(cmd *exec.Cmd) error {
 		return killErr
 	}
 	if waitErr != nil {
-		var exitErr *exec.ExitError
-		if !errors.As(waitErr, &exitErr) {
+		if _, ok := errors.AsType[*exec.ExitError](waitErr); !ok {
 			return waitErr
 		}
 	}

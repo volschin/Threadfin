@@ -53,8 +53,7 @@ func TestRestorOldBinaryReturnsRenameError(t *testing.T) {
 	if err == nil {
 		t.Fatal("missing backup restoration succeeded")
 	}
-	var linkErr *os.LinkError
-	if !errors.As(err, &linkErr) {
+	if _, ok := errors.AsType[*os.LinkError](err); !ok {
 		t.Fatalf("restoration error = %v, want filesystem error", err)
 	}
 }
@@ -106,8 +105,7 @@ func TestReplacePreparedUpdateChmodFailureReportsRollbackFailure(t *testing.T) {
 	if !errors.Is(err, chmodErr) {
 		t.Fatalf("replacement error = %v, want chmod error", err)
 	}
-	var linkErr *os.LinkError
-	if !errors.As(err, &linkErr) {
+	if _, ok := errors.AsType[*os.LinkError](err); !ok {
 		t.Fatalf("replacement error = %v, want rollback filesystem error", err)
 	}
 }
@@ -148,8 +146,7 @@ func TestRestartUnixReportsExecAndRollbackFailures(t *testing.T) {
 	if !errors.Is(err, execErr) {
 		t.Fatalf("restart error = %v, want exec error", err)
 	}
-	var linkErr *os.LinkError
-	if !errors.As(err, &linkErr) {
+	if _, ok := errors.AsType[*os.LinkError](err); !ok {
 		t.Fatalf("restart error = %v, want rollback filesystem error", err)
 	}
 }

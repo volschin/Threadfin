@@ -30,8 +30,7 @@ func TestCheckAuthorizationLevelPreservesUserDataPersistenceError(t *testing.T) 
 	}
 
 	err = checkAuthorizationLevel(token, "missing.permission")
-	var pathErr *os.PathError
-	if !errors.As(err, &pathErr) {
+	if _, ok := errors.AsType[*os.PathError](err); !ok {
 		t.Fatalf("checkAuthorizationLevel() error = %v, want persistence path error", err)
 	}
 }
@@ -57,8 +56,7 @@ func TestSaveUserDataPreservesRemoveUserPersistenceError(t *testing.T) {
 		userID: map[string]interface{}{"delete": true},
 	}}
 	err = saveUserData(request)
-	var pathErr *os.PathError
-	if !errors.As(err, &pathErr) {
+	if _, ok := errors.AsType[*os.PathError](err); !ok {
 		t.Fatalf("saveUserData() error = %v, want persistence path error", err)
 	}
 }

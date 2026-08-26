@@ -40,8 +40,7 @@ func TestCreateDefaultUserReturnsPersistenceError(t *testing.T) {
 	database = filepath.Join(t.TempDir(), "missing-directory", databaseFile)
 
 	err := CreateDefaultUser("default-user", "password")
-	var pathErr *os.PathError
-	if !errors.As(err, &pathErr) {
+	if _, ok := errors.AsType[*os.PathError](err); !ok {
 		t.Fatalf("CreateDefaultUser() error = %v, want persistence path error", err)
 	}
 	if got := len(data["users"].(map[string]interface{})); got != 0 {
@@ -54,8 +53,7 @@ func TestCreateNewUserReturnsPersistenceError(t *testing.T) {
 	database = filepath.Join(t.TempDir(), "missing-directory", databaseFile)
 
 	userID, err := CreateNewUser("new-user", "password")
-	var pathErr *os.PathError
-	if !errors.As(err, &pathErr) {
+	if _, ok := errors.AsType[*os.PathError](err); !ok {
 		t.Fatalf("CreateNewUser() error = %v, want persistence path error", err)
 	}
 	if userID != "" {
@@ -72,8 +70,7 @@ func TestGetAllUserDataReturnsInitializationPersistenceError(t *testing.T) {
 	database = filepath.Join(t.TempDir(), "missing-directory", databaseFile)
 
 	users, err := GetAllUserData()
-	var pathErr *os.PathError
-	if !errors.As(err, &pathErr) {
+	if _, ok := errors.AsType[*os.PathError](err); !ok {
 		t.Fatalf("GetAllUserData() error = %v, want persistence path error", err)
 	}
 	if users != nil {
@@ -90,8 +87,7 @@ func TestRemoveUserRollsBackPersistenceFailure(t *testing.T) {
 	database = filepath.Join(t.TempDir(), "missing-directory", databaseFile)
 
 	err = RemoveUser(userID)
-	var pathErr *os.PathError
-	if !errors.As(err, &pathErr) {
+	if _, ok := errors.AsType[*os.PathError](err); !ok {
 		t.Fatalf("RemoveUser() error = %v, want persistence path error", err)
 	}
 	if _, ok := data["users"].(map[string]interface{})[userID]; !ok {
@@ -201,8 +197,7 @@ func TestLegacyMigrationSaveFailureWithMultipleUsersReturnsPersistenceError(t *t
 	if token != "" {
 		t.Fatalf("migration persistence failure returned token %q", token)
 	}
-	var pathErr *os.PathError
-	if !errors.As(err, &pathErr) {
+	if _, ok := errors.AsType[*os.PathError](err); !ok {
 		t.Fatalf("migration persistence failure returned %v, want filesystem persistence error", err)
 	}
 	if user["_password"] != legacy {
