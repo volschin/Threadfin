@@ -675,6 +675,21 @@ class ShowContent extends Content {
             showElement("loading", false);
             return;
         }
+        if (menuKey == "settings") {
+            renderSettingsPage(doc);
+            showElement("loading", false);
+            return;
+        }
+        if (menuKey == "users") {
+            renderUsersPage(doc);
+            showElement("loading", false);
+            return;
+        }
+        if (menuKey == "log") {
+            renderLogPage(doc);
+            showElement("loading", false);
+            return;
+        }
         var h = this.createHeadline(headline);
         var existingHeader = popup_header.querySelector('h3');
         if (existingHeader) {
@@ -967,6 +982,7 @@ class PopupContent extends PopupWindow {
     constructor() {
         super(...arguments);
         this.table = document.createElement("TABLE");
+        this.rowIndex = 0;
     }
     createHeadline(headline) {
         this.doc.innerHTML = "";
@@ -979,12 +995,42 @@ class PopupContent extends PopupWindow {
     }
     appendRow(title, element) {
         var tr = document.createElement("TR");
+        var titleCell = null;
+        var rowIndex = this.rowIndex++;
         // Bezeichnung
         if (title.length != 0) {
-            tr.appendChild(this.createTitle(title));
+            titleCell = this.createTitle(title);
+            titleCell.id = "popup-field-label-" + rowIndex;
+            tr.appendChild(titleCell);
         }
         // Content
         tr.appendChild(this.createContent(element));
+        if (titleCell) {
+            var controls = [];
+            var tagName = element && element.tagName ? String(element.tagName).toUpperCase() : "";
+            if (tagName == "INPUT" || tagName == "SELECT" || tagName == "TEXTAREA") {
+                controls.push(element);
+            }
+            if (element && typeof element.querySelectorAll == "function") {
+                var descendants = element.querySelectorAll("input, select, textarea");
+                for (var controlIndex = 0; controlIndex < descendants.length; controlIndex++) {
+                    if (controls.indexOf(descendants[controlIndex]) == -1) {
+                        controls.push(descendants[controlIndex]);
+                    }
+                }
+            }
+            controls.forEach((control, controlIndex) => {
+                if (String(control.type || "").toLowerCase() == "hidden") {
+                    return;
+                }
+                if (!control.id) {
+                    control.id = "popup-field-" + rowIndex + "-" + controlIndex;
+                }
+                if (!control.getAttribute("aria-label") && !control.getAttribute("aria-labelledby")) {
+                    control.setAttribute("aria-labelledby", titleCell.id);
+                }
+            });
+        }
         this.table.appendChild(tr);
     }
     createInput(type, name, value) {
@@ -1699,6 +1745,9 @@ function openPopUp(dataType, element) {
     if (typeof enhanceFilterPopup == "function") {
         enhanceFilterPopup(dataType);
     }
+    if (dataType == "users") {
+        enhanceUsersPopup(id, data);
+    }
     showPopUpElement('popup-custom');
 }
 class XMLTVFile {
@@ -2067,16 +2116,9 @@ function savePopupData(dataType, id, remove, option) {
     switch (dataType) {
         case "users":
             confirmMsg = "Delete this user?";
-            if (id == "-") {
-                cmd = "saveNewUser";
-                data["userData"] = input;
-            }
-            else {
-                cmd = "saveUserData";
-                var d = new Object();
-                d[id] = input;
-                data["userData"] = d;
-            }
+            var userRequest = buildUserRequest(id, input, remove == true);
+            cmd = userRequest.cmd;
+            data = userRequest.data;
             break;
         case "m3u":
             confirmMsg = "Delete this playlist?";

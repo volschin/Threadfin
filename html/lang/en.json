@@ -715,6 +715,26 @@
       "description": "Access to the API interface is only possible with authentication."
     }
   },
+  "admin": {
+    "settings": {
+      "purpose": "Configure ingestion, files, streaming, backups, and access without changing unrelated settings.",
+      "epgPMSImpact": "PMS lets the connected client manage guide data; XMLTV sources, Mapping, and M3U/XMLTV guide outputs are not used by this mode.",
+      "epgXEPGImpact": "XEPG uses XMLTV guide sources and makes Mapping plus M3U and XMLTV outputs applicable after you save.",
+      "webGate": "WEB access gates user management. Saving WEB as disabled clears PMS, M3U, XML, and API authentication on the server."
+    },
+    "users": {
+      "purpose": "Control which Threadfin interfaces and generated endpoints each account may use. Passwords are edit-only secrets.",
+      "passwords": "Passwords are available only while creating or editing an account."
+    },
+    "log": {
+      "purpose": "Search the current diagnostic record or filter response-backed DEBUG, WARNING, and ERROR markers.",
+      "resetWarning": "Permanently remove all current in-memory log entries."
+    },
+    "authentication": {
+      "loginPurpose": "Sign in to manage Threadfin and its generated outputs.",
+      "firstUserPurpose": "Create the first administrator account. Passwords are stored as Argon2id verifiers."
+    }
+  },
   "wizard": {
     "headline": "Set up Threadfin",
     "introduction": "Configure the source pipeline: choose capacity and guide mode, add a playlist, then add XMLTV when using XEPG. After setup, Overview shows the next required stage.",

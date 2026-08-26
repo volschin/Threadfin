@@ -17,49 +17,50 @@ type RequestStruct struct {
 
 	// Neue Werte für die Einstellungen (settings.json)
 	Settings struct {
-		API                      *bool     `json:"api,omitempty"`
-		SSDP                     *bool     `json:"ssdp,omitempty"`
-		AuthenticationAPI        *bool     `json:"authentication.api,omitempty"`
-		AuthenticationM3U        *bool     `json:"authentication.m3u,omitempty"`
-		AuthenticationPMS        *bool     `json:"authentication.pms,omitempty"`
-		AuthenticationWEP        *bool     `json:"authentication.web,omitempty"`
-		AuthenticationXML        *bool     `json:"authentication.xml,omitempty"`
-		BackupKeep               *int      `json:"backup.keep,omitempty"`
-		BackupPath               *string   `json:"backup.path,omitempty"`
-		Buffer                   *string   `json:"buffer,omitempty"`
-		BufferSize               *int      `json:"buffer.size.kb,omitempty"`
-		BufferTimeout            *float64  `json:"buffer.timeout,omitempty"`
-		CacheImages              *bool     `json:"cache.images,omitempty"`
-		EpgSource                *string   `json:"epgSource,omitempty"`
-		FFmpegOptions            *string   `json:"ffmpeg.options,omitempty"`
-		FFmpegPath               *string   `json:"ffmpeg.path,omitempty"`
-		FfmpegForceHttp          *bool     `json:"ffmpeg.forceHttp,omitempty"`
-		VLCOptions               *string   `json:"vlc.options,omitempty"`
-		VLCPath                  *string   `json:"vlc.path,omitempty"`
-		FilesUpdate              *bool     `json:"files.update,omitempty"`
-		TempPath                 *string   `json:"temp.path,omitempty"`
-		Tuner                    *int      `json:"tuner,omitempty"`
-		UDPxy                    *string   `json:"udpxy,omitempty"`
-		Update                   *[]string `json:"update,omitempty"`
-		UserAgent                *string   `json:"user.agent,omitempty"`
-		XepgReplaceMissingImages *bool     `json:"xepg.replace.missing.images,omitempty"`
-		XepgReplaceChannelTitle  *bool     `json:"xepg.replace.channel.title,omitempty"`
-		ThreadfinAutoUpdate      *bool     `json:"ThreadfinAutoUpdate,omitempty"`
-		SchemeM3U                *string   `json:"scheme.m3u,omitempty"`
-		SchemeXML                *string   `json:"scheme.xml,omitempty"`
-		StoreBufferInRAM         *bool     `json:"storeBufferInRAM,omitempty"`
-		ForceHttps               *bool     `json:"forceHttps,omitempty"`
-		ExcludeStreamsHttps      *bool     `json:"excludeStreamsHttps,omitempty"`
-		HttpsPort                *int      `json:"httpsPort,omitempty"`
-		HttpsThreadfinDomain     *string   `json:"httpsThreadfinDomain,omitempty"`
-		HttpThreadfinDomain      *string   `json:"httpThreadfinDomain,omitempty"`
-		BindIpAddress            *string   `json:"bindIpAddress,omitempty"`
-		EnableNonAscii           *bool     `json:"enableNonAscii,omitempty"`
-		EpgCategories            *string   `json:"epgCategories,omitempty"`
-		EpgCategoriesColors      *string   `json:"epgCategoriesColors,omitempty"`
-		Dummy                    *bool     `json:"dummy,omitempty"`
-		DummyChannel             *string   `json:"dummyChannel,omitempty"`
-		IgnoreFilters            *bool     `json:"ignoreFilters,omitempty"`
+		API                       *bool     `json:"api,omitempty"`
+		SSDP                      *bool     `json:"ssdp,omitempty"`
+		AuthenticationAPI         *bool     `json:"authentication.api,omitempty"`
+		AuthenticationM3U         *bool     `json:"authentication.m3u,omitempty"`
+		AuthenticationPMS         *bool     `json:"authentication.pms,omitempty"`
+		AuthenticationWEP         *bool     `json:"authentication.web,omitempty"`
+		AuthenticationXML         *bool     `json:"authentication.xml,omitempty"`
+		BackupKeep                *int      `json:"backup.keep,omitempty"`
+		BackupPath                *string   `json:"backup.path,omitempty"`
+		Buffer                    *string   `json:"buffer,omitempty"`
+		BufferSize                *int      `json:"buffer.size.kb,omitempty"`
+		BufferTimeout             *float64  `json:"buffer.timeout,omitempty"`
+		CacheImages               *bool     `json:"cache.images,omitempty"`
+		EpgSource                 *string   `json:"epgSource,omitempty"`
+		FFmpegOptions             *string   `json:"ffmpeg.options,omitempty"`
+		FFmpegPath                *string   `json:"ffmpeg.path,omitempty"`
+		FfmpegForceHttp           *bool     `json:"ffmpeg.forceHttp,omitempty"`
+		VLCOptions                *string   `json:"vlc.options,omitempty"`
+		VLCPath                   *string   `json:"vlc.path,omitempty"`
+		FilesUpdate               *bool     `json:"files.update,omitempty"`
+		TempPath                  *string   `json:"temp.path,omitempty"`
+		Tuner                     *int      `json:"tuner,omitempty"`
+		UDPxy                     *string   `json:"udpxy,omitempty"`
+		Update                    *[]string `json:"update,omitempty"`
+		UserAgent                 *string   `json:"user.agent,omitempty"`
+		XepgReplaceMissingImages  *bool     `json:"xepg.replace.missing.images,omitempty"`
+		XepgReplaceChannelTitle   *bool     `json:"xepg.replace.channel.title,omitempty"`
+		ThreadfinAutoUpdate       *bool     `json:"ThreadfinAutoUpdate,omitempty"`
+		SchemeM3U                 *string   `json:"scheme.m3u,omitempty"`
+		SchemeXML                 *string   `json:"scheme.xml,omitempty"`
+		StoreBufferInRAM          *bool     `json:"storeBufferInRAM,omitempty"`
+		ForceHttps                *bool     `json:"forceHttps,omitempty"`
+		ExcludeStreamsHttps       *bool     `json:"excludeStreamHttps,omitempty"`
+		ExcludeStreamsHttpsLegacy *bool     `json:"excludeStreamsHttps,omitempty"`
+		HttpsPort                 *int      `json:"httpsPort,omitempty"`
+		HttpsThreadfinDomain      *string   `json:"httpsThreadfinDomain,omitempty"`
+		HttpThreadfinDomain       *string   `json:"httpThreadfinDomain,omitempty"`
+		BindIpAddress             *string   `json:"bindIpAddress,omitempty"`
+		EnableNonAscii            *bool     `json:"enableNonAscii,omitempty"`
+		EpgCategories             *string   `json:"epgCategories,omitempty"`
+		EpgCategoriesColors       *string   `json:"epgCategoriesColors,omitempty"`
+		Dummy                     *bool     `json:"dummy,omitempty"`
+		DummyChannel              *string   `json:"dummyChannel,omitempty"`
+		IgnoreFilters             *bool     `json:"ignoreFilters,omitempty"`
 	} `json:"settings,omitempty"`
 
 	// Upload Logo
@@ -85,6 +86,13 @@ type RequestStruct struct {
 
 	// Probe Url
 	ProbeURL string `json:"probeURL,omitempty"`
+}
+
+func normalizeSettingsRequestAliases(request *RequestStruct) {
+	if request.Settings.ExcludeStreamsHttps == nil {
+		request.Settings.ExcludeStreamsHttps = request.Settings.ExcludeStreamsHttpsLegacy
+	}
+	request.Settings.ExcludeStreamsHttpsLegacy = nil
 }
 
 // ResponseStruct : Antworten an den Client (WEB)

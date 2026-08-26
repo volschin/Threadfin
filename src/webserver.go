@@ -501,7 +501,7 @@ func WS(w http.ResponseWriter, r *http.Request) {
 				}
 
 				response.Token = newToken
-				response.Users, _ = authentication.GetAllUserData()
+				response.Users, _ = browserUserData()
 
 			}
 
@@ -533,7 +533,7 @@ func WS(w http.ResponseWriter, r *http.Request) {
 			if err == nil {
 				response.OpenMenu = strconv.Itoa(slices.Index(System.WEB.Menu, "settings"))
 
-				if Settings.AuthenticationWEB == true && authenticationUpdate == false {
+				if authenticationSettingsRequireReload(authenticationUpdate, Settings.AuthenticationWEB) {
 					response.Reload = true
 				}
 
@@ -1172,7 +1172,7 @@ func setDefaultResponseData(response ResponseStruct, data bool) (defaults Respon
 
 	if data == true {
 
-		defaults.Users, _ = authentication.GetAllUserData()
+		defaults.Users, _ = browserUserData()
 		//defaults.DVR = System.DVRAddress
 
 		if Settings.EpgSource == "XEPG" {
@@ -1207,6 +1207,46 @@ func setDefaultResponseData(response ResponseStruct, data bool) (defaults Respon
 	}
 
 	return
+}
+
+func browserUserData() (map[string]interface{}, error) {
+	users, err := authentication.GetAllUserData()
+	if err != nil {
+		return nil, err
+	}
+
+	safeDataKeys := [...]string{
+		"username",
+		"defaultUser",
+		"authentication.web",
+		"authentication.pms",
+		"authentication.m3u",
+		"authentication.xml",
+		"authentication.api",
+	}
+	browserUsers := make(map[string]interface{}, len(users))
+	for userID, value := range users {
+		record, ok := value.(map[string]interface{})
+		if !ok {
+			return nil, fmt.Errorf("invalid authentication record for user %q", userID)
+		}
+		storedData, ok := record["data"].(map[string]interface{})
+		if !ok {
+			return nil, fmt.Errorf("invalid authentication data for user %q", userID)
+		}
+		safeData := make(map[string]interface{}, len(safeDataKeys))
+		for _, key := range safeDataKeys {
+			if safeValue, exists := storedData[key]; exists {
+				safeData[key] = safeValue
+			}
+		}
+		browserUsers[userID] = map[string]interface{}{"data": safeData}
+	}
+	return browserUsers, nil
+}
+
+func authenticationSettingsRequireReload(previous, current bool) bool {
+	return !previous && current
 }
 
 func enablePPV(w http.ResponseWriter, r *http.Request) {

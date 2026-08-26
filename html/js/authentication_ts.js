@@ -1,33 +1,37 @@
 "use strict";
-function login() {
-    var err = false;
-    var data = new Object();
-    var div = document.getElementById("content");
-    var form = document.getElementById("authentication");
-    var inputs = div.getElementsByTagName("INPUT");
-    console.log(inputs);
-    for (var i = inputs.length - 1; i >= 0; i--) {
-        var key = inputs[i].name;
-        var value = inputs[i].value;
-        if (value.length == 0) {
-            inputs[i].style.borderColor = "red";
-            err = true;
+function login(_event) {
+    var username = document.getElementById("username");
+    var password = document.getElementById("password");
+    var confirmPassword = document.getElementById("confirm");
+    var message = document.getElementById("err");
+    var inputs = [username, password];
+    if (confirmPassword) {
+        inputs.push(confirmPassword);
+    }
+    var firstInvalid = null;
+    inputs.forEach(input => {
+        input.style.borderColor = "";
+        input.setAttribute("aria-invalid", "false");
+        if (input.value.length == 0 && !firstInvalid) {
+            firstInvalid = input;
         }
-        data[key] = value;
+    });
+    if (firstInvalid) {
+        firstInvalid.style.borderColor = "red";
+        firstInvalid.setAttribute("aria-invalid", "true");
+        message.textContent = "{{.alert.missingInput}}";
+        firstInvalid.focus();
+        return false;
     }
-    if (err == true) {
-        data = new Object();
-        return;
+    if (confirmPassword && confirmPassword.value != password.value) {
+        password.style.borderColor = "red";
+        confirmPassword.style.borderColor = "red";
+        password.setAttribute("aria-invalid", "true");
+        confirmPassword.setAttribute("aria-invalid", "true");
+        message.textContent = "{{.account.failed}}";
+        password.focus();
+        return false;
     }
-    if (data.hasOwnProperty("confirm")) {
-        if (data["confirm"] != data["password"]) {
-            alert("sdafsd");
-            document.getElementById('password').style.borderColor = "red";
-            document.getElementById('confirm').style.borderColor = "red";
-            document.getElementById("err").innerHTML = "{{.account.failed}}";
-            return;
-        }
-    }
-    console.log(data);
-    form.submit();
+    message.textContent = "";
+    return true;
 }

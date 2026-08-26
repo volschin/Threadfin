@@ -45,7 +45,7 @@ menuItems.push(new MainMenuItem("logout", "{{.mainMenu.item.logout}}", "logout.p
 
 // Kategorien für die Einstellungen
 var settingsCategory = new Array()
-settingsCategory.push(new SettingsCategoryItem("{{.settings.category.general}}", "ThreadfinAutoUpdate,ssdp,tuner,epgSource,epgCategories,epgCategoriesColors,dummy,dummyChannel,ignoreFilters,api"))
+settingsCategory.push(new SettingsCategoryItem("{{.settings.category.general}}", "epgSource,ThreadfinAutoUpdate,ssdp,tuner,epgCategories,epgCategoriesColors,dummy,dummyChannel,ignoreFilters,api"))
 settingsCategory.push(new SettingsCategoryItem("{{.settings.category.files}}", "update,files.update,temp.path,cache.images,bindIpAddress,httpThreadfinDomain,forceHttps,excludeStreamHttps,httpsPort,httpsThreadfinDomain,xepg.replace.missing.images,xepg.replace.channel.title,enableNonAscii"))
 settingsCategory.push(new SettingsCategoryItem("{{.settings.category.streaming}}", "udpxy,buffer.size.kb,buffer.timeout,user.agent,ffmpeg.path,ffmpeg.options,ffmpeg.forceHttp,vlc.path,vlc.options"))
 settingsCategory.push(new SettingsCategoryItem("{{.settings.category.backup}}", "backup.path,backup.keep"))
@@ -542,12 +542,7 @@ function changeChannelNumber(element) {
 function backup() {
 
   var data = new Object()
-  console.log("Backup data")
-
   var cmd = "ThreadfinBackup"
-
-  console.log("SEND TO SERVER");
-  console.log(data)
 
   var server: Server = new Server(cmd)
   server.request(data)
@@ -625,7 +620,7 @@ function restore() {
   restore.onchange = function () {
 
     var filename = (restore as HTMLInputElement).files[0].name
-    var check = confirm("File: " + filename + "\n{{.confirm.restore}}");
+    var check = confirm("Restore " + filename + "?\nAll current Threadfin data will be replaced with this backup. This action cannot be undone.");
 
     if (check == true) {
 
@@ -636,7 +631,6 @@ function restore() {
 
         reader.readAsDataURL(file);
         reader.onload = function () {
-          console.log(reader.result);
           var data = new Object();
           var cmd = "ThreadfinRestore"
           data["base64"] = reader.result
@@ -689,7 +683,6 @@ function uploadLogo() {
 
       reader.readAsDataURL(file);
       reader.onload = function () {
-        console.log(reader.result);
         var data = new Object();
         var cmd = "uploadLogo"
         data["base64"] = reader.result

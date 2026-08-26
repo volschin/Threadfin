@@ -1,46 +1,19 @@
 class Log {
 
   createLog(entry:string):any {
-
-    var element = document.createElement("PRE");
-
-    if (entry.indexOf("WARNING") != -1) {
-      element.className = "warningMsg"
-    }
-
-    if (entry.indexOf("ERROR") != -1) {
-      element.className = "errorMsg"
-    }
-
-    if (entry.indexOf("DEBUG") != -1) {
-      element.className = "debugMsg"
-    }
-
-    element.innerHTML = entry
-
-    return element
+    return createLogEntryElement(entry)
   }
 
 }
 
 function showLogs(bottom:boolean) {
 
-  var log = new Log()
-
-  var logs = SERVER["log"]["log"]
-  var div = document.getElementById("content_log")
-
-  div.innerHTML = ""
-
-  var keys = getObjKeys(logs)
-
-  keys.forEach(logID => {
-
-    var entry = log.createLog(logs[logID])
-
-    div.append(entry)
-  
-  });
+  var logs = SERVER["log"] && Array.isArray(SERVER["log"]["log"]) ? SERVER["log"]["log"] : []
+  var div = document.getElementById("content_log_entries")
+  if (!div) {
+    return
+  }
+  renderLogEntryList(div, logs)
 
   setTimeout(function(){ 
 
@@ -56,7 +29,9 @@ function showLogs(bottom:boolean) {
 }
 
 function resetLogs() {
-
+  if (!confirm("Reset all current log entries? This permanently removes them and cannot be undone.")) {
+    return
+  }
   var cmd = "resetLogs"
   var data = new Object()
   var server:Server = new Server(cmd)

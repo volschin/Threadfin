@@ -17,6 +17,7 @@ import (
 
 // Einstellungen ändern (WebUI)
 func updateServerSettings(request RequestStruct) (settings SettingsStruct, err error) {
+	normalizeSettingsRequestAliases(&request)
 
 	oldSettings, err := interfaceToMap(Settings)
 	if err != nil {
