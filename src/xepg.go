@@ -5,6 +5,7 @@ import (
 	"encoding/xml"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path"
 	"regexp"
@@ -1029,8 +1030,11 @@ func createXMLTVFile() (err error) {
 		return err
 	}
 	writer := bufio.NewWriterSize(xmlFile, 1<<20) // 1MB buffer
+	finalized := false
 	defer func() {
-		err = errors.Join(err, writer.Flush(), xmlFile.Close())
+		if !finalized {
+			err = errors.Join(err, finalizeXMLTVOutput(writer, xmlFile))
+		}
 	}()
 
 	var xepgXML XMLTV
@@ -1125,12 +1129,22 @@ func createXMLTVFile() (err error) {
 		return err
 	}
 
+	if err = finalizeXMLTVOutput(writer, xmlFile); err != nil {
+		finalized = true
+		return err
+	}
+	finalized = true
+
 	showInfo("XEPG:" + fmt.Sprintf("Compress XMLTV file (%s)", System.Compressed.GZxml))
 	if err = compressGZIPFile(System.File.XML, System.Compressed.GZxml); err != nil {
 		return err
 	}
 
 	return
+}
+
+func finalizeXMLTVOutput(writer *bufio.Writer, file io.Closer) error {
+	return errors.Join(writer.Flush(), file.Close())
 }
 
 // Programmdaten erstellen (createXMLTVFile)
