@@ -163,9 +163,7 @@ func checkConditions(streamValues, conditions, coType string) (status bool) {
 	conditions = strings.Replace(conditions, ", ", ",", -1)
 	conditions = strings.Replace(conditions, " ,", ",", -1)
 
-	var keys = strings.Split(conditions, ",")
-
-	for _, key := range keys {
+	for key := range strings.SplitSeq(conditions, ",") {
 
 		if strings.Contains(streamValues, key) {
 
