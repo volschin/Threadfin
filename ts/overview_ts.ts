@@ -118,16 +118,24 @@ function createOverviewActivityPanel(state: OverviewState): HTMLElement {
   var panel = createOverviewPanel("Current activity", "tf-overview-activity")
   var metrics = document.createElement("dl")
   metrics.className = "tf-overview-metrics"
-  appendOverviewMetric(metrics, "Active streams", "overview-active-streams", String(state.activity.activeStreams))
+  appendOverviewMetric(metrics, "Active client connections", "overview-active-client-connections", String(state.activity.activeClientConnections))
   appendOverviewMetric(metrics, "Client capacity", "overview-client-capacity", overviewCapacityLabel(state.activity.clients))
-  appendOverviewMetric(metrics, "Source capacity", "overview-playlist-capacity", overviewCapacityLabel(state.activity.playlists))
+  appendOverviewMetric(metrics, "Playlist connections", "overview-playlist-capacity", overviewCapacityLabel(state.activity.playlists))
   panel.appendChild(metrics)
 
   var explanation = document.createElement("p")
   explanation.className = "tf-overview-panel-note"
-  explanation.textContent = state.activity.activeStreams == 0 ? "No client streams are active now." : "Threadfin currently observes active client streams."
+  explanation.id = "overview-activity-summary"
+  explanation.textContent = overviewActivitySummary(state.activity.activeClientConnections)
   panel.appendChild(explanation)
   return panel
+}
+
+function overviewActivitySummary(activeClientConnections: number): string {
+  if (activeClientConnections == 0) {
+    return "No active client connections are currently observed."
+  }
+  return "Threadfin currently observes " + activeClientConnections + (activeClientConnections == 1 ? " active client connection." : " active client connections.")
 }
 
 function appendOverviewMetric(list: HTMLDListElement, label: string, id: string, value: string): void {
@@ -315,9 +323,10 @@ function overviewSourceStatusLabel(source: OverviewSourceState): string {
 function refreshOverviewOperationalState(response: any): void {
   var activity = selectActivityState(response)
   var attention = selectAttentionState(response)
-  setOverviewOperationalText("overview-active-streams", String(activity.activeStreams))
+  setOverviewOperationalText("overview-active-client-connections", String(activity.activeClientConnections))
   setOverviewOperationalText("overview-client-capacity", overviewCapacityLabel(activity.clients))
   setOverviewOperationalText("overview-playlist-capacity", overviewCapacityLabel(activity.playlists))
+  setOverviewOperationalText("overview-activity-summary", overviewActivitySummary(activity.activeClientConnections))
   setOverviewOperationalText("overview-errors", String(attention.errors))
   setOverviewOperationalText("overview-warnings", String(attention.warnings))
   setOverviewOperationalText("overview-attention-summary", overviewAttentionSummary(attention))

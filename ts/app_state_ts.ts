@@ -38,11 +38,13 @@ interface OverviewCapacityState {
 
 interface OverviewState {
   playlistCount: number
+  playlistReadyCount: number
   selectedStreamCount: number
   xmltv: {
     applicable: boolean
     ready: boolean
     sourceCount: number
+    readyCount: number
   }
   mapping: {
     activeCount: number
@@ -53,7 +55,7 @@ interface OverviewState {
     endpoints: OverviewEndpointState[]
   }
   activity: {
-    activeStreams: number
+    activeClientConnections: number
     clients: OverviewCapacityState
     playlists: OverviewCapacityState
   }
@@ -103,27 +105,33 @@ function selectSelectedStreamCount(server: any): number {
   return Array.isArray(preview.activeStreams) ? preview.activeStreams.length : 0
 }
 
-function selectXMLTVState(server: any): { applicable: boolean, ready: boolean, sourceCount: number } {
+function overviewXMLTVSourceReady(source: { [key: string]: any }): boolean {
+  var compatibility = overviewRecord(source.compatibility)
+  return overviewNumber(source["provider.availability"]) > 0 && overviewNumber(compatibility["xmltv.channels"]) > 0
+}
+
+function selectXMLTVState(server: any): { applicable: boolean, ready: boolean, sourceCount: number, readyCount: number } {
   var root = overviewRecord(server)
   var settings = overviewRecord(root.settings)
   var clientInfo = overviewRecord(root.clientInfo)
   var files = overviewRecord(settings.files)
   var sources = overviewRecord(files.xmltv)
   var applicable = overviewString(settings.epgSource || clientInfo.epgSource).toUpperCase() == "XEPG"
-  var ready = false
+  var sourceCount = Object.keys(sources).length
+  var readyCount = 0
 
   Object.keys(sources).forEach(key => {
     var source = overviewRecord(sources[key])
-    var compatibility = overviewRecord(source.compatibility)
-    if (overviewNumber(source["provider.availability"]) > 0 && overviewNumber(compatibility["xmltv.channels"]) > 0) {
-      ready = true
+    if (overviewXMLTVSourceReady(source)) {
+      readyCount++
     }
   })
 
   return {
     applicable: applicable,
-    ready: applicable && ready,
-    sourceCount: Object.keys(sources).length,
+    ready: applicable && sourceCount > 0 && readyCount == sourceCount,
+    sourceCount: sourceCount,
+    readyCount: readyCount,
   }
 }
 
@@ -136,9 +144,16 @@ function selectMappingState(server: any): { activeCount: number, unresolvedCount
 
   Object.keys(mappings).forEach(key => {
     var mapping = overviewRecord(mappings[key])
-    if (mapping["x-active"] === true && mapping["x-hide-channel"] !== true) {
+    if (mapping["x-hide-channel"] === true) {
+      return
+    }
+
+    var xmltvFile = overviewString(mapping["x-xmltv-file"])
+    var mappedChannel = overviewString(mapping["x-mapping"])
+    var valid = xmltvFile != "" && xmltvFile != "-" && mappedChannel != "" && mappedChannel != "-"
+    if (mapping["x-active"] === true && valid) {
       activeCount++
-    } else {
+    } else if (!valid) {
       unresolvedCount++
     }
   })
@@ -157,15 +172,15 @@ function overviewEndpointAvailable(value: any, endpoint: "dvr" | "m3u" | "xmltv"
   return /^https?:\/\//i.test(address)
 }
 
-function selectOutputState(server: any, selectedStreamCount: number, xmltv: { applicable: boolean }, mapping: { activeCount: number }): { ready: boolean, endpoints: OverviewEndpointState[] } {
+function selectOutputState(server: any, selectedStreamCount: number, xmltv: { applicable: boolean, ready: boolean }, mapping: { activeCount: number }): { ready: boolean, endpoints: OverviewEndpointState[] } {
   var root = overviewRecord(server)
   var clientInfo = overviewRecord(root.clientInfo)
   var dvrAvailable = selectedStreamCount > 0 && overviewEndpointAvailable(clientInfo.DVR, "dvr")
-  var m3uAvailable = xmltv.applicable && mapping.activeCount > 0 && overviewEndpointAvailable(clientInfo["m3u-url"], "m3u")
-  var xmltvAvailable = xmltv.applicable && mapping.activeCount > 0 && overviewEndpointAvailable(clientInfo["xepg-url"], "xmltv")
+  var m3uAvailable = xmltv.applicable && xmltv.ready && mapping.activeCount > 0 && overviewEndpointAvailable(clientInfo["m3u-url"], "m3u")
+  var xmltvAvailable = xmltv.applicable && xmltv.ready && mapping.activeCount > 0 && overviewEndpointAvailable(clientInfo["xepg-url"], "xmltv")
   var ready = dvrAvailable
   if (xmltv.applicable) {
-    ready = ready && mapping.activeCount > 0 && m3uAvailable && xmltvAvailable
+    ready = ready && xmltv.ready && mapping.activeCount > 0 && m3uAvailable && xmltvAvailable
   }
 
   return {
@@ -183,23 +198,23 @@ function selectOutputState(server: any, selectedStreamCount: number, xmltv: { ap
         label: "M3U URL",
         value: m3uAvailable ? overviewString(clientInfo["m3u-url"]) : "",
         available: m3uAvailable,
-        explanation: !xmltv.applicable ? "M3U output requires XEPG mode." : mapping.activeCount == 0 ? "M3U output becomes usable after channels are active in Mapping." : m3uAvailable ? "Threadfin's generated channel playlist." : "The M3U output is not available yet.",
+        explanation: !xmltv.applicable ? "M3U output requires XEPG mode." : !xmltv.ready ? "M3U output waits until every configured XMLTV source is ready." : mapping.activeCount == 0 ? "M3U output becomes usable after channels are active in Mapping." : m3uAvailable ? "Threadfin's generated channel playlist." : "The M3U output is not available yet.",
       },
       {
         key: "xmltv",
         label: "XMLTV URL",
         value: xmltvAvailable ? overviewString(clientInfo["xepg-url"]) : "",
         available: xmltvAvailable,
-        explanation: !xmltv.applicable ? "Guide data is managed by the client in PMS mode." : mapping.activeCount == 0 ? "XMLTV output becomes usable after channels are active in Mapping." : xmltvAvailable ? "Threadfin's generated guide data." : "The XMLTV output is not available yet.",
+        explanation: !xmltv.applicable ? "Guide data is managed by the client in PMS mode." : !xmltv.ready ? "XMLTV output waits until every configured guide source is ready." : mapping.activeCount == 0 ? "XMLTV output becomes usable after channels are active in Mapping." : xmltvAvailable ? "Threadfin's generated guide data." : "The XMLTV output is not available yet.",
       },
     ],
   }
 }
 
-function selectActivityState(server: any): { activeStreams: number, clients: OverviewCapacityState, playlists: OverviewCapacityState } {
+function selectActivityState(server: any): { activeClientConnections: number, clients: OverviewCapacityState, playlists: OverviewCapacityState } {
   var clientInfo = overviewRecord(overviewRecord(server).clientInfo)
   return {
-    activeStreams: overviewNumber(clientInfo.activeClients),
+    activeClientConnections: overviewNumber(clientInfo.activeClients),
     clients: {
       active: overviewNumber(clientInfo.activeClients),
       total: overviewNumber(clientInfo.totalClients),
@@ -233,13 +248,14 @@ function selectSourceState(server: any): OverviewSourceState[] {
       var source = overviewRecord(configured[key])
       var rawAvailability = source["provider.availability"]
       var availability = overviewNumber(rawAvailability)
+      var ready = kind == "XMLTV" ? overviewXMLTVSourceReady(source) : availability > 0
       sources.push({
         id: key,
         name: overviewString(source.name) || kind,
         kind: kind,
         lastUpdate: overviewString(source["last.update"]),
         availability: availability,
-        status: rawAvailability === undefined || rawAvailability === null ? "unknown" : availability > 0 ? "ready" : "unavailable",
+        status: rawAvailability === undefined || rawAvailability === null ? "unknown" : ready ? "ready" : "unavailable",
       })
     })
   }
@@ -258,21 +274,19 @@ function selectSourceState(server: any): OverviewSourceState[] {
 }
 
 function selectOverviewStages(state: Omit<OverviewState, "stages">): OverviewStageState[] {
-  var playlistSources = state.sources.filter(source => source.kind != "XMLTV")
-  var playlistsReady = playlistSources.some(source => source.status == "ready")
   var stages: OverviewStageState[] = []
 
   stages.push(state.playlistCount == 0 ? {
     key: "playlist", label: "Playlist", status: "empty", summary: "No playlist configured",
     explanation: "Add an M3U playlist or HDHomeRun source to begin.",
     action: { label: "Add playlist", destination: "playlist" },
-  } : playlistsReady ? {
-    key: "playlist", label: "Playlist", status: "ready", summary: state.playlistCount + (state.playlistCount == 1 ? " source ready" : " sources ready"),
-    explanation: "Threadfin has a reachable channel source.",
+  } : state.playlistReadyCount == state.playlistCount ? {
+    key: "playlist", label: "Playlist", status: "ready", summary: state.playlistReadyCount + " / " + state.playlistCount + " ready",
+    explanation: "Every configured channel source is reachable.",
     action: { label: "View playlist", destination: "playlist" },
   } : {
-    key: "playlist", label: "Playlist", status: "attention", summary: "Source needs attention",
-    explanation: "The configured channel source is not currently available.",
+    key: "playlist", label: "Playlist", status: "attention", summary: state.playlistReadyCount + " / " + state.playlistCount + " ready",
+    explanation: "One or more configured channel sources need attention.",
     action: { label: "Review playlist", destination: "playlist" },
   })
 
@@ -295,12 +309,12 @@ function selectOverviewStages(state: Omit<OverviewState, "stages">): OverviewSta
     explanation: "PMS mode leaves guide data management to the connected client.",
     action: { label: "Review EPG source", destination: "settings" },
   } : state.xmltv.ready ? {
-    key: "xmltv", label: "XMLTV", status: "ready", summary: state.xmltv.sourceCount + (state.xmltv.sourceCount == 1 ? " guide ready" : " guides ready"),
-    explanation: "Guide channels are available to XEPG.",
+    key: "xmltv", label: "XMLTV", status: "ready", summary: state.xmltv.readyCount + " / " + state.xmltv.sourceCount + " ready",
+    explanation: "Every configured guide source has channels available to XEPG.",
     action: { label: "View XMLTV", destination: "xmltv" },
   } : {
-    key: "xmltv", label: "XMLTV", status: "attention", summary: "Guide not ready",
-    explanation: "XEPG needs an available XMLTV guide with channels.",
+    key: "xmltv", label: "XMLTV", status: "attention", summary: state.xmltv.readyCount + " / " + state.xmltv.sourceCount + " ready",
+    explanation: "XEPG needs every configured XMLTV source to be available with guide channels.",
     action: { label: "Add XMLTV", destination: "xmltv" },
   })
 
@@ -345,15 +359,18 @@ function selectOverviewState(server: any): OverviewState {
   var xmltv = selectXMLTVState(server)
   var mapping = selectMappingState(server)
   var outputs = selectOutputState(server, selectedStreamCount, xmltv, mapping)
+  var sources = selectSourceState(server)
+  var playlistReadyCount = sources.filter(source => source.kind != "XMLTV" && source.status == "ready").length
   var stateWithoutStages: Omit<OverviewState, "stages"> = {
     playlistCount: playlistCount,
+    playlistReadyCount: playlistReadyCount,
     selectedStreamCount: selectedStreamCount,
     xmltv: xmltv,
     mapping: mapping,
     outputs: outputs,
     activity: selectActivityState(server),
     attention: selectAttentionState(server),
-    sources: selectSourceState(server),
+    sources: sources,
   }
 
   var state = stateWithoutStages as OverviewState

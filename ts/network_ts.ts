@@ -102,29 +102,30 @@ class Server {
 
       switch (data["cmd"]) {
         case "updateLog":
-          SERVER["log"] = response["log"]
-          refreshOverviewOperationalState(response)
+          mergeUpdateLogResponse(response)
+          refreshOverviewOperationalState(SERVER)
+          var updateClientInfo = overviewRecord(SERVER["clientInfo"])
           if (document.getElementById("content_log")) {
             showLogs(false)
           }
           if (document.getElementById("playlist-connection-information")) {
             let activeClass = "text-primary"
-            if (response["clientInfo"]["activePlaylist"] / response["clientInfo"]["totalPlaylist"] >= 0.6 && response["clientInfo"]["activePlaylist"] / response["clientInfo"]["totalPlaylist"] < 0.8) {
+            if (updateClientInfo["activePlaylist"] / updateClientInfo["totalPlaylist"] >= 0.6 && updateClientInfo["activePlaylist"] / updateClientInfo["totalPlaylist"] < 0.8) {
               activeClass = "text-warning"
-            } else if (response["clientInfo"]["activePlaylist"] / response["clientInfo"]["totalPlaylist"] >= 0.8) {
+            } else if (updateClientInfo["activePlaylist"] / updateClientInfo["totalPlaylist"] >= 0.8) {
               activeClass = "text-danger"
             }
-            document.getElementById("playlist-connection-information").innerHTML = "Playlist Connections: <span class='" + activeClass + "'>" + response["clientInfo"]["activePlaylist"] + " / " + response["clientInfo"]["totalPlaylist"] + "</span>"
+            document.getElementById("playlist-connection-information").innerHTML = "Playlist Connections: <span class='" + activeClass + "'>" + updateClientInfo["activePlaylist"] + " / " + updateClientInfo["totalPlaylist"] + "</span>"
           }
           
           if (document.getElementById("client-connection-information")) {
             let activeClass = "text-primary"
-            if (response["clientInfo"]["activeClients"] / response["clientInfo"]["totalClients"] >= 0.6 && response["clientInfo"]["activeClients"] / response["clientInfo"]["totalClients"] < 0.8) {
+            if (updateClientInfo["activeClients"] / updateClientInfo["totalClients"] >= 0.6 && updateClientInfo["activeClients"] / updateClientInfo["totalClients"] < 0.8) {
               activeClass = "text-warning"
-            } else if (response["clientInfo"]["activeClients"] / response["clientInfo"]["totalClients"] >= 0.8) {
+            } else if (updateClientInfo["activeClients"] / updateClientInfo["totalClients"] >= 0.8) {
               activeClass = "text-danger"
             }
-            document.getElementById("client-connection-information").innerHTML = "Client Connections: <span class='" + activeClass + "'>" + response["clientInfo"]["activeClients"] + " / " + response["clientInfo"]["totalClients"] + "</span>"
+            document.getElementById("client-connection-information").innerHTML = "Client Connections: <span class='" + activeClass + "'>" + updateClientInfo["activeClients"] + " / " + updateClientInfo["totalClients"] + "</span>"
           }
           return
           break;
@@ -165,6 +166,24 @@ class Server {
 
   }
 
+}
+
+function mergeUpdateLogResponse(response: any): void {
+  var server = overviewRecord(SERVER)
+  var update = overviewRecord(response)
+  mergeUpdateLogRecord(server, "clientInfo", update.clientInfo)
+  mergeUpdateLogRecord(server, "log", update.log)
+}
+
+function mergeUpdateLogRecord(server: { [key: string]: any }, key: string, updateValue: any): void {
+  var existing = overviewRecord(server[key])
+  if (server[key] !== existing) {
+    server[key] = existing
+  }
+  var update = overviewRecord(updateValue)
+  Object.keys(update).forEach(updateKey => {
+    existing[updateKey] = update[updateKey]
+  })
 }
 
 function getCookie(name) {
