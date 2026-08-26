@@ -5,12 +5,14 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"log"
 	"net"
 	"net/http"
 	"net/url"
 	"os"
 	"path"
+	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
@@ -25,6 +27,7 @@ const (
 	streamRoutePrefix    = "/stream/"
 	streamRoutePattern   = "/stream/{streamID...}"
 	streamRoutePathValue = "streamID"
+	completeM3UType      = "audio/x-mpegurl"
 )
 
 func registerStreamRoute(mux *http.ServeMux) {
@@ -275,13 +278,102 @@ func Auto(w http.ResponseWriter, r *http.Request) {
 	return
 }
 
+var m3uURLAuth = urlAuth
+
+type m3uReadFile interface {
+	io.ReadSeeker
+	Stat() (os.FileInfo, error)
+	Close() error
+}
+
+type m3uHandlerOps struct {
+	build func([]string) (string, error)
+	open  func(string) (m3uReadFile, error)
+}
+
+func defaultM3UHandlerOps() m3uHandlerOps {
+	return m3uHandlerOps{
+		build: buildM3U,
+		open:  openFinalM3U,
+	}
+}
+
+func serveOpenedM3U(w http.ResponseWriter, r *http.Request, file m3uReadFile) error {
+	info, err := file.Stat()
+	if err != nil {
+		return errors.Join(fmt.Errorf("inspect complete M3U: %w", err), file.Close())
+	}
+	if !info.Mode().IsRegular() {
+		return errors.Join(fmt.Errorf("complete M3U %q is not a regular file", info.Name()), file.Close())
+	}
+
+	w.Header().Set("Content-Type", completeM3UType)
+	http.ServeContent(w, r, info.Name(), info.ModTime(), file)
+	if err := file.Close(); err != nil {
+		ShowError(err, 0)
+	}
+	return nil
+}
+
+func openAndServeM3U(w http.ResponseWriter, r *http.Request, filename string, open func(string) (m3uReadFile, error)) (opened bool, err error) {
+	file, err := open(filename)
+	if err != nil {
+		return false, err
+	}
+	return true, serveOpenedM3U(w, r, file)
+}
+
+func serveM3U(w http.ResponseWriter, r *http.Request, filename, groupTitle string, ops m3uHandlerOps) error {
+	if groupTitle != "" {
+		systemMutex.Lock()
+		if !System.Dev {
+			w.Header().Set("Content-Disposition", "attachment; filename="+getFilenameFromPath(strings.TrimPrefix(r.URL.Path, "/")))
+		}
+		systemMutex.Unlock()
+
+		content, err := ops.build(strings.Split(groupTitle, ","))
+		if err != nil {
+			return fmt.Errorf("build filtered M3U: %w", err)
+		}
+		contentType := http.DetectContentType([]byte(content))
+		if strings.Contains(strings.ToLower(contentType), "xml") {
+			contentType = "application/xml; charset=utf-8"
+		}
+		w.Header().Set("Content-Type", contentType)
+		_, err = w.Write([]byte(content))
+		return err
+	}
+
+	opened, err := openAndServeM3U(w, r, filename, ops.open)
+	if opened {
+		return err
+	}
+	if !errors.Is(err, fs.ErrNotExist) {
+		return fmt.Errorf("open complete M3U: %w", err)
+	}
+
+	log.Println("M3U file does not exist, building new one")
+	systemMutex.Lock()
+	if !System.Dev {
+		w.Header().Set("Content-Disposition", "attachment; filename="+getFilenameFromPath(strings.TrimPrefix(r.URL.Path, "/")))
+	}
+	systemMutex.Unlock()
+
+	if _, err := ops.build(nil); err != nil {
+		return fmt.Errorf("build complete M3U: %w", err)
+	}
+	if _, err := openAndServeM3U(w, r, filename, ops.open); err != nil {
+		return fmt.Errorf("open generated complete M3U: %w", err)
+	}
+	return nil
+}
+
 // Threadfin : Web Server /xmltv/ und /m3u/
 func Threadfin(w http.ResponseWriter, r *http.Request) {
 
-	var requestType, groupTitle, file, content, contentType string
+	var requestType, file, content, contentType string
 	var err error
 	var path = strings.TrimPrefix(r.URL.Path, "/")
-	var groups = []string{}
 
 	systemMutex.Lock()
 	if Settings.HttpThreadfinDomain != "" {
@@ -320,48 +412,25 @@ func Threadfin(w http.ResponseWriter, r *http.Request) {
 
 		requestType = "m3u"
 
-		err = urlAuth(r, requestType)
+		err = m3uURLAuth(r, requestType)
 		if err != nil {
 			ShowError(err, 000)
 			httpStatusError(w, r, 403)
 			return
 		}
 
-		groupTitle = r.URL.Query().Get("group-title")
+		groupTitle := r.URL.Query().Get("group-title")
 
 		systemMutex.Lock()
-		m3uFilePath := System.Folder.Data + "threadfin.m3u"
+		m3uFilePath := filepath.Join(System.Folder.Data, "threadfin.m3u")
 		systemMutex.Unlock()
 
-		queries := r.URL.Query()
-		// Check if the m3u file exists
-		if len(queries) == 0 {
-			if _, err := os.Stat(m3uFilePath); err == nil {
-				log.Println("Serving existing m3u file")
-				http.ServeFile(w, r, m3uFilePath)
-				return
-			}
-		}
-
-		log.Println("M3U file does not exist, building new one")
-
-		systemMutex.Lock()
-		if !System.Dev {
-			// false: Dateiname wird im Header gesetzt
-			// true: M3U wird direkt im Browser angezeigt
-			w.Header().Set("Content-Disposition", "attachment; filename="+getFilenameFromPath(path))
-		}
-		systemMutex.Unlock()
-
-		if len(groupTitle) > 0 {
-			groups = strings.Split(groupTitle, ",")
-		}
-
-		content, err = buildM3U(groups)
+		err = serveM3U(w, r, m3uFilePath, groupTitle, defaultM3UHandlerOps())
 		if err != nil {
-			ShowError(err, 000)
+			ShowError(err, 0)
+			httpStatusError(w, r, http.StatusInternalServerError)
 		}
-
+		return
 	}
 
 	contentType = http.DetectContentType([]byte(content))

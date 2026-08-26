@@ -3,12 +3,16 @@ package src
 import (
 	"bufio"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
+	"io/fs"
 	"math"
 	"net/url"
 	"os"
 	"os/exec"
 	"path"
+	"path/filepath"
 	"regexp"
 	"slices"
 	"strconv"
@@ -19,8 +23,9 @@ import (
 
 // Playlisten parsen
 var (
-	filterExcludeRegexp = regexp.MustCompile(`!+[{]+[^.]+[}]`)
-	filterIncludeRegexp = regexp.MustCompile(`[{]+[^.]+[}]`)
+	filterExcludeRegexp   = regexp.MustCompile(`!+[{]+[^.]+[}]`)
+	filterIncludeRegexp   = regexp.MustCompile(`[{]+[^.]+[}]`)
+	createM3UStreamingURL = createStreamingURL
 )
 
 func parsePlaylist(filename, fileType string) (channels []interface{}, err error) {
@@ -54,8 +59,6 @@ func filterThisStream(s interface{}) (status bool, liveEvent bool) {
 		if filter.Rule == "" {
 			continue
 		}
-
-		liveEvent = filter.LiveEvent
 
 		var group, name, search string
 		var exclude, include string
@@ -124,27 +127,21 @@ func filterThisStream(s interface{}) (status bool, liveEvent bool) {
 
 		if match == true {
 
-			if len(exclude) > 0 {
-				var status = checkConditions(search, exclude, "exclude")
-				if status == false {
-					return false, liveEvent
-				}
+			if len(exclude) > 0 && !checkConditions(search, exclude, "exclude") {
+				continue
 			}
 
-			if len(include) > 0 {
-				var status = checkConditions(search, include, "include")
-				if status == false {
-					return false, liveEvent
-				}
+			if len(include) > 0 && !checkConditions(search, include, "include") {
+				continue
 			}
 
-			return true, liveEvent
+			return true, filter.LiveEvent
 
 		}
 
 	}
 
-	return false, liveEvent
+	return false, false
 }
 
 // Bedingungen für den Filter
@@ -229,6 +226,95 @@ func compareChannelNumbers(a, b XEPGChannelStruct) int {
 	}
 }
 
+type m3uTempFile interface {
+	io.Writer
+	Name() string
+	Chmod(os.FileMode) error
+	Sync() error
+	Close() error
+}
+
+type m3uPublicationOps struct {
+	createTemp func(string, string) (m3uTempFile, error)
+	stat       func(string) (os.FileInfo, error)
+	rename     func(string, string) error
+	remove     func(string) error
+}
+
+// defaultM3UPublishedMode keeps a first publication owner-only. Replacements
+// preserve the explicit mode of an existing published playlist.
+const defaultM3UPublishedMode os.FileMode = 0o600
+
+func publishM3UFile(filename string, write func(io.StringWriter) error) error {
+	return publishM3UFileWithOps(filename, write, m3uPublicationOps{
+		createTemp: func(directory, pattern string) (m3uTempFile, error) {
+			return os.CreateTemp(directory, pattern)
+		},
+		stat:   os.Stat,
+		rename: os.Rename,
+		remove: os.Remove,
+	})
+}
+
+func publishM3UFileWithOps(filename string, write func(io.StringWriter) error, ops m3uPublicationOps) (err error) {
+	publishedMode := defaultM3UPublishedMode
+	stat := ops.stat
+	if stat == nil {
+		stat = os.Stat
+	}
+	info, statErr := stat(filename)
+	switch {
+	case statErr == nil:
+		publishedMode = info.Mode().Perm()
+	case !errors.Is(statErr, fs.ErrNotExist):
+		return fmt.Errorf("inspect published M3U mode: %w", statErr)
+	}
+
+	temporary, err := ops.createTemp(filepath.Dir(filename), ".threadfin.m3u-*")
+	if err != nil {
+		return fmt.Errorf("create temporary M3U file: %w", err)
+	}
+
+	temporaryName := temporary.Name()
+	closed := false
+	published := false
+	defer func() {
+		if !closed {
+			err = errors.Join(err, temporary.Close())
+		}
+		if !published {
+			removeErr := ops.remove(temporaryName)
+			if removeErr != nil && !errors.Is(removeErr, fs.ErrNotExist) {
+				err = errors.Join(err, fmt.Errorf("remove temporary M3U file: %w", removeErr))
+			}
+		}
+	}()
+
+	if err := temporary.Chmod(publishedMode); err != nil {
+		return fmt.Errorf("set temporary M3U mode: %w", err)
+	}
+
+	writer := bufio.NewWriterSize(temporary, 1<<20)
+	if err := write(writer); err != nil {
+		return fmt.Errorf("write complete M3U: %w", err)
+	}
+	if err := writer.Flush(); err != nil {
+		return fmt.Errorf("flush complete M3U: %w", err)
+	}
+	if err := temporary.Sync(); err != nil {
+		return fmt.Errorf("sync complete M3U: %w", err)
+	}
+	closed = true
+	if err := temporary.Close(); err != nil {
+		return fmt.Errorf("close complete M3U: %w", err)
+	}
+	if err := ops.rename(temporaryName, filename); err != nil {
+		return fmt.Errorf("publish complete M3U: %w", err)
+	}
+	published = true
+	return nil
+}
+
 // Threadfin M3U Datei erstellen
 func buildM3U(groups []string) (m3u string, err error) {
 
@@ -296,106 +382,92 @@ func buildM3U(groups []string) (m3u string, err error) {
 	}
 	header := fmt.Sprintf(`#EXTM3U url-tvg="%s" x-tvg-url="%s"`+"\n", xmltvURL, xmltvURL)
 
-	// If generating the full file, stream to disk to avoid huge in-memory strings
-	var writer *bufio.Writer
-	var file *os.File
-	if len(groups) == 0 {
-		filename := System.Folder.Data + "threadfin.m3u"
-		file, err = os.Create(filename)
-		if err != nil {
-			return "", err
-		}
-		defer func() {
-			if closeErr := file.Close(); err == nil {
-				err = closeErr
-			}
-		}()
-		writer = bufio.NewWriterSize(file, 1<<20) // 1MB buffer
-		if _, err = writer.WriteString(header); err != nil {
-			return "", err
-		}
-	} else {
-		m3u = header
-	}
-
 	// Sort entries by tvg-chno numerically
 	slices.SortFunc(entries, func(a, b channelEntry) int {
 		return compareChannelNumbers(a.ch, b.ch)
 	})
 
-	// Avoid duplicate exact stream URLs within the same group and cap per-group by expected minus deactivated
-	seenURLInGroup := make(map[string]struct{})
-	emittedGroupCount := make(map[string]int)
-	for _, e := range entries {
-		var channel = e.ch
-
-		group := channel.XGroupTitle
-		if channel.XCategory != "" {
-			group = channel.XCategory
-		}
-		if group == "" {
-			group = channel.GroupTitle
+	render := func(output io.StringWriter) error {
+		if _, err := output.WriteString(header); err != nil {
+			return err
 		}
 
-		// Determine allowed active count = expected - deactivated
-		if expected, ok := expectedGroupCount[group]; ok {
-			allowed := max(expected-deactivatedPerGroup[group], 0)
-			if emittedGroupCount[group] >= allowed {
-				continue
+		// Avoid duplicate exact stream URLs within the same group and cap per-group by expected minus deactivated
+		seenURLInGroup := make(map[string]struct{})
+		emittedGroupCount := make(map[string]int)
+		for _, e := range entries {
+			var channel = e.ch
+
+			group := channel.XGroupTitle
+			if channel.XCategory != "" {
+				group = channel.XCategory
 			}
-		}
+			if group == "" {
+				group = channel.GroupTitle
+			}
 
-		// Disabling so not to rewrite stream to https domain when disable stream from https set
-		if Settings.ForceHttps && Settings.HttpsThreadfinDomain != "" && Settings.ExcludeStreamHttps == false {
-			u, err := url.Parse(channel.URL)
-			if err == nil {
-				u.Scheme = "https"
-				host_split := strings.Split(u.Host, ":")
-				if len(host_split) > 0 {
-					u.Host = host_split[0]
-				}
-				if u.RawQuery != "" {
-					channel.URL = fmt.Sprintf("https://%s:%d%s?%s", u.Host, Settings.HttpsPort, u.Path, u.RawQuery)
-				} else {
-					channel.URL = fmt.Sprintf("https://%s:%d%s", u.Host, Settings.HttpsPort, u.Path)
+			// Determine allowed active count = expected - deactivated
+			if expected, ok := expectedGroupCount[group]; ok {
+				allowed := max(expected-deactivatedPerGroup[group], 0)
+				if emittedGroupCount[group] >= allowed {
+					continue
 				}
 			}
-		}
 
-		logo := ""
-		if channel.TvgLogo != "" {
-			logo = imgc.Image.GetURL(channel.TvgLogo, Settings.HttpThreadfinDomain, Settings.Port, Settings.ForceHttps, Settings.HttpsPort, Settings.HttpsThreadfinDomain)
-		}
-		var parameter = fmt.Sprintf(`#EXTINF:0 channelID="%s" tvg-chno="%s" tvg-name="%s" tvg-id="%s" tvg-logo="%s" group-title="%s",%s`+"\n", channel.XEPG, channel.XChannelID, channel.XName, channel.XChannelID, logo, group, channel.XName)
-		var stream, err = createStreamingURL("M3U", channel.FileM3UID, channel.XChannelID, channel.XName, channel.URL, channel.BackupChannel1, channel.BackupChannel2, channel.BackupChannel3)
-		if err == nil {
+			// Disabling so not to rewrite stream to https domain when disable stream from https set
+			if Settings.ForceHttps && Settings.HttpsThreadfinDomain != "" && Settings.ExcludeStreamHttps == false {
+				u, err := url.Parse(channel.URL)
+				if err == nil {
+					u.Scheme = "https"
+					host_split := strings.Split(u.Host, ":")
+					if len(host_split) > 0 {
+						u.Host = host_split[0]
+					}
+					if u.RawQuery != "" {
+						channel.URL = fmt.Sprintf("https://%s:%d%s?%s", u.Host, Settings.HttpsPort, u.Path, u.RawQuery)
+					} else {
+						channel.URL = fmt.Sprintf("https://%s:%d%s", u.Host, Settings.HttpsPort, u.Path)
+					}
+				}
+			}
+
+			logo := ""
+			if channel.TvgLogo != "" {
+				logo = imgc.Image.GetURL(channel.TvgLogo, Settings.HttpThreadfinDomain, Settings.Port, Settings.ForceHttps, Settings.HttpsPort, Settings.HttpsThreadfinDomain)
+			}
+			parameter := fmt.Sprintf(`#EXTINF:0 channelID="%s" tvg-chno="%s" tvg-name="%s" tvg-id="%s" tvg-logo="%s" group-title="%s",%s`+"\n", channel.XEPG, channel.XChannelID, channel.XName, channel.XChannelID, logo, group, channel.XName)
+			stream, err := createM3UStreamingURL("M3U", channel.FileM3UID, channel.XChannelID, channel.XName, channel.URL, channel.BackupChannel1, channel.BackupChannel2, channel.BackupChannel3)
+			if err != nil {
+				return err
+			}
 			key := group + "|" + stream
 			if _, ok := seenURLInGroup[key]; ok {
 				continue
 			}
 			seenURLInGroup[key] = struct{}{}
-			if writer != nil {
-				if _, err = writer.WriteString(parameter); err != nil {
-					return "", err
-				}
-				if _, err = writer.WriteString(stream + "\n"); err != nil {
-					return "", err
-				}
-			} else {
-				m3u = m3u + parameter + stream + "\n"
+			if _, err := output.WriteString(parameter); err != nil {
+				return err
+			}
+			if _, err := output.WriteString(stream + "\n"); err != nil {
+				return err
 			}
 			emittedGroupCount[group] = emittedGroupCount[group] + 1
 		}
 
+		return nil
 	}
 
-	if writer != nil {
-		if err = writer.Flush(); err != nil {
-			return "", err
-		}
+	filename := filepath.Join(System.Folder.Data, "threadfin.m3u")
+	if len(groups) == 0 {
+		err = publishM3UFile(filename, render)
+		return "", err
 	}
 
-	return
+	var output strings.Builder
+	if err = render(&output); err != nil {
+		return "", err
+	}
+	return output.String(), nil
 }
 
 func probeChannel(request RequestStruct) (string, string, string, error) {

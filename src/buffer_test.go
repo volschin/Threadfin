@@ -4,14 +4,17 @@ import (
 	"bytes"
 	"errors"
 	"io"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/avfs/avfs"
 	"github.com/avfs/avfs/vfs/memfs"
 )
 
@@ -35,14 +38,311 @@ func TestTerminateProcessKillsAndReapsChild(t *testing.T) {
 	}
 }
 
-func TestCreateBufferFileReturnsCreateError(t *testing.T) {
+type readDirErrorVFS struct {
+	avfs.VFS
+	err error
+}
+
+func (vfs readDirErrorVFS) ReadDir(string) ([]fs.DirEntry, error) {
+	return nil, vfs.err
+}
+
+func useMemoryBufferVFS(t *testing.T) avfs.VFS {
+	t.Helper()
+
 	previousVFS := bufferVFS
-	bufferVFS = memfs.New()
-	t.Cleanup(func() { bufferVFS = previousVFS })
+	vfs := memfs.New()
+	bufferVFS = vfs
+	t.Cleanup(func() {
+		bufferVFS = previousVFS
+	})
+
+	return vfs
+}
+
+func writeBufferTestFile(t *testing.T, vfs avfs.VFS, path, content string) {
+	t.Helper()
+
+	if err := vfs.WriteFile(path, []byte(content), 0600); err != nil {
+		t.Fatalf("WriteFile(%q) error = %v", path, err)
+	}
+}
+
+func TestCreateBufferFileReturnsCreateError(t *testing.T) {
+	useMemoryBufferVFS(t)
 
 	err := createBufferFile(filepath.Join("missing", "segment.ts"))
 	if err == nil {
 		t.Fatal("createBufferFile() error = nil, want missing-directory error")
+	}
+}
+
+func TestPrepareSegmentDirectoryPrimaryClearsFilesAndStartsAtOne(t *testing.T) {
+	vfs := useMemoryBufferVFS(t)
+	folder := "buffer" + string(os.PathSeparator)
+	if err := vfs.MkdirAll(folder, 0755); err != nil {
+		t.Fatal(err)
+	}
+	writeBufferTestFile(t, vfs, filepath.Join(folder, "37.ts"), "stale")
+	writeBufferTestFile(t, vfs, filepath.Join(folder, "notes.txt"), "stale")
+
+	start, err := prepareSegmentDirectory(folder, false)
+	if err != nil {
+		t.Fatalf("prepareSegmentDirectory() error = %v", err)
+	}
+	if start != 1 {
+		t.Fatalf("prepareSegmentDirectory() start = %d, want 1", start)
+	}
+	entries, err := vfs.ReadDir(folder)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 0 {
+		t.Fatalf("primary directory contains %d entries after reset, want 0", len(entries))
+	}
+}
+
+func TestPrepareSegmentDirectoryBackupStartsAfterHighestRetainedFile(t *testing.T) {
+	vfs := useMemoryBufferVFS(t)
+	folder := "buffer" + string(os.PathSeparator)
+	if err := vfs.MkdirAll(folder, 0755); err != nil {
+		t.Fatal(err)
+	}
+	for _, segment := range []int{4, 7, 11} {
+		writeBufferTestFile(t, vfs, filepath.Join(folder, strconv.Itoa(segment)+".ts"), "retained")
+	}
+
+	start, err := prepareSegmentDirectory(folder, true)
+	if err != nil {
+		t.Fatalf("prepareSegmentDirectory() error = %v", err)
+	}
+	if start != 12 {
+		t.Fatalf("prepareSegmentDirectory() start = %d, want 12", start)
+	}
+	content, err := vfs.ReadFile(filepath.Join(folder, "11.ts"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(content) != "retained" {
+		t.Fatalf("retained segment content = %q, want %q", content, "retained")
+	}
+}
+
+func TestPrepareSegmentDirectoryBackupStartsAtOneWithoutRetainedSegments(t *testing.T) {
+	for _, test := range []struct {
+		name            string
+		createDirectory bool
+	}{
+		{name: "missing directory"},
+		{name: "empty directory", createDirectory: true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			vfs := useMemoryBufferVFS(t)
+			folder := "buffer" + string(os.PathSeparator)
+			if test.createDirectory {
+				if err := vfs.MkdirAll(folder, 0755); err != nil {
+					t.Fatal(err)
+				}
+			}
+
+			start, err := prepareSegmentDirectory(folder, true)
+			if err != nil {
+				t.Fatalf("prepareSegmentDirectory() error = %v", err)
+			}
+			if start != 1 {
+				t.Fatalf("prepareSegmentDirectory() start = %d, want 1", start)
+			}
+		})
+	}
+}
+
+func TestPrepareSegmentDirectoryBackupContinuesAcrossRepeatedTransitions(t *testing.T) {
+	vfs := useMemoryBufferVFS(t)
+	folder := "buffer" + string(os.PathSeparator)
+	if err := vfs.MkdirAll(folder, 0755); err != nil {
+		t.Fatal(err)
+	}
+	for segment := 1; segment <= 5; segment++ {
+		writeBufferTestFile(t, vfs, filepath.Join(folder, strconv.Itoa(segment)+".ts"), "retained")
+	}
+
+	start, err := prepareSegmentDirectory(folder, true)
+	if err != nil {
+		t.Fatalf("prepareSegmentDirectory() error = %v", err)
+	}
+	if start != 6 {
+		t.Fatalf("prepareSegmentDirectory() start = %d, want 6", start)
+	}
+	writeBufferTestFile(t, vfs, filepath.Join(folder, "6.ts"), "retained")
+
+	start, err = prepareSegmentDirectory(folder, true)
+	if err != nil {
+		t.Fatalf("prepareSegmentDirectory() error = %v", err)
+	}
+	if start != 7 {
+		t.Fatalf("prepareSegmentDirectory() start = %d, want 7", start)
+	}
+}
+
+func TestPrepareSegmentDirectoryBackupIgnoresNoncanonicalFiles(t *testing.T) {
+	vfs := useMemoryBufferVFS(t)
+	folder := "buffer" + string(os.PathSeparator)
+	if err := vfs.MkdirAll(folder, 0755); err != nil {
+		t.Fatal(err)
+	}
+	outOfRangeName := strconv.FormatUint(uint64(^uint(0)>>1)+1, 10) + ".ts"
+	ignoredNames := []string{"01.ts", "+2.ts", "-3.ts", "0.ts", "3.0.ts", "4.ts.bak", "notes.txt", " 6.ts", outOfRangeName}
+	for _, name := range ignoredNames {
+		writeBufferTestFile(t, vfs, filepath.Join(folder, name), "retained")
+	}
+	ignoredDirectory := filepath.Join(folder, "999.ts")
+	if err := vfs.Mkdir(ignoredDirectory, 0755); err != nil {
+		t.Fatal(err)
+	}
+	writeBufferTestFile(t, vfs, filepath.Join(folder, "5.ts"), "retained")
+
+	start, err := prepareSegmentDirectory(folder, true)
+	if err != nil {
+		t.Fatalf("prepareSegmentDirectory() error = %v", err)
+	}
+	if start != 6 {
+		t.Fatalf("prepareSegmentDirectory() start = %d, want 6", start)
+	}
+	for _, name := range ignoredNames {
+		if _, err := vfs.Stat(filepath.Join(folder, name)); err != nil {
+			t.Fatalf("ignored entry %q was not retained: %v", name, err)
+		}
+	}
+	if info, err := vfs.Stat(ignoredDirectory); err != nil || !info.IsDir() {
+		t.Fatalf("ignored directory = (%v, %v), want retained directory", info, err)
+	}
+}
+
+func TestPrepareSegmentDirectoryBackupReturnsReadDirError(t *testing.T) {
+	vfs := useMemoryBufferVFS(t)
+	folder := "buffer" + string(os.PathSeparator)
+	if err := vfs.MkdirAll(folder, 0755); err != nil {
+		t.Fatal(err)
+	}
+	retainedPath := filepath.Join(folder, "7.ts")
+	writeBufferTestFile(t, vfs, retainedPath, "retained")
+	readErr := errors.New("read directory failed")
+	bufferVFS = readDirErrorVFS{VFS: vfs, err: readErr}
+
+	start, err := prepareSegmentDirectory(folder, true)
+	if start != 0 || !errors.Is(err, readErr) {
+		t.Fatalf("prepareSegmentDirectory() = (%d, %v), want (0, %v)", start, err, readErr)
+	}
+	content, err := vfs.ReadFile(retainedPath)
+	if err != nil || string(content) != "retained" {
+		t.Fatalf("retained segment after ReadDir error = (%q, %v), want (retained, nil)", content, err)
+	}
+}
+
+func TestPrepareSegmentDirectoryBackupReturnsOverflowForMaxIntSegment(t *testing.T) {
+	vfs := useMemoryBufferVFS(t)
+	folder := "buffer" + string(os.PathSeparator)
+	if err := vfs.MkdirAll(folder, 0755); err != nil {
+		t.Fatal(err)
+	}
+	maxInt := int(^uint(0) >> 1)
+	retainedPath := filepath.Join(folder, strconv.Itoa(maxInt)+".ts")
+	writeBufferTestFile(t, vfs, retainedPath, "retained")
+
+	start, err := prepareSegmentDirectory(folder, true)
+	if start != maxInt || !errors.Is(err, errSegmentNumberOverflow) {
+		t.Fatalf("prepareSegmentDirectory() = (%d, %v), want (%d, %v)", start, err, maxInt, errSegmentNumberOverflow)
+	}
+	content, err := vfs.ReadFile(retainedPath)
+	if err != nil || string(content) != "retained" {
+		t.Fatalf("retained max segment after overflow = (%q, %v), want (retained, nil)", content, err)
+	}
+}
+
+func TestIncrementSegmentNumberGuardsOverflow(t *testing.T) {
+	next, err := incrementSegmentNumber(6)
+	if err != nil || next != 7 {
+		t.Fatalf("incrementSegmentNumber(6) = (%d, %v), want (7, nil)", next, err)
+	}
+
+	maxInt := int(^uint(0) >> 1)
+	next, err = incrementSegmentNumber(maxInt)
+	if !errors.Is(err, errSegmentNumberOverflow) || next != maxInt {
+		t.Fatalf("incrementSegmentNumber(maxInt) = (%d, %v), want (%d, overflow)", next, err, maxInt)
+	}
+}
+
+func TestIsFirstSegmentSupportsBackupStart(t *testing.T) {
+	if !isFirstSegment(6, 6) {
+		t.Fatal("backup start segment was not recognized as first segment")
+	}
+	if isFirstSegment(7, 6) {
+		t.Fatal("later backup segment was recognized as first segment")
+	}
+}
+
+func TestGetBufTmpFilesReturnsCompletedNonOverlappingBackupSegment(t *testing.T) {
+	vfs := useMemoryBufferVFS(t)
+	folder := "buffer" + string(os.PathSeparator)
+	if err := vfs.MkdirAll(folder, 0755); err != nil {
+		t.Fatal(err)
+	}
+	for segment := 1; segment <= 7; segment++ {
+		writeBufferTestFile(t, vfs, filepath.Join(folder, strconv.Itoa(segment)+".ts"), "")
+	}
+
+	stream := ThisStream{
+		Folder:      folder,
+		OldSegments: []string{"1.ts", "2.ts", "3.ts", "4.ts", "5.ts"},
+	}
+	files := getBufTmpFiles(&stream)
+	if len(files) != 1 || files[0] != "6.ts" {
+		t.Fatalf("getBufTmpFiles() = %v, want [6.ts]", files)
+	}
+	if stream.OldSegments[len(stream.OldSegments)-1] != "6.ts" {
+		t.Fatalf("OldSegments = %v, want newly delivered 6.ts appended", stream.OldSegments)
+	}
+}
+
+func TestGetBufTmpFilesReturnsFirstCompletedSegmentWithCurrentSuccessor(t *testing.T) {
+	vfs := useMemoryBufferVFS(t)
+	folder := "buffer" + string(os.PathSeparator)
+	if err := vfs.MkdirAll(folder, 0755); err != nil {
+		t.Fatal(err)
+	}
+	writeBufferTestFile(t, vfs, filepath.Join(folder, "1.ts"), "complete")
+	writeBufferTestFile(t, vfs, filepath.Join(folder, "2.ts"), "in progress")
+
+	stream := ThisStream{Folder: folder}
+	if got := getBufTmpFiles(&stream); !slices.Equal(got, []string{"1.ts"}) {
+		t.Fatalf("getBufTmpFiles() = %v, want [1.ts]", got)
+	}
+	if !slices.Equal(stream.OldSegments, []string{"1.ts"}) {
+		t.Fatalf("OldSegments = %v, want [1.ts]", stream.OldSegments)
+	}
+}
+
+func TestGetBufTmpFilesPreservesAdjacentLargeSegmentBasenames(t *testing.T) {
+	if strconv.IntSize != 64 {
+		t.Skip("requires 64-bit native ints")
+	}
+
+	vfs := useMemoryBufferVFS(t)
+	folder := "buffer" + string(os.PathSeparator)
+	if err := vfs.MkdirAll(folder, 0755); err != nil {
+		t.Fatal(err)
+	}
+	completed := []string{"9007199254740992.ts", "9007199254740993.ts"}
+	for _, name := range append(slices.Clone(completed), "9007199254740994.ts") {
+		writeBufferTestFile(t, vfs, filepath.Join(folder, name), "")
+	}
+
+	stream := ThisStream{Folder: folder}
+	if got := getBufTmpFiles(&stream); !slices.Equal(got, completed) {
+		t.Fatalf("getBufTmpFiles() = %v, want %v", got, completed)
+	}
+	if !slices.Equal(stream.OldSegments, completed) {
+		t.Fatalf("OldSegments = %v, want %v", stream.OldSegments, completed)
 	}
 }
 
