@@ -3,6 +3,7 @@ package src
 import (
 	"bytes"
 	"errors"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -84,6 +85,26 @@ func (reader failingJSONReader) Read([]byte) (int, error) {
 	return 0, reader.err
 }
 
+var errAPIRead = errors.New("API body read failed")
+var errAPIClose = errors.New("API body close failed")
+
+type apiBody struct {
+	io.Reader
+	closeErr error
+	closes   int
+}
+
+func (body *apiBody) Close() error {
+	body.closes++
+	return body.closeErr
+}
+
+type apiReadFailure struct{}
+
+func (apiReadFailure) Read([]byte) (int, error) {
+	return 0, errAPIRead
+}
+
 func TestDecodeAPIRequestPreservesCurrentJSONSemantics(t *testing.T) {
 	request, err := decodeAPIRequest(strings.NewReader(
 		`{"CMD":"status","username":"benchmark","unknown":"ignored"}`,
@@ -104,5 +125,29 @@ func TestDecodeAPIRequestPreservesCurrentJSONSemantics(t *testing.T) {
 	readErr := errors.New("request read failed")
 	if _, err := decodeAPIRequest(failingJSONReader{err: readErr}); !errors.Is(err, readErr) {
 		t.Fatalf("decodeAPIRequest() error = %v, want %v", err, readErr)
+	}
+}
+
+func TestDecodeAndCloseAPIRequestKeepsErrorsSeparate(t *testing.T) {
+	body := &apiBody{Reader: apiReadFailure{}, closeErr: errAPIClose}
+	_, decodeErr, closeErr := decodeAndCloseAPIRequest(body)
+	if !errors.Is(decodeErr, errAPIRead) || !errors.Is(closeErr, errAPIClose) || body.closes != 1 {
+		t.Fatalf("decode=%v close=%v calls=%d", decodeErr, closeErr, body.closes)
+	}
+}
+
+func TestAPICloseFailureDoesNotReplaceSuccessfulStatus(t *testing.T) {
+	restorePersistentState(t)
+	Settings.API = true
+	body := &apiBody{Reader: strings.NewReader(`{"cmd":"status"}`), closeErr: errAPIClose}
+	r := httptest.NewRequest(http.MethodPost, "/api/", nil)
+	r.Body = body
+	w := httptest.NewRecorder()
+	API(w, r)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", w.Code)
+	}
+	if body.closes != 1 {
+		t.Fatalf("Close calls = %d, want 1", body.closes)
 	}
 }
