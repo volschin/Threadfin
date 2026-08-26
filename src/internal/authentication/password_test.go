@@ -2,6 +2,7 @@ package authentication
 
 import (
 	"bytes"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"os"
@@ -221,6 +222,56 @@ func TestChangeCredentialsStoresArgon2idPassword(t *testing.T) {
 	stored := data["users"].(map[string]interface{})[userID].(map[string]interface{})["_password"].(string)
 	if !strings.HasPrefix(stored, "$argon2id$") {
 		t.Fatalf("changed password stored as %q", stored)
+	}
+}
+
+func TestHashPasswordPreservesExactPHCFields(t *testing.T) {
+	hash, err := hashPassword("benchmark-password")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	parts := strings.Split(hash, "$")
+	if len(parts) != 6 {
+		t.Fatalf("PHC field count = %d, want 6: %q", len(parts), hash)
+	}
+	wantPrefix := []string{"", "argon2id", "v=19", "m=19456,t=2,p=1"}
+	for i, want := range wantPrefix {
+		if parts[i] != want {
+			t.Fatalf("PHC field %d = %q, want %q", i, parts[i], want)
+		}
+	}
+	salt, err := base64.RawStdEncoding.DecodeString(parts[4])
+	if err != nil {
+		t.Fatalf("decode salt: %v", err)
+	}
+	key, err := base64.RawStdEncoding.DecodeString(parts[5])
+	if err != nil {
+		t.Fatalf("decode key: %v", err)
+	}
+	if len(salt) != 16 || len(key) != int(passwordKeyLength) {
+		t.Fatalf("decoded lengths = salt:%d key:%d, want salt:16 key:%d", len(salt), len(key), passwordKeyLength)
+	}
+	matches, legacy := verifyPassword("benchmark-password", hash)
+	if !matches || legacy {
+		t.Fatalf("verify generated hash = matches:%t legacy:%t, want true false", matches, legacy)
+	}
+}
+
+func TestSerializeArgon2IDHashMatchesCurrentFormat(t *testing.T) {
+	salt := []byte{
+		0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
+		0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f,
+	}
+	key := []byte{
+		0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17,
+		0x18, 0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f,
+		0x20, 0x21, 0x22, 0x23, 0x24, 0x25, 0x26, 0x27,
+		0x28, 0x29, 0x2a, 0x2b, 0x2c, 0x2d, 0x2e, 0x2f,
+	}
+	const want = "$argon2id$v=19$m=19456,t=2,p=1$AAECAwQFBgcICQoLDA0ODw$EBESExQVFhcYGRobHB0eHyAhIiMkJSYnKCkqKywtLi8"
+	if got := serializeArgon2IDHash(salt, key); got != want {
+		t.Fatalf("serializeArgon2IDHash() = %q, want %q", got, want)
 	}
 }
 

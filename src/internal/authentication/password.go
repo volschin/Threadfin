@@ -24,14 +24,19 @@ func hashPassword(password string) (string, error) {
 		return "", err
 	}
 	key := argon2.IDKey([]byte(password), salt, passwordIterations, passwordMemory, passwordParallelism, passwordKeyLength)
-	return fmt.Sprintf("$argon2id$v=%d$m=%d,t=%d,p=%d$%s$%s",
+	return serializeArgon2IDHash(salt, key), nil
+}
+
+func serializeArgon2IDHash(salt, key []byte) string {
+	return fmt.Sprintf(
+		"$argon2id$v=%d$m=%d,t=%d,p=%d$%s$%s",
 		argon2.Version,
 		passwordMemory,
 		passwordIterations,
 		passwordParallelism,
 		base64.RawStdEncoding.EncodeToString(salt),
 		base64.RawStdEncoding.EncodeToString(key),
-	), nil
+	)
 }
 
 func verifyPassword(password, stored string) (matches bool, legacy bool) {
