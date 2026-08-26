@@ -802,6 +802,12 @@
   outline-offset: 3px;
 }
 
+.tf-source-popup :focus-visible,
+.tf-setup :focus-visible {
+  outline: 3px solid var(--tf-cyan);
+  outline-offset: 3px;
+}
+
 @media (max-width: 52rem) {
   .tf-app {
     grid-template-columns: minmax(0, 1fr);
@@ -843,6 +849,12 @@
   }
 
   .tf-app :is(button, a, input, select, [role="button"]) {
+    min-height: 44px;
+    min-inline-size: 44px;
+  }
+
+  .tf-source-popup :is(button, input, select, [role="button"]),
+  .tf-setup :is(button, input, select, [role="button"]) {
     min-height: 44px;
     min-inline-size: 44px;
   }

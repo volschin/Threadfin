@@ -100,7 +100,7 @@ func getProviderData(fileType, fileID string) (err error) {
 		}
 
 		// Daten überprüfen
-		showInfo("Check File:" + fileSource)
+		showInfo("Check File:" + sanitizeProviderSourceForLog(fileSource))
 
 		switch fileType {
 
@@ -208,7 +208,7 @@ func getProviderData(fileType, fileID string) (err error) {
 		case "hdhr":
 
 			// Laden vom HDHomeRun Tuner
-			showInfo("Tuner:" + fileSource)
+			showInfo("Tuner:" + sanitizeProviderSourceForLog(fileSource))
 			var tunerURL = "http://" + fileSource + "/lineup.json"
 			serverFileName, body, err = downloadFileFromServer(tunerURL, httpProxyUrl)
 
@@ -217,13 +217,13 @@ func getProviderData(fileType, fileID string) (err error) {
 			if isRemoteProviderSource(fileSource) {
 
 				// Laden vom Remote Server
-				showInfo("Download:" + fileSource)
+				showInfo("Download:" + sanitizeProviderSourceForLog(fileSource))
 				serverFileName, body, err = downloadFileFromServer(fileSource, httpProxyUrl)
 
 			} else {
 
 				// Laden einer lokalen Datei
-				showInfo("Open:" + fileSource)
+				showInfo("Open:" + sanitizeProviderSourceForLog(fileSource))
 
 				err = checkFile(fileSource)
 				if err == nil {
@@ -239,7 +239,7 @@ func getProviderData(fileType, fileID string) (err error) {
 
 			err = saveDateFromProvider(fileSource, serverFileName, dataID, body)
 			if err == nil {
-				showInfo("Save File:" + fileSource + " [ID: " + dataID + "]")
+				showInfo("Save File:" + sanitizeProviderSourceForLog(fileSource) + " [ID: " + dataID + "]")
 			}
 
 		}
@@ -322,6 +322,7 @@ func getProviderData(fileType, fileID string) (err error) {
 func downloadFileFromServer(providerURL string, proxyUrl string) (filename string, body []byte, err error) {
 	_, err = url.ParseRequestURI(providerURL)
 	if err != nil {
+		err = fmt.Errorf("invalid provider source: %s", sanitizeProviderSourceForLog(providerURL))
 		return
 	}
 
@@ -345,6 +346,7 @@ func downloadFileFromServer(providerURL string, proxyUrl string) (filename strin
 
 	req, err := http.NewRequest("GET", providerURL, nil)
 	if err != nil {
+		err = fmt.Errorf("invalid provider request for %s", sanitizeProviderSourceForLog(providerURL))
 		return
 	}
 
@@ -352,6 +354,7 @@ func downloadFileFromServer(providerURL string, proxyUrl string) (filename strin
 
 	resp, err := httpClient.Do(req)
 	if err != nil {
+		err = fmt.Errorf("provider request failed for %s", sanitizeProviderSourceForLog(providerURL))
 		return
 	}
 	defer resp.Body.Close()
@@ -359,7 +362,7 @@ func downloadFileFromServer(providerURL string, proxyUrl string) (filename strin
 	resp.Header.Set("User-Agent", Settings.UserAgent)
 
 	if resp.StatusCode != http.StatusOK {
-		err = fmt.Errorf("%d: %s %s", resp.StatusCode, providerURL, http.StatusText(resp.StatusCode))
+		err = fmt.Errorf("%d: %s %s", resp.StatusCode, sanitizeProviderSourceForLog(providerURL), http.StatusText(resp.StatusCode))
 		return
 	}
 
@@ -387,7 +390,25 @@ func downloadFileFromServer(providerURL string, proxyUrl string) (filename strin
 }
 
 func isRemoteProviderSource(source string) bool {
-	return strings.Contains(source, "http://") || strings.Contains(source, "https://")
+	lower := strings.ToLower(strings.TrimSpace(source))
+	return strings.HasPrefix(lower, "http:") || strings.HasPrefix(lower, "https:")
+}
+
+func sanitizeProviderSourceForLog(source string) string {
+	trimmed := strings.TrimSpace(source)
+	if !isRemoteProviderSource(trimmed) {
+		return source
+	}
+
+	providerURL, err := url.Parse(trimmed)
+	if err != nil || providerURL.Host == "" {
+		return "[redacted source]"
+	}
+	providerURL.User = nil
+	providerURL.RawQuery = ""
+	providerURL.ForceQuery = false
+	providerURL.Fragment = ""
+	return providerURL.String()
 }
 
 func configuredProviderRequestTimeout(bufferTimeout float64) time.Duration {

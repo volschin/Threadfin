@@ -2119,7 +2119,6 @@ function savePopupData(dataType, id, remove, option) {
             data["filter"][id] = input;
             break;
         default:
-            console.log(dataType, id);
             return;
             break;
     }
@@ -2130,7 +2129,6 @@ function savePopupData(dataType, id, remove, option) {
         }
     }
     console.log("SEND TO SERVER");
-    console.log(data);
     beginSourceRequest(dataType, id, remove, option);
     var server = new Server(cmd);
     server.request(data);

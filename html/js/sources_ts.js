@@ -1,6 +1,9 @@
 "use strict";
 var sourceFeedbackByKey = {};
 var sourcePageFeedback = {};
+var sourcePopupInvoker;
+var sourcePopupFocusKey = "";
+var sourcePopupFocusListenerAttached = false;
 function sourceRecord(value) {
     return value && typeof value == "object" && !Array.isArray(value) ? value : {};
 }
@@ -10,6 +13,22 @@ function sourceString(value) {
 function sourceNumber(value) {
     var number = typeof value == "number" ? value : Number(value);
     return isFinite(number) ? number : 0;
+}
+function sourceLocationForDisplay(value) {
+    var source = sourceString(value);
+    if (!/^https?:/i.test(source.trim())) {
+        return source;
+    }
+    try {
+        var location = new URL(source.trim());
+        if (!location.protocol || !location.host) {
+            return "{{.sources.locationInvalidDisplay}}";
+        }
+        return location.protocol + "//" + location.host + location.pathname;
+    }
+    catch (_error) {
+        return "{{.sources.locationInvalidDisplay}}";
+    }
 }
 function sourceFeedbackKey(providerType, id) {
     return providerType + ":" + id;
@@ -43,7 +62,7 @@ function selectSourceList(server, destination) {
                 providerType: providerType,
                 name: sourceString(source.name) || (providerType == "xmltv" ? "XMLTV" : providerType.toUpperCase()),
                 typeLabel: providerType == "m3u" ? "M3U" : providerType == "hdhr" ? "HDHomeRun" : "XMLTV",
-                source: sourceString(source["file.source"]),
+                source: sourceLocationForDisplay(source["file.source"]),
                 lastUpdate: sourceString(source["last.update"]),
                 availability: sourceNumber(rawAvailability),
                 availabilityKnown: rawAvailability !== undefined && rawAvailability !== null,
@@ -105,9 +124,10 @@ function createSourceAddButton(destination) {
     var button = document.createElement("button");
     button.type = "button";
     button.className = "tf-source-primary-action";
+    button.setAttribute("data-source-focus-key", destination + ":add");
     button.textContent = destination == "playlist" ? "{{.sources.playlist.add}}" : "{{.sources.xmltv.add}}";
     button.addEventListener("click", function () {
-        openPopUp(destination == "playlist" ? "playlist" : "xmltv", undefined);
+        openSourcePopup(destination == "playlist" ? "playlist" : "xmltv", undefined, button);
     });
     return button;
 }
@@ -217,40 +237,82 @@ function renderSourceRow(source) {
     row.appendChild(feedbackElement);
     var actions = document.createElement("div");
     actions.className = "tf-source-actions";
-    actions.appendChild(createSourceRowAction("{{.sources.actions.edit}}", function () {
-        openPopUp(source.providerType, { id: source.id });
+    actions.appendChild(createSourceRowAction("{{.sources.actions.edit}}", source.providerType + ":" + source.id + ":edit", function (invoker) {
+        openSourcePopup(source.providerType, { id: source.id }, invoker);
     }));
-    actions.appendChild(createSourceRowAction("{{.sources.actions.update}}", function () {
-        invokeSourcePopupAction(source.providerType, source.id, "update");
+    actions.appendChild(createSourceRowAction("{{.sources.actions.update}}", source.providerType + ":" + source.id + ":update", function (invoker) {
+        invokeSourcePopupAction(source.providerType, source.id, "update", invoker);
     }));
-    var remove = createSourceRowAction("{{.sources.actions.delete}}", function () {
-        invokeSourcePopupAction(source.providerType, source.id, "delete");
+    var remove = createSourceRowAction("{{.sources.actions.delete}}", source.providerType + ":" + source.id + ":delete", function (invoker) {
+        invokeSourcePopupAction(source.providerType, source.id, "delete", invoker);
     });
     remove.className += " tf-source-delete-action";
     actions.appendChild(remove);
     row.appendChild(actions);
     return row;
 }
-function createSourceRowAction(label, listener) {
+function createSourceRowAction(label, focusKey, listener) {
     var button = document.createElement("button");
     button.type = "button";
     button.textContent = label;
-    button.addEventListener("click", listener);
+    button.setAttribute("data-source-focus-key", focusKey);
+    button.addEventListener("click", function () {
+        listener(button);
+    });
     return button;
 }
-function invokeSourcePopupAction(providerType, id, action) {
-    openPopUp(providerType, { id: id });
+function invokeSourcePopupAction(providerType, id, action, invoker) {
+    openSourcePopup(providerType, { id: id }, invoker);
     savePopupData(providerType, id, action == "delete", action == "update" ? 1 : 0);
 }
-function enhanceSourcePopup(dataType) {
-    if (dataType != "m3u" && dataType != "hdhr" && dataType != "xmltv") {
-        return;
+function openSourcePopup(dataType, element, invoker) {
+    sourcePopupInvoker = invoker;
+    sourcePopupFocusKey = invoker ? sourceString(invoker.getAttribute("data-source-focus-key")) : "";
+    var modal = document.getElementById("popup");
+    if (modal && !sourcePopupFocusListenerAttached) {
+        sourcePopupFocusListenerAttached = true;
+        modal.addEventListener("hidden.bs.modal", function () {
+            var focusTarget = sourcePopupInvoker && document.contains(sourcePopupInvoker) ? sourcePopupInvoker : sourcePopupReplacement(sourcePopupFocusKey);
+            if (focusTarget) {
+                focusTarget.focus();
+            }
+            sourcePopupInvoker = undefined;
+            sourcePopupFocusKey = "";
+        });
     }
+    openPopUp(dataType, element);
+}
+function sourcePopupReplacement(focusKey) {
+    if (!focusKey) {
+        return undefined;
+    }
+    var candidates = document.querySelectorAll("[data-source-focus-key]");
+    for (var index = 0; index < candidates.length; index++) {
+        var candidate = candidates[index];
+        if (candidate.getAttribute("data-source-focus-key") == focusKey) {
+            return candidate;
+        }
+    }
+    return undefined;
+}
+function enhanceSourcePopup(dataType) {
     var popup = document.getElementById("popup-custom");
     if (!popup) {
         return;
     }
+    popup.classList.remove("tf-source-popup");
+    if (dataType != "m3u" && dataType != "hdhr" && dataType != "xmltv") {
+        return;
+    }
     popup.classList.add("tf-source-popup");
+    var fields = popup.querySelectorAll("input, select");
+    Array.prototype.forEach.call(fields, function (field) {
+        var row = field.closest("tr");
+        var title = row ? row.querySelector("td:first-child") : undefined;
+        if (title && title.textContent) {
+            field.setAttribute("aria-label", title.textContent.replace(/:\s*$/, ""));
+        }
+    });
     var sourceInput = popup.querySelector('[name="file.source"]');
     if (sourceInput && sourceInput.parentElement) {
         var help = document.createElement("p");
@@ -395,8 +457,8 @@ function completeSourceRequest(command, data, response) {
         return;
     }
     var root = sourceRecord(response);
-    if (root.status == false) {
-        var error = sourceString(root.err) || "Source request failed.";
+    if (root.status !== true) {
+        var error = root.status === false ? sourceString(root.err) || "Source request failed." : "{{.sources.responseInvalid}}";
         var failed = { state: "error", message: error };
         sourceFeedbackByKey[sourceFeedbackKey(request.providerType, request.id)] = failed;
         sourceSetFormStatus(error, "error");

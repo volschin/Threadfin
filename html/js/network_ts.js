@@ -5,10 +5,11 @@ class Server {
     }
     request(data) {
         if (SERVER_CONNECTION == true) {
+            console.warn("WebSocket request skipped because another request is active:", this.cmd);
+            completeTask5RequestFailure(this.cmd, data, "{{.sources.requestBusy}}");
             return;
         }
         SERVER_CONNECTION = true;
-        console.log(data);
         if (this.cmd != "updateLog") {
             // showElement("loading", true)
             UNDO = new Object();
@@ -22,44 +23,68 @@ class Server {
                 break;
         }
         var url = this.protocol + window.location.hostname + ":" + window.location.port + "/data/" + "?Token=" + getCookie("Token");
-        data["cmd"] = this.cmd;
+        var command = this.cmd;
+        data["cmd"] = command;
         var ws = new WebSocket(url);
+        var requestSettled = false;
+        var settleTransportFailure = function () {
+            if (requestSettled) {
+                return;
+            }
+            requestSettled = true;
+            SERVER_CONNECTION = false;
+            showElement("loading", false);
+            console.warn("WebSocket request failed:", command);
+            completeTask5RequestFailure(command, data, "{{.sources.transportError}}");
+        };
         ws.onopen = function () {
             WS_AVAILABLE = true;
-            console.log("REQUEST (JS):");
-            console.log(data);
-            console.log("REQUEST: (JSON)");
-            console.log(JSON.stringify(data));
+            console.log("WebSocket request opened:", command);
             this.send(JSON.stringify(data));
         };
         ws.onerror = function (e) {
-            console.log("No websocket connection to Threadfin could be established. Check your network configuration.");
-            SERVER_CONNECTION = false;
+            settleTransportFailure();
             if (WS_AVAILABLE == false) {
                 alert("No websocket connection to Threadfin could be established. Check your network configuration.");
             }
         };
+        ws.onclose = function () {
+            settleTransportFailure();
+        };
         ws.onmessage = function (e) {
+            var response;
+            try {
+                response = JSON.parse(e.data);
+            }
+            catch (_error) {
+                settleTransportFailure();
+                return;
+            }
+            requestSettled = true;
             SERVER_CONNECTION = false;
             showElement("loading", false);
-            console.log("RESPONSE:");
-            var response = JSON.parse(e.data);
-            console.log(response);
+            console.log("WebSocket response received:", command);
             if (typeof completeSourceRequest == "function") {
                 completeSourceRequest(data["cmd"], data, response);
             }
             if (data["cmd"] == "saveWizard" && typeof completeConfigurationWizardRequest == "function") {
                 completeConfigurationWizardRequest(response);
             }
-            if (response.hasOwnProperty("token")) {
-                document.cookie = "Token=" + response["token"];
-            }
-            if (response["status"] == false) {
-                alert(response["err"]);
-                if (response.hasOwnProperty("reload")) {
-                    location.reload();
+            var responseIsObject = response && typeof response == "object" && !Array.isArray(response);
+            if (!responseIsObject || response["status"] !== true) {
+                if (responseIsObject && response["status"] === false) {
+                    alert(response["err"] || "{{.sources.responseInvalid}}");
+                    if (response.hasOwnProperty("reload")) {
+                        location.reload();
+                    }
+                }
+                else {
+                    alert("{{.sources.responseInvalid}}");
                 }
                 return;
+            }
+            if (response.hasOwnProperty("token")) {
+                document.cookie = "Token=" + response["token"];
             }
             if (response.hasOwnProperty("probeInfo")) {
                 if (document.getElementById("probeDetails")) {
@@ -113,6 +138,15 @@ class Server {
             }
             createLayout();
         };
+    }
+}
+function completeTask5RequestFailure(command, data, message) {
+    var response = { status: false, err: message };
+    if (typeof completeSourceRequest == "function") {
+        completeSourceRequest(command, data, response);
+    }
+    if (command == "saveWizard" && typeof completeConfigurationWizardRequest == "function") {
+        completeConfigurationWizardRequest(response);
     }
 }
 function mergeUpdateLogResponse(response) {

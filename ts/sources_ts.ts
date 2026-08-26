@@ -36,6 +36,9 @@ interface SourceRequestDescriptor {
 
 var sourceFeedbackByKey: { [key: string]: SourceFeedback } = {}
 var sourcePageFeedback: { [key: string]: SourceFeedback } = {}
+var sourcePopupInvoker: HTMLElement
+var sourcePopupFocusKey = ""
+var sourcePopupFocusListenerAttached = false
 
 function sourceRecord(value: any): { [key: string]: any } {
   return value && typeof value == "object" && !Array.isArray(value) ? value : {}
@@ -48,6 +51,22 @@ function sourceString(value: any): string {
 function sourceNumber(value: any): number {
   var number = typeof value == "number" ? value : Number(value)
   return isFinite(number) ? number : 0
+}
+
+function sourceLocationForDisplay(value: any): string {
+  var source = sourceString(value)
+  if (!/^https?:/i.test(source.trim())) {
+    return source
+  }
+  try {
+    var location = new URL(source.trim())
+    if (!location.protocol || !location.host) {
+      return "{{.sources.locationInvalidDisplay}}"
+    }
+    return location.protocol + "//" + location.host + location.pathname
+  } catch (_error) {
+    return "{{.sources.locationInvalidDisplay}}"
+  }
 }
 
 function sourceFeedbackKey(providerType: SourceProviderType, id: string): string {
@@ -83,7 +102,7 @@ function selectSourceList(server: any, destination: SourceDestination): SourceLi
         providerType: providerType,
         name: sourceString(source.name) || (providerType == "xmltv" ? "XMLTV" : providerType.toUpperCase()),
         typeLabel: providerType == "m3u" ? "M3U" : providerType == "hdhr" ? "HDHomeRun" : "XMLTV",
-        source: sourceString(source["file.source"]),
+        source: sourceLocationForDisplay(source["file.source"]),
         lastUpdate: sourceString(source["last.update"]),
         availability: sourceNumber(rawAvailability),
         availabilityKnown: rawAvailability !== undefined && rawAvailability !== null,
@@ -150,9 +169,10 @@ function createSourceAddButton(destination: SourceDestination): HTMLButtonElemen
   var button = document.createElement("button")
   button.type = "button"
   button.className = "tf-source-primary-action"
+  button.setAttribute("data-source-focus-key", destination + ":add")
   button.textContent = destination == "playlist" ? "{{.sources.playlist.add}}" : "{{.sources.xmltv.add}}"
   button.addEventListener("click", function () {
-    openPopUp(destination == "playlist" ? "playlist" : "xmltv", undefined)
+    openSourcePopup(destination == "playlist" ? "playlist" : "xmltv", undefined, button)
   })
   return button
 }
@@ -267,14 +287,14 @@ function renderSourceRow(source: SourceListItem): HTMLElement {
 
   var actions = document.createElement("div")
   actions.className = "tf-source-actions"
-  actions.appendChild(createSourceRowAction("{{.sources.actions.edit}}", function () {
-    openPopUp(source.providerType, { id: source.id })
+  actions.appendChild(createSourceRowAction("{{.sources.actions.edit}}", source.providerType + ":" + source.id + ":edit", function (invoker) {
+    openSourcePopup(source.providerType, { id: source.id }, invoker)
   }))
-  actions.appendChild(createSourceRowAction("{{.sources.actions.update}}", function () {
-    invokeSourcePopupAction(source.providerType, source.id, "update")
+  actions.appendChild(createSourceRowAction("{{.sources.actions.update}}", source.providerType + ":" + source.id + ":update", function (invoker) {
+    invokeSourcePopupAction(source.providerType, source.id, "update", invoker)
   }))
-  var remove = createSourceRowAction("{{.sources.actions.delete}}", function () {
-    invokeSourcePopupAction(source.providerType, source.id, "delete")
+  var remove = createSourceRowAction("{{.sources.actions.delete}}", source.providerType + ":" + source.id + ":delete", function (invoker) {
+    invokeSourcePopupAction(source.providerType, source.id, "delete", invoker)
   })
   remove.className += " tf-source-delete-action"
   actions.appendChild(remove)
@@ -282,28 +302,72 @@ function renderSourceRow(source: SourceListItem): HTMLElement {
   return row
 }
 
-function createSourceRowAction(label: string, listener: () => void): HTMLButtonElement {
+function createSourceRowAction(label: string, focusKey: string, listener: (invoker: HTMLButtonElement) => void): HTMLButtonElement {
   var button = document.createElement("button")
   button.type = "button"
   button.textContent = label
-  button.addEventListener("click", listener)
+  button.setAttribute("data-source-focus-key", focusKey)
+  button.addEventListener("click", function () {
+    listener(button)
+  })
   return button
 }
 
-function invokeSourcePopupAction(providerType: SourceProviderType, id: string, action: "update" | "delete"): void {
-  openPopUp(providerType, { id: id })
+function invokeSourcePopupAction(providerType: SourceProviderType, id: string, action: "update" | "delete", invoker: HTMLElement): void {
+  openSourcePopup(providerType, { id: id }, invoker)
   savePopupData(providerType, id, action == "delete", action == "update" ? 1 : 0)
 }
 
-function enhanceSourcePopup(dataType: string): void {
-  if (dataType != "m3u" && dataType != "hdhr" && dataType != "xmltv") {
-    return
+function openSourcePopup(dataType: string, element: any, invoker: HTMLElement): void {
+  sourcePopupInvoker = invoker
+  sourcePopupFocusKey = invoker ? sourceString(invoker.getAttribute("data-source-focus-key")) : ""
+  var modal = document.getElementById("popup")
+  if (modal && !sourcePopupFocusListenerAttached) {
+    sourcePopupFocusListenerAttached = true
+    modal.addEventListener("hidden.bs.modal", function () {
+      var focusTarget = sourcePopupInvoker && document.contains(sourcePopupInvoker) ? sourcePopupInvoker : sourcePopupReplacement(sourcePopupFocusKey)
+      if (focusTarget) {
+        focusTarget.focus()
+      }
+      sourcePopupInvoker = undefined
+      sourcePopupFocusKey = ""
+    })
   }
+  openPopUp(dataType, element)
+}
+
+function sourcePopupReplacement(focusKey: string): HTMLElement {
+  if (!focusKey) {
+    return undefined
+  }
+  var candidates = document.querySelectorAll("[data-source-focus-key]")
+  for (var index = 0; index < candidates.length; index++) {
+    var candidate = candidates[index] as HTMLElement
+    if (candidate.getAttribute("data-source-focus-key") == focusKey) {
+      return candidate
+    }
+  }
+  return undefined
+}
+
+function enhanceSourcePopup(dataType: string): void {
   var popup = document.getElementById("popup-custom")
   if (!popup) {
     return
   }
+  popup.classList.remove("tf-source-popup")
+  if (dataType != "m3u" && dataType != "hdhr" && dataType != "xmltv") {
+    return
+  }
   popup.classList.add("tf-source-popup")
+  var fields = popup.querySelectorAll("input, select")
+  Array.prototype.forEach.call(fields, function (field: HTMLElement) {
+    var row = field.closest("tr")
+    var title = row ? row.querySelector("td:first-child") : undefined
+    if (title && title.textContent) {
+      field.setAttribute("aria-label", title.textContent.replace(/:\s*$/, ""))
+    }
+  })
   var sourceInput = popup.querySelector('[name="file.source"]') as HTMLInputElement
   if (sourceInput && sourceInput.parentElement) {
     var help = document.createElement("p")
@@ -455,8 +519,8 @@ function completeSourceRequest(command: string, data: any, response: any): void 
     return
   }
   var root = sourceRecord(response)
-  if (root.status == false) {
-    var error = sourceString(root.err) || "Source request failed."
+  if (root.status !== true) {
+    var error = root.status === false ? sourceString(root.err) || "Source request failed." : "{{.sources.responseInvalid}}"
     var failed: SourceFeedback = { state: "error", message: error }
     sourceFeedbackByKey[sourceFeedbackKey(request.providerType, request.id)] = failed
     sourceSetFormStatus(error, "error")

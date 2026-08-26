@@ -2636,7 +2636,6 @@ function savePopupData(dataType: string, id: string, remove: Boolean, option: nu
       break
 
     default:
-      console.log(dataType, id);
       return
       break;
 
@@ -2652,8 +2651,6 @@ function savePopupData(dataType: string, id: string, remove: Boolean, option: nu
   }
 
   console.log("SEND TO SERVER");
-
-  console.log(data);
 
   beginSourceRequest(dataType, id, remove, option)
   var server: Server = new Server(cmd)

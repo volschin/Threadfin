@@ -263,6 +263,10 @@
     "lastUpdate": "Last update",
     "neverUpdated": "No successful update recorded",
     "locationUnavailable": "Source location not reported",
+    "locationInvalidDisplay": "Source location hidden because it could not be displayed safely",
+    "requestBusy": "Another request is already in progress. Try again.",
+    "transportError": "Connection lost before Threadfin confirmed the request. Try again.",
+    "responseInvalid": "Threadfin returned an invalid response. Try again.",
     "forms": {
       "locationHelp": "Enter an HTTP(S) URL or a local file path, for example https://provider.example/file or /srv/threadfin/file.",
       "hdhrHelp": "Enter the HDHomeRun address and port, for example 192.168.1.10:5004.",
