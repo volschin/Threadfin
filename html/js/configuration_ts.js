@@ -95,7 +95,7 @@ function readyForConfiguration(wizard) {
 }
 function showConfigurationWizard(wizard) {
     configurationWizard[wizard].createWizard();
-    var visibleSteps = configurationWizardVisibleSteps();
+    var visibleSteps = wizard == 1 ? configurationWizard.length : configurationWizardVisibleSteps();
     var progress = document.querySelectorAll("#wizard-progress li");
     Array.prototype.forEach.call(progress, function (item, index) {
         item.hidden = index >= visibleSteps;
@@ -212,7 +212,8 @@ function completeConfigurationWizardRequest(response) {
     status.textContent = response && response.status === true ? "{{.wizard.saved}}" : response && response.status === false ? sourceString(response.err) || "{{.sources.responseInvalid}}" : "{{.sources.responseInvalid}}";
 }
 function completeConfigurationWizard() {
-    window.location.assign("/web/#overview");
+    window.location.replace("/web/#overview");
+    window.location.reload();
 }
 // Wizard
 var configurationWizard = new Array();

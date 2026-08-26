@@ -3,6 +3,7 @@ type OverviewStageStatus = "ready" | "attention" | "empty" | "waiting" | "manage
 interface OverviewActionState {
   label: string
   destination: AppDestination
+  openAdd?: "playlist" | "xmltv"
 }
 
 interface OverviewStageState {
@@ -279,7 +280,7 @@ function selectOverviewStages(state: Omit<OverviewState, "stages">): OverviewSta
   stages.push(state.playlistCount == 0 ? {
     key: "playlist", label: "Playlist", status: "empty", summary: "No playlist configured",
     explanation: "Add an M3U playlist or HDHomeRun source to begin.",
-    action: { label: "Add playlist", destination: "playlist" },
+    action: { label: "Add playlist", destination: "playlist", openAdd: "playlist" },
   } : state.playlistReadyCount == state.playlistCount ? {
     key: "playlist", label: "Playlist", status: "ready", summary: state.playlistReadyCount + " / " + state.playlistCount + " ready",
     explanation: "Every configured channel source is reachable.",
@@ -315,7 +316,7 @@ function selectOverviewStages(state: Omit<OverviewState, "stages">): OverviewSta
   } : {
     key: "xmltv", label: "XMLTV", status: "attention", summary: state.xmltv.readyCount + " / " + state.xmltv.sourceCount + " ready",
     explanation: "XEPG needs every configured XMLTV source to be available with guide channels.",
-    action: { label: "Add XMLTV", destination: "xmltv" },
+    action: { label: "Add XMLTV", destination: "xmltv", openAdd: "xmltv" },
   })
 
   stages.push(!state.xmltv.applicable ? {

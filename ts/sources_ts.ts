@@ -39,6 +39,7 @@ var sourcePageFeedback: { [key: string]: SourceFeedback } = {}
 var sourcePopupInvoker: HTMLElement
 var sourcePopupFocusKey = ""
 var sourcePopupFocusListenerAttached = false
+var sourcePopupShownListenerAttached = false
 
 function sourceRecord(value: any): { [key: string]: any } {
   return value && typeof value == "object" && !Array.isArray(value) ? value : {}
@@ -322,6 +323,10 @@ function openSourcePopup(dataType: string, element: any, invoker: HTMLElement): 
   sourcePopupInvoker = invoker
   sourcePopupFocusKey = invoker ? sourceString(invoker.getAttribute("data-source-focus-key")) : ""
   var modal = document.getElementById("popup")
+  if (modal) {
+    modal.setAttribute("role", "dialog")
+    modal.setAttribute("aria-modal", "true")
+  }
   if (modal && !sourcePopupFocusListenerAttached) {
     sourcePopupFocusListenerAttached = true
     modal.addEventListener("hidden.bs.modal", function () {
@@ -333,7 +338,30 @@ function openSourcePopup(dataType: string, element: any, invoker: HTMLElement): 
       sourcePopupFocusKey = ""
     })
   }
+  if (modal && !sourcePopupShownListenerAttached) {
+    sourcePopupShownListenerAttached = true
+    modal.addEventListener("shown.bs.modal", function () {
+      focusSourcePopupFirstControl()
+    })
+  }
   openPopUp(dataType, element)
+}
+
+function focusSourcePopupFirstControl(): void {
+  var popup = document.getElementById("popup-custom")
+  if (!popup || !popup.classList.contains("tf-source-popup")) {
+    return
+  }
+  var firstControl = popup.querySelector("input, select, button") as HTMLElement
+  if (firstControl) {
+    firstControl.focus()
+  }
+}
+
+function focusRenderedSourcePopup(modal: HTMLElement): void {
+  if (modal && modal.classList.contains("show")) {
+    window.setTimeout(focusSourcePopupFirstControl, 0)
+  }
 }
 
 function sourcePopupReplacement(focusKey: string): HTMLElement {
@@ -356,10 +384,25 @@ function enhanceSourcePopup(dataType: string): void {
     return
   }
   popup.classList.remove("tf-source-popup")
-  if (dataType != "m3u" && dataType != "hdhr" && dataType != "xmltv") {
+  var sourcePopup = dataType == "playlist" || dataType == "m3u" || dataType == "hdhr" || dataType == "xmltv"
+  var title = popup.querySelector("h3") as HTMLElement
+  var modal = document.getElementById("popup")
+  if (modal) {
+    if (title) {
+      title.id = sourcePopup ? "source-popup-title" : "popup-title"
+      modal.setAttribute("aria-labelledby", title.id)
+    } else {
+      modal.removeAttribute("aria-labelledby")
+    }
+  }
+  if (!sourcePopup) {
     return
   }
   popup.classList.add("tf-source-popup")
+  if (dataType == "playlist") {
+    focusRenderedSourcePopup(modal)
+    return
+  }
   var fields = popup.querySelectorAll("input, select")
   Array.prototype.forEach.call(fields, function (field: HTMLElement) {
     var row = field.closest("tr")
@@ -396,6 +439,7 @@ function enhanceSourcePopup(dataType: string): void {
   status.setAttribute("aria-live", "polite")
   status.hidden = true
   popup.appendChild(status)
+  focusRenderedSourcePopup(modal)
 }
 
 function sourceLocationAccepted(value: string): boolean {

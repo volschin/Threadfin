@@ -127,7 +127,7 @@ function readyForConfiguration(wizard:number) {
 
 function showConfigurationWizard(wizard:number) {
   configurationWizard[wizard].createWizard()
-  var visibleSteps = configurationWizardVisibleSteps()
+  var visibleSteps = wizard == 1 ? configurationWizard.length : configurationWizardVisibleSteps()
 
   var progress = document.querySelectorAll("#wizard-progress li")
   Array.prototype.forEach.call(progress, function (item: HTMLElement, index: number) {
@@ -266,7 +266,8 @@ function completeConfigurationWizardRequest(response: any): void {
 }
 
 function completeConfigurationWizard(): void {
-  window.location.assign("/web/#overview")
+  window.location.replace("/web/#overview")
+  window.location.reload()
 }
 
 // Wizard

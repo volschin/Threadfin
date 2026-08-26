@@ -65,6 +65,12 @@ function createOverviewSignalPath(stages) {
         action.textContent = stage.action.label;
         action.addEventListener("click", function () {
             openDestination(stage.action.destination, true);
+            if (stage.action.openAdd && typeof openSourcePopup == "function") {
+                var addButton = document.querySelector('[data-source-focus-key="' + stage.action.openAdd + ':add"]');
+                if (addButton) {
+                    openSourcePopup(stage.action.openAdd, undefined, addButton);
+                }
+            }
         });
         item.appendChild(status);
         item.appendChild(heading);

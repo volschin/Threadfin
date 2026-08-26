@@ -99,7 +99,7 @@
     },
     "empty": {
       "title": "No filters yet",
-      "description": "Create a Group Filter to select imported streams before Mapping."
+      "description": "No saved filter rules exist. Imported streams may already be selected by the current defaults; create a Group Filter to control which streams reach Mapping."
     },
     "advanced": {
       "title": "Advanced filtering",

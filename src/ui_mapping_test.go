@@ -265,6 +265,8 @@ func TestUIMappingGeneratedDOMAccessibilityAndEditor(t *testing.T) {
 		RemovedReturnFocus       string `json:"removedReturnFocus"`
 		ProgrammaticReturnFocus  string `json:"programmaticReturnFocus"`
 		HistoryReturnFocus       string `json:"historyReturnFocus"`
+		PMSText                  string `json:"pmsText"`
+		PMSSettingsHash          string `json:"pmsSettingsHash"`
 	}
 	if err := json.Unmarshal(output, &got); err != nil {
 		t.Fatalf("decode Mapping DOM fixture: %v\n%s", err, output)
@@ -305,6 +307,9 @@ func TestUIMappingGeneratedDOMAccessibilityAndEditor(t *testing.T) {
 	}
 	if got.SidebarReturnFocus != "settings" || got.PendingReturnFocus != "mapping-heading" || !got.PendingSaveAvoided || got.AmbiguousReturnFocus != "mapping-heading" || got.RemovedReturnFocus != "mapping-heading" || got.ProgrammaticReturnFocus != "mapping-heading" || got.HistoryReturnFocus != "mapping-heading" {
 		t.Fatalf("Mapping guard focus return contract = %+v", got)
+	}
+	if !strings.Contains(got.PMSText, "PMS mode") || !strings.Contains(got.PMSText, "XEPG") || !strings.Contains(got.PMSText, "client") || got.PMSSettingsHash != "#settings" {
+		t.Fatalf("PMS Mapping explanation/settings route = text %q route %q", got.PMSText, got.PMSSettingsHash)
 	}
 }
 
@@ -549,6 +554,7 @@ const context = {console: {log() {}, warn() {}}, document, window: {history, loc
 }}}, currentDestination: "mapping"};
 vm.createContext(context); vm.runInContext(fs.readFileSync(process.argv[2], "utf8"), context); vm.runInContext(fs.readFileSync(process.argv[3], "utf8"), context); vm.runInContext(fs.readFileSync(process.argv[4], "utf8"), context);
 function key(target, value, shiftKey) { const event = {key: value, shiftKey: !!shiftKey, prevented: false, preventDefault() { this.prevented = true; }, stopPropagation() {}}; if (target.listeners.keydown) target.listeners.keydown(event); return event; }
+context.SERVER.settings.epgSource = "PMS"; context.renderMappingPage(host); const pmsText = text(host); const pmsSettings = all(host).find(item => item.tagName === "BUTTON" && item.textContent === "Open EPG Source settings"); if (pmsSettings) pmsSettings.listeners.click(); const pmsSettingsHash = history.pushes[history.pushes.length - 1] || ""; context.currentDestination = "mapping"; context.SERVER.settings.epgSource = "XEPG";
 context.renderMappingPage(host); const pageText = text(host); const selectAll = all(host).find(item => item.getAttribute("aria-label") === "Select all visible channels"); const live = all(host).find(item => item.className === "tf-mapping-counts"); const backupLists = all(host).filter(item => item.id === "mapping-backup-options").length;
 let sortButton = all(host).find(item => item.tagName === "BUTTON" && item.textContent === "Channel"), initialSort = sortButton.parentElement.getAttribute("aria-sort"); sortButton.listeners.click(); sortButton = all(host).find(item => item.tagName === "BUTTON" && item.textContent === "Channel"); const toggledSort = sortButton.parentElement.getAttribute("aria-sort");
 let typing = all(host).find(item => item.getAttribute("aria-label") === "Search mapping"); typing.focus(); typing.value = "h"; typing.setSelectionRange(1, 1); typing.listeners.input(); typing = document.activeElement; if (document.contains(typing) && typing.listeners.input) { typing.value += "i"; typing.setSelectionRange(2, 2); typing.listeners.input(); } const typedSearch = context.mappingCurrentQuery.search, searchFocused = document.contains(document.activeElement) && document.activeElement.getAttribute("data-mapping-focus") === "filter-search", searchCaret = document.activeElement.selectionStart;
@@ -566,7 +572,7 @@ context.mappingApplyChannelPatch(context.mappingWorkspaceState, ["valid"], {"x-n
 const removedInvoker = new Element("button"); removedInvoker.id = "removed-invoker"; app.appendChild(removedInvoker); removedInvoker.focus(); context.mappingRequestNavigation(() => saveContinued++, removedInvoker); guard = context.mappingGuardDialog; app.removeChild(removedInvoker); all(guard).find(item => item.getAttribute("data-mapping-guard") === "stay").listeners.click(); const removedReturnFocus = document.activeElement.id;
 sidebar.focus(); context.openDestination("settings", true); guard = context.mappingGuardDialog; all(guard).find(item => item.getAttribute("data-mapping-guard") === "stay").listeners.click(); const programmaticReturnFocus = document.activeElement.id;
 sidebar.focus(); history.state = {threadfinDestination: "settings"}; context.restoreDestinationFromHistory(); guard = context.mappingGuardDialog; key(guard, "Escape", false); const guardEscapeClosed = !context.mappingGuardDialog, historyReturnFocus = document.activeElement.id, guardEscapeContinued = 0;
-process.stdout.write(JSON.stringify({pageText, editorText, selectAllLabel: selectAll.getAttribute("aria-label"), editorRole: editor.getAttribute("role"), editorLabelledBy: editor.getAttribute("aria-labelledby"), advancedInitially, advancedSearch, backupLists, saveFocus: save.focusCount, draftName: "Keyboard renamed", liveStatus: live.getAttribute("aria-live"), unloadPrevented: unload.prevented, unloadReturnValue: unload.returnValue, stayContinued, discardContinued, saveContinued, pendingSaveDisabled, pendingDiscardDisabled, pendingStayEnabled, pendingStayClosed, ambiguousStayClosed, typedSearch, searchFocused, searchCaret, filterFocused, selectAllFocused, keyboardSelected, keyboardFocused, pendingMutationsDisabled, pendingEditorBlocked, initialEditorFocus, tabTrapped, shiftTabTrapped, editorEscapeClosed, editorInvokerRestored, editorEscapeDraft, guardEscapeClosed, guardEscapeContinued, initialSort, toggledSort, sidebarReturnFocus, pendingReturnFocus, pendingSaveAvoided, ambiguousReturnFocus, removedReturnFocus, programmaticReturnFocus, historyReturnFocus}));
+process.stdout.write(JSON.stringify({pageText, editorText, selectAllLabel: selectAll.getAttribute("aria-label"), editorRole: editor.getAttribute("role"), editorLabelledBy: editor.getAttribute("aria-labelledby"), advancedInitially, advancedSearch, backupLists, saveFocus: save.focusCount, draftName: "Keyboard renamed", liveStatus: live.getAttribute("aria-live"), unloadPrevented: unload.prevented, unloadReturnValue: unload.returnValue, stayContinued, discardContinued, saveContinued, pendingSaveDisabled, pendingDiscardDisabled, pendingStayEnabled, pendingStayClosed, ambiguousStayClosed, typedSearch, searchFocused, searchCaret, filterFocused, selectAllFocused, keyboardSelected, keyboardFocused, pendingMutationsDisabled, pendingEditorBlocked, initialEditorFocus, tabTrapped, shiftTabTrapped, editorEscapeClosed, editorInvokerRestored, editorEscapeDraft, guardEscapeClosed, guardEscapeContinued, initialSort, toggledSort, sidebarReturnFocus, pendingReturnFocus, pendingSaveAvoided, ambiguousReturnFocus, removedReturnFocus, programmaticReturnFocus, historyReturnFocus, pmsText, pmsSettingsHash}));
 `
 
 const mappingLargeRendererNodeScript = `

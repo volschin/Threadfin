@@ -344,11 +344,30 @@ function mappingOverlayHost() {
     return document.querySelector(".tf-app") || document.body;
 }
 function renderMappingPage(host) {
-    initializeMappingWorkspace(SERVER);
     host.innerHTML = "";
     var page = document.createElement("div");
     page.className = "tf-mapping";
-    page.appendChild(renderMappingHeader());
+    var pmsMode = mappingString(mappingRecord(mappingRecord(SERVER).settings).epgSource).toUpperCase() == "PMS";
+    if (!pmsMode) {
+        initializeMappingWorkspace(SERVER);
+    }
+    page.appendChild(renderMappingHeader(!pmsMode));
+    if (pmsMode) {
+        var note = document.createElement("section");
+        note.className = "tf-mapping-empty tf-mapping-mode-note";
+        note.setAttribute("role", "note");
+        var title = document.createElement("h2");
+        title.textContent = "Mapping requires XEPG";
+        var copy = document.createElement("p");
+        copy.textContent = "PMS mode leaves guide data management to the connected client. Switch the EPG Source to XEPG to map channels and generate M3U/XMLTV guide outputs in Threadfin.";
+        var settings = mappingButton("Open EPG Source settings", function () { openDestination("settings", true, settings); });
+        note.appendChild(title);
+        note.appendChild(copy);
+        note.appendChild(settings);
+        page.appendChild(note);
+        host.appendChild(page);
+        return;
+    }
     page.appendChild(renderMappingFilters());
     var rows = mappingVisibleRows(mappingWorkspaceState, mappingCurrentQuery);
     page.appendChild(renderMappingCounts(rows));
@@ -359,7 +378,7 @@ function renderMappingPage(host) {
     page.appendChild(renderMappingSaveBar());
     host.appendChild(page);
 }
-function renderMappingHeader() {
+function renderMappingHeader(showViews = true) {
     var header = document.createElement("header");
     header.className = "tf-mapping-header";
     var group = document.createElement("div");
@@ -372,6 +391,9 @@ function renderMappingHeader() {
     group.appendChild(title);
     group.appendChild(purpose);
     header.appendChild(group);
+    if (!showViews) {
+        return header;
+    }
     var segments = document.createElement("div");
     segments.className = "tf-mapping-segments";
     segments.setAttribute("role", "group");

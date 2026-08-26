@@ -701,6 +701,8 @@ func TestGeneratedSourcePopupValidationLabelsAndFocusReturn(t *testing.T) {
 		InvokerFocusCount     int               `json:"invokerFocusCount"`
 		ReplacementFocusCount int               `json:"replacementFocusCount"`
 		SourceClassReset      bool              `json:"sourceClassReset"`
+		TransitionFocusCount  int               `json:"transitionFocusCount"`
+		NonSourceLabel        string            `json:"nonSourceLabel"`
 	}
 	if err := json.Unmarshal(output, &got); err != nil {
 		t.Fatalf("decode generated source popup accessibility: %v\n%s", err, output)
@@ -725,6 +727,12 @@ func TestGeneratedSourcePopupValidationLabelsAndFocusReturn(t *testing.T) {
 	if !got.SourceClassReset {
 		t.Fatal("source popup styling leaked into a subsequently opened legacy popup")
 	}
+	if got.TransitionFocusCount != 1 {
+		t.Fatal("an already-open playlist chooser did not focus the newly rendered source form")
+	}
+	if got.NonSourceLabel != "popup-title" {
+		t.Fatalf("shared modal retained stale source label %q after reuse", got.NonSourceLabel)
+	}
 }
 
 func TestGeneratedWizardLabelsAndModeAwareProgress(t *testing.T) {
@@ -739,6 +747,10 @@ func TestGeneratedWizardLabelsAndModeAwareProgress(t *testing.T) {
 		t.Fatalf("execute generated wizard mode/accessibility state: %v\n%s", err, output)
 	}
 	var got struct {
+		Decision struct {
+			Step        string `json:"step"`
+			XMLTVHidden bool   `json:"xmltvHidden"`
+		} `json:"decision"`
 		PMS struct {
 			Step        string `json:"step"`
 			Action      string `json:"action"`
@@ -755,6 +767,9 @@ func TestGeneratedWizardLabelsAndModeAwareProgress(t *testing.T) {
 	if err := json.Unmarshal(output, &got); err != nil {
 		t.Fatalf("decode generated wizard mode/accessibility state: %v\n%s", err, output)
 	}
+	if got.Decision.Step != "Step 2 of 4" || got.Decision.XMLTVHidden {
+		t.Fatal("EPG mode decision prematurely changes the wizard denominator before the user chooses PMS or XEPG")
+	}
 	if got.PMS.Step != "Step 3 of 3" || got.PMS.Action != "Finish setup" || !got.PMS.XMLTVHidden || got.PMS.LabelledBy != "wizard-field-label" {
 		t.Fatal("PMS M3U step is not a labelled final step with truthful 3-of-3 progress")
 	}
@@ -770,6 +785,12 @@ func TestSourceUIIntegrationAndWizardMarkup(t *testing.T) {
 	}
 	if !strings.Contains(menu, `enhanceSourcePopup(dataType)`) || !strings.Contains(menu, `validateSourcePopup(dataType)`) {
 		t.Fatal("existing source popups are missing shared guidance/field validation")
+	}
+	sources := readUITypeScript(t, "sources_ts.ts")
+	for _, contract := range []string{`modal.setAttribute("role", "dialog")`, `modal.setAttribute("aria-modal", "true")`, `modal.setAttribute("aria-labelledby", title.id)`, `modal.addEventListener("shown.bs.modal"`, `firstControl.focus()`} {
+		if !strings.Contains(sources, contract) {
+			t.Errorf("source popup accessibility contract is missing %q", contract)
+		}
 	}
 	network := readUITypeScript(t, "network_ts.ts")
 	if !strings.Contains(network, `completeSourceRequest(data["cmd"], data, response)`) {
@@ -817,9 +838,12 @@ func TestSourceUIIntegrationAndWizardMarkup(t *testing.T) {
 			t.Errorf("source/wizard accessibility stylesheet is missing %q", contract)
 		}
 	}
+	if !strings.Contains(string(styles), `@media (max-height: 35rem)`) || !strings.Contains(string(styles), `.tf-setup #content`) || !strings.Contains(string(styles), ".tf-setup #box-footer {\n    position: fixed;") {
+		t.Error("wizard stylesheet does not compact the setup flow for low-height viewports")
+	}
 }
 
-func TestWizardCompletionUsesOverviewHash(t *testing.T) {
+func TestWizardCompletionReloadsTheNormalOverviewDocument(t *testing.T) {
 	temp := t.TempDir()
 	scriptPath := filepath.Join(temp, "wizard-route.js")
 	if err := os.WriteFile(scriptPath, []byte(wizardRouteNodeScript), 0o600); err != nil {
@@ -834,8 +858,15 @@ func TestWizardCompletionUsesOverviewHash(t *testing.T) {
 	if err != nil {
 		t.Fatalf("execute generated wizard route: %v\n%s", err, output)
 	}
-	if strings.TrimSpace(string(output)) != "/web/#overview" {
-		t.Fatalf("wizard completion route = %q, want /web/#overview", output)
+	var got struct {
+		Location string `json:"location"`
+		Reloaded bool   `json:"reloaded"`
+	}
+	if err := json.Unmarshal(output, &got); err != nil {
+		t.Fatalf("decode wizard completion route: %v\n%s", err, output)
+	}
+	if got.Location != "/web/#overview" || !got.Reloaded {
+		t.Fatalf("wizard completion route = %+v, want normal Overview document reload", got)
 	}
 }
 
@@ -926,10 +957,10 @@ process.stdout.write(JSON.stringify({playlist, xmltv, locations, displays, progr
 const wizardRouteNodeScript = `
 const fs = require("fs");
 const vm = require("vm");
-let assigned = "";
+let location = "", reloaded = false;
 const context = {
   console: {log() {}, warn() {}},
-  window: {location: {assign(value) { assigned = value; }}},
+  window: {location: {replace(value) { location = value; }, reload() { reloaded = true; }}},
   document: {getElementById() { return null; }, querySelectorAll() { return []; }},
   PopupContent: class {},
   Server: class {request() {}},
@@ -939,7 +970,7 @@ vm.createContext(context);
 vm.runInContext(fs.readFileSync(process.argv[2], "utf8"), context);
 vm.runInContext(fs.readFileSync(process.argv[3], "utf8"), context);
 context.completeConfigurationWizard();
-process.stdout.write(assigned);
+process.stdout.write(JSON.stringify({location, reloaded}));
 `
 
 const sourceRequestFailureNodeScript = `
@@ -972,12 +1003,13 @@ const context = {
     },
     querySelectorAll() { return []; },
   },
-  window: {location: {protocol: "http:", hostname: "127.0.0.1", port: "34400", assign() { routed = true; }}},
+  window: {location: {protocol: "http:", hostname: "127.0.0.1", port: "34400", replace() { routed = true; }, reload() { routed = true; }}},
   location: {reload() { routed = true; }},
   WebSocket: FakeWebSocket,
   PopupContent: class {},
   showElement() {},
   createLayout() {},
+  openDestination() { routed = true; },
   alert() {},
   SERVER: {}, UNDO: {}, SERVER_CONNECTION: false, WS_AVAILABLE: false,
 };
@@ -1115,7 +1147,11 @@ const source = field("input", "file.source", "Source location", "ftp://provider.
 const buffer = field("select", "buffer", "Buffer", "-");
 const controls = [name, source, buffer];
 const popup = new Element("div");
+const title = new Element("h3");
+title.textContent = "SOURCE FORM";
 popup.querySelector = function(selector) {
+  if (selector === "h3") return title;
+  if (selector === "input, select, button") return controls[0];
   const match = selector.match(/\[name="([^"]+)"\]/);
   return match ? controls.find(control => control.getAttribute("name") === match[1]) || null : null;
 };
@@ -1144,6 +1180,7 @@ const context = {
     querySelectorAll(selector) { return selector === "[data-source-focus-key]" ? [replacement] : []; },
   },
   openPopUp(kind) { popupKind = kind; },
+  window: {setTimeout(callback) { callback(); }},
 };
 vm.createContext(context);
 vm.runInContext(fs.readFileSync(process.argv[2], "utf8"), context);
@@ -1153,9 +1190,15 @@ const error = byID("source-file-source-error");
 const sourceClassApplied = popup.classList.contains("tf-source-popup");
 context.enhanceSourcePopup("filter");
 const sourceClassReset = sourceClassApplied && !popup.classList.contains("tf-source-popup");
+const nonSourceLabel = modal.getAttribute("aria-labelledby") || "";
 const invoker = new Element("button");
 invoker.setAttribute("data-source-focus-key", "m3u:M1:edit");
+context.enhanceSourcePopup("playlist");
+modal.classList.add("show");
+context.openPopUp = function(kind) { popupKind = kind; context.enhanceSourcePopup(kind); };
+const focusBeforeTransition = name.focusCount;
 context.openSourcePopup("m3u", undefined, invoker);
+const transitionFocusCount = name.focusCount - focusBeforeTransition;
 modal.listeners["hidden.bs.modal"]();
 invokerConnected = false;
 context.openSourcePopup("m3u", undefined, invoker);
@@ -1171,6 +1214,8 @@ process.stdout.write(JSON.stringify({
   invokerFocusCount: invoker.focusCount,
   replacementFocusCount: replacement.focusCount,
   sourceClassReset,
+  transitionFocusCount,
+  nonSourceLabel,
 }));
 `
 
@@ -1245,6 +1290,8 @@ let source = fs.readFileSync(process.argv[2], "utf8")
   .replaceAll("{{.wizard.finish}}", "Finish setup")
   .replaceAll("{{.button.next}}", "Next");
 vm.runInContext(source, context);
+context.showConfigurationWizard(1);
+const decision = {step: step.textContent, xmltvHidden: progress[3].hidden};
 context.showConfigurationWizard(2);
 const pmsField = content.children.find(child => child.className === "wizard");
 const pms = {step: step.textContent, action: next.value, xmltvHidden: progress[3].hidden, labelledBy: pmsField.getAttribute("aria-labelledby") || ""};
@@ -1252,7 +1299,7 @@ context.SERVER.settings.epgSource = "XEPG";
 context.showConfigurationWizard(3);
 const xepgField = content.children.find(child => child.className === "wizard");
 const xepg = {step: step.textContent, action: next.value, xmltvHidden: progress[3].hidden, labelledBy: xepgField.getAttribute("aria-labelledby") || ""};
-process.stdout.write(JSON.stringify({pms, xepg}));
+process.stdout.write(JSON.stringify({decision, pms, xepg}));
 `
 
 const sourcePayloadNodeScript = `

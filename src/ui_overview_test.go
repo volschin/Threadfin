@@ -58,6 +58,7 @@ type overviewStateResult struct {
 		Summary string `json:"summary"`
 		Action  struct {
 			Destination string `json:"destination"`
+			OpenAdd     string `json:"openAdd"`
 		} `json:"action"`
 	} `json:"stages"`
 }
@@ -109,12 +110,27 @@ func TestOverviewStateClassifiesEmptySetup(t *testing.T) {
 	assertOverviewStage(t, state, "xmltv", "attention", "xmltv")
 	assertOverviewStage(t, state, "mapping", "waiting", "mapping")
 	assertOverviewStage(t, state, "outputs", "waiting", "connections")
+	assertOverviewStageOpenAdd(t, state, "playlist", "playlist")
+	assertOverviewStageOpenAdd(t, state, "xmltv", "xmltv")
 	if state.Outputs.Ready || len(state.Sources) != 0 {
 		t.Fatalf("empty output/source state = ready %t, sources %d, want false and 0", state.Outputs.Ready, len(state.Sources))
 	}
 	assertOverviewEndpoint(t, state, "dvr", false)
 	assertOverviewEndpoint(t, state, "m3u", false)
 	assertOverviewEndpoint(t, state, "xmltv", false)
+}
+
+func assertOverviewStageOpenAdd(t *testing.T, state overviewStateResult, key, openAdd string) {
+	t.Helper()
+	for _, stage := range state.Stages {
+		if stage.Key == key {
+			if stage.Action.OpenAdd != openAdd {
+				t.Fatalf("stage %q open-add = %q, want %q", key, stage.Action.OpenAdd, openAdd)
+			}
+			return
+		}
+	}
+	t.Fatalf("missing overview stage %q", key)
 }
 
 func TestOverviewStateClassifiesPMSAsClientManaged(t *testing.T) {
