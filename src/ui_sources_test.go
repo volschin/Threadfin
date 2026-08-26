@@ -395,6 +395,140 @@ func TestInitDetectsWizardBeforeCreatingSettingsFile(t *testing.T) {
 	}
 }
 
+func TestFreshSettingsCreateUUIDTempFolderBeforePermissionCheck(t *testing.T) {
+	restorePersistentState(t)
+	tempRoot := t.TempDir()
+	t.Setenv("TMPDIR", tempRoot)
+
+	System = SystemStruct{}
+	System.Name = "ThreadfinFreshTempTest"
+	System.DBVersion = "0.5.0"
+	System.Folder.Config = filepath.Join(tempRoot, "config") + string(os.PathSeparator)
+	System.Folder.Backup = filepath.Join(System.Folder.Config, "backup") + string(os.PathSeparator)
+	System.Folder.Temp = filepath.Join(tempRoot, "threadfinfreshtemptest") + string(os.PathSeparator)
+	System.File.Settings = filepath.Join(System.Folder.Config, "settings.json")
+	if err := os.MkdirAll(System.Folder.Config, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := saveMapToJSONFile(System.File.Settings, map[string]interface{}{}); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := loadSettings(); err != nil {
+		t.Fatal(err)
+	}
+	if info, err := os.Stat(System.Folder.Temp); err != nil || !info.IsDir() {
+		t.Fatalf("fresh UUID temp folder %q was not created before permission validation: %v", System.Folder.Temp, err)
+	}
+	if err := checkFilePermission(System.Folder.Temp); err != nil {
+		t.Fatalf("fresh UUID temp folder is not writable: %v", err)
+	}
+}
+
+func TestFreshSettingsApplyCLIBindOverride(t *testing.T) {
+	restorePersistentState(t)
+	tempRoot := t.TempDir()
+
+	System = SystemStruct{}
+	System.Name = "ThreadfinFreshBindTest"
+	System.DBVersion = "0.5.0"
+	System.Flag.Bind = "127.0.0.1"
+	System.Folder.Config = filepath.Join(tempRoot, "config") + string(os.PathSeparator)
+	System.Folder.Backup = filepath.Join(System.Folder.Config, "backup") + string(os.PathSeparator)
+	System.Folder.Temp = filepath.Join(tempRoot, "threadfinfreshbindtest") + string(os.PathSeparator)
+	System.File.Settings = filepath.Join(System.Folder.Config, "settings.json")
+	if err := os.MkdirAll(System.Folder.Config, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := saveMapToJSONFile(System.File.Settings, map[string]interface{}{}); err != nil {
+		t.Fatal(err)
+	}
+
+	settings, err := loadSettings()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if settings.BindIpAddress != "127.0.0.1" {
+		t.Fatalf("bind IP = %q, want CLI override", settings.BindIpAddress)
+	}
+}
+
+func TestFirstRunDoesNotAdvertiseUnconfiguredServerWithSSDP(t *testing.T) {
+	previousSettings := Settings
+	previousSystem := System
+	t.Cleanup(func() {
+		Settings = previousSettings
+		System = previousSystem
+	})
+
+	Settings.SSDP = true
+	System.ConfigurationWizard = true
+	if shouldStartSSDP() {
+		t.Fatal("unconfigured first-run server would start SSDP")
+	}
+
+	System.ConfigurationWizard = false
+	if !shouldStartSSDP() {
+		t.Fatal("configured server no longer honors enabled SSDP setting")
+	}
+}
+
+func TestCompletingFirstRunStartsEnabledSSDPExactlyOnce(t *testing.T) {
+	previousSettings := Settings
+	previousSystem := System
+	t.Cleanup(func() {
+		Settings = previousSettings
+		System = previousSystem
+	})
+
+	Settings.SSDP = true
+	System.ConfigurationWizard = true
+	calls := 0
+	if err := completeConfigurationWizard(func() error {
+		calls++
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if calls != 1 {
+		t.Fatalf("SSDP starter calls = %d, want 1", calls)
+	}
+	if System.ConfigurationWizard {
+		t.Fatal("configuration wizard remained active after successful completion")
+	}
+
+	Settings.SSDP = false
+	System.ConfigurationWizard = true
+	if err := completeConfigurationWizard(func() error {
+		calls++
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if calls != 1 {
+		t.Fatalf("disabled SSDP changed starter calls to %d, want 1", calls)
+	}
+}
+
+func TestCompletingFirstRunKeepsWizardActiveWhenSSDPStartFails(t *testing.T) {
+	previousSettings := Settings
+	previousSystem := System
+	t.Cleanup(func() {
+		Settings = previousSettings
+		System = previousSystem
+	})
+
+	Settings.SSDP = true
+	System.ConfigurationWizard = true
+	wantErr := errors.New("SSDP unavailable")
+	if err := completeConfigurationWizard(func() error { return wantErr }); !errors.Is(err, wantErr) {
+		t.Fatalf("completion error = %v, want %v", err, wantErr)
+	}
+	if !System.ConfigurationWizard {
+		t.Fatal("configuration wizard was cleared after SSDP start failed")
+	}
+}
+
 func TestGeneratedSourceStateUsesExistingResponseAndConfirmedResults(t *testing.T) {
 	temp := t.TempDir()
 	scriptPath := filepath.Join(temp, "source-state.js")

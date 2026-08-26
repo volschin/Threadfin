@@ -76,6 +76,8 @@ func TestDispatchThreadfinStartupReturnsNonzeroForPrivateModeFailure(t *testing.
 }
 
 func TestPerformStartupUpdateSkipsOnlyUpdateChildCheck(t *testing.T) {
+	src.System.ConfigurationWizard = false
+	t.Cleanup(func() { src.System.ConfigurationWizard = false })
 	calls := 0
 	update := func() error {
 		calls++
@@ -92,5 +94,21 @@ func TestPerformStartupUpdateSkipsOnlyUpdateChildCheck(t *testing.T) {
 	}
 	if calls != 1 {
 		t.Fatalf("ordinary update calls = %d, want 1", calls)
+	}
+}
+
+func TestPerformStartupUpdateSkipsUnconfiguredFirstRun(t *testing.T) {
+	src.System.ConfigurationWizard = true
+	t.Cleanup(func() { src.System.ConfigurationWizard = false })
+
+	calls := 0
+	if err := performStartupUpdate(false, func() error {
+		calls++
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if calls != 0 {
+		t.Fatalf("first-run update calls = %d, want 0", calls)
 	}
 }

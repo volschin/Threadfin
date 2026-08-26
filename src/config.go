@@ -233,7 +233,7 @@ func Init() (err error) {
 	}
 
 	// DLNA Server starten
-	if Settings.SSDP {
+	if shouldStartSSDP() {
 		err = SSDP()
 		if err != nil {
 			return
@@ -244,6 +244,20 @@ func Init() (err error) {
 	loadHTMLMap()
 
 	return
+}
+
+func shouldStartSSDP() bool {
+	return Settings.SSDP && !System.ConfigurationWizard
+}
+
+func completeConfigurationWizard(startSSDP func() error) error {
+	if Settings.SSDP {
+		if err := startSSDP(); err != nil {
+			return err
+		}
+	}
+	System.ConfigurationWizard = false
+	return nil
 }
 
 func configurationWizardRequired(settingsFile string) (bool, error) {

@@ -670,8 +670,10 @@ func WS(w http.ResponseWriter, r *http.Request) {
 			err = errNew
 			if err == nil {
 				if nextStep == 10 {
-					System.ConfigurationWizard = false
-					response.Reload = true
+					err = completeConfigurationWizard(SSDP)
+					if err == nil {
+						response.Reload = true
+					}
 				} else {
 					response.Wizard = nextStep
 				}
