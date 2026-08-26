@@ -1,7 +1,6 @@
 package src
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -9,6 +8,7 @@ import (
 	"net/http"
 	"time"
 
+	"threadfin/src/internal/jsoncompat"
 	up2date "threadfin/src/internal/up2date/client"
 
 	"github.com/hashicorp/go-version"
@@ -116,6 +116,12 @@ func remoteWindowsStartupProviderCount(providers map[string]interface{}, alwaysR
 	return count
 }
 
+func decodeGitHubReleases(body io.ReadCloser) ([]*GithubReleaseInfo, error) {
+	var releases []*GithubReleaseInfo
+	decodeErr := jsoncompat.UnmarshalRead(body, &releases)
+	return releases, errors.Join(decodeErr, body.Close())
+}
+
 // BinaryUpdate : Binary Update Prozess. Git Branch master und beta wird von GitHub geladen.
 func BinaryUpdate() (err error) {
 
@@ -145,8 +151,6 @@ func BinaryUpdate() (err error) {
 	case "Main", "Beta":
 		var releaseInfo = fmt.Sprintf("%s/releases", System.Update.Github)
 		var latest string
-		var body []byte
-
 		var git []*GithubReleaseInfo
 
 		resp, err := http.Get(releaseInfo)
@@ -155,9 +159,7 @@ func BinaryUpdate() (err error) {
 			return nil
 		}
 
-		body, _ = io.ReadAll(resp.Body)
-
-		err = json.Unmarshal(body, &git)
+		git, err = decodeGitHubReleases(resp.Body)
 		if err != nil {
 			return err
 		}

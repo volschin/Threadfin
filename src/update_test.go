@@ -1,7 +1,10 @@
 package src
 
 import (
+	"errors"
+	"io"
 	"math"
+	"strings"
 	"testing"
 	"time"
 )
@@ -100,5 +103,33 @@ func TestWindowsUpdateReadinessBudgetUsesDefaultProviderTimeoutForNaN(t *testing
 
 	if got, want := windowsUpdateReadinessBudget(settings), 2*time.Minute+30*time.Second; got != want {
 		t.Fatalf("Windows update readiness budget = %v, want %v", got, want)
+	}
+}
+
+var errGitHubRead = errors.New("GitHub response read failed")
+var errGitHubClose = errors.New("GitHub response close failed")
+
+type githubBody struct {
+	io.Reader
+	closeErr error
+}
+
+func (b githubBody) Close() error { return b.closeErr }
+
+type githubReadFailure struct{}
+
+func (githubReadFailure) Read([]byte) (int, error) { return 0, errGitHubRead }
+
+func TestDecodeGitHubReleasesClosesAndJoinsErrors(t *testing.T) {
+	body := githubBody{Reader: githubReadFailure{}, closeErr: errGitHubClose}
+	_, err := decodeGitHubReleases(body)
+	if !errors.Is(err, errGitHubRead) || !errors.Is(err, errGitHubClose) {
+		t.Fatalf("error=%v", err)
+	}
+}
+
+func TestDecodeGitHubReleasesRejectsTrailingValue(t *testing.T) {
+	if _, err := decodeGitHubReleases(githubBody{Reader: strings.NewReader(`[] [])`)}); err == nil {
+		t.Fatal("expected trailing-value error")
 	}
 }
