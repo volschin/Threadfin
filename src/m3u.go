@@ -341,10 +341,7 @@ func buildM3U(groups []string) (m3u string, err error) {
 
 		// Determine allowed active count = expected - deactivated
 		if expected, ok := expectedGroupCount[group]; ok {
-			allowed := expected - deactivatedPerGroup[group]
-			if allowed < 0 {
-				allowed = 0
-			}
+			allowed := max(expected-deactivatedPerGroup[group], 0)
 			if emittedGroupCount[group] >= allowed {
 				continue
 			}
