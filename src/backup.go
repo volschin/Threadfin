@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	internalarchive "threadfin/src/internal/archive"
 )
 
 func ThreadfinAutoBackup() (err error) {
@@ -113,7 +115,7 @@ func ThreadfinRestore(archive string) (newWebURL string, err error) {
 	}
 
 	// Zip Archiv in tmp entpacken
-	err = extractZIP(archive, tmpRestore)
+	err = internalarchive.ExtractZIP(archive, tmpRestore)
 	if err != nil {
 		return
 	}
@@ -132,7 +134,7 @@ func ThreadfinRestore(archive string) (newWebURL string, err error) {
 	}
 
 	// Zip Archiv in den Config Ordner entpacken
-	err = extractZIP(archive, System.Folder.Config)
+	err = internalarchive.ExtractZIP(archive, System.Folder.Config)
 	if err != nil {
 		return
 	}
