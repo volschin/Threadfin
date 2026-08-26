@@ -90,6 +90,35 @@
     "sortChannelNumbers": "Sort Channels"
   },
   "filter": {
+    "unnamed": "Unnamed filter",
+    "addGroup": "Add Group Filter",
+    "counts": {
+      "imported": "Imported",
+      "selected": "Selected",
+      "excluded": "Excluded"
+    },
+    "empty": {
+      "title": "No filters yet",
+      "description": "Create a Group Filter to select imported streams before Mapping."
+    },
+    "advanced": {
+      "title": "Advanced filtering",
+      "description": "Use a Custom Filter when a group rule is not specific enough.",
+      "chooseType": "Choose filter type",
+      "addCustom": "Add Custom Filter"
+    },
+    "example": "Example: select the Sports group, include FHD,UHD, and exclude ES,IT.",
+    "validation": {
+      "nameRequired": "Enter a filter name.",
+      "ruleRequired": "Choose or enter a filter rule."
+    },
+    "feedback": {
+      "saving": "Saving filter…",
+      "deleting": "Deleting filter…",
+      "saved": "Filter saved.",
+      "deleted": "Filter deleted.",
+      "error": "Filter request failed."
+    },
     "table": {
       "startingNumber": "Start Ch.",
       "name": "Filter Name",

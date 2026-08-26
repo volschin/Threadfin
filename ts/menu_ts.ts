@@ -827,6 +827,11 @@ class ShowContent extends Content {
       showElement("loading", false)
       return
     }
+    if (menuKey == "filter") {
+      renderFilterManagementPage(doc)
+      showElement("loading", false)
+      return
+    }
     var h = this.createHeadline(headline)
     var existingHeader = popup_header.querySelector('h3')
     if(existingHeader) {
@@ -2065,6 +2070,9 @@ function openPopUp(dataType, element) {
   }
 
   enhanceSourcePopup(dataType)
+  if (typeof enhanceFilterPopup == "function") {
+    enhanceFilterPopup(dataType)
+  }
   showPopUpElement('popup-custom');
 }
 
@@ -2451,13 +2459,14 @@ function changeChannelLogo(epgMapId: string) {
 
 function savePopupData(dataType: string, id: string, remove: Boolean, option: number) {
 
-  if (remove != true && option == 0 && !validateSourcePopup(dataType)) {
+  var filterPopupValid = typeof validateFilterPopup != "function" || validateFilterPopup(dataType)
+  if (remove != true && option == 0 && (!validateSourcePopup(dataType) || !filterPopupValid)) {
     return
   }
 
-  showElement("loading", true)
-
   if (dataType == "mapping") {
+
+    showElement("loading", true)
 
 
     var data = new Object()
@@ -2650,9 +2659,14 @@ function savePopupData(dataType: string, id: string, remove: Boolean, option: nu
 
   }
 
+  showElement("loading", true)
+
   console.log("SEND TO SERVER");
 
   beginSourceRequest(dataType, id, remove, option)
+  if (typeof beginFilterRequest == "function") {
+    beginFilterRequest(dataType, id, remove)
+  }
   var server: Server = new Server(cmd)
   server.request(data)
 

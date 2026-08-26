@@ -663,8 +663,150 @@
 .tf-app .tf-source-feedback[data-state="error"],
 .tf-app .tf-source-page-status[data-state="error"],
 .tf-app .tf-source-field-error,
-.tf-app .tf-source-form-status[data-state="error"] {
+.tf-app .tf-source-form-status[data-state="error"],
+.tf-app .tf-filter-page-status[data-state="error"],
+.tf-app .tf-filter-field-error,
+.tf-app .tf-filter-form-status[data-state="error"] {
   color: var(--tf-fault-red);
+}
+
+.tf-app .tf-filters {
+  display: grid;
+  gap: 1rem;
+  max-width: 72rem;
+  margin-inline: auto;
+}
+
+.tf-app .tf-filters-header,
+.tf-app .tf-filter-row,
+.tf-app .tf-filter-advanced,
+.tf-app .tf-filter-empty,
+.tf-app .tf-filter-counts {
+  display: grid;
+  gap: 1rem;
+  padding: 1rem;
+  background: var(--tf-console-graphite);
+  border: 1px solid var(--tf-panel-steel);
+  border-radius: 0.5rem;
+}
+
+.tf-app .tf-filters-header {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+}
+
+.tf-app .tf-filters-header h1,
+.tf-app .tf-filter-row h2,
+.tf-app .tf-filter-advanced h2,
+.tf-app .tf-filter-empty h2 {
+  margin: 0;
+}
+
+.tf-app .tf-filters-header p,
+.tf-app .tf-filter-row p,
+.tf-app .tf-filter-advanced p,
+.tf-app .tf-filter-empty p,
+.tf-app .tf-filter-page-status {
+  margin: 0;
+  color: var(--tf-text-muted);
+  line-height: 1.5;
+}
+
+.tf-app .tf-filter-counts {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin: 0;
+}
+
+.tf-app .tf-filter-counts dt {
+  color: var(--tf-text-muted);
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.tf-app .tf-filter-counts dd {
+  margin: 0.25rem 0 0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 1.5rem;
+  font-weight: 700;
+}
+
+.tf-app .tf-filter-list {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.tf-app .tf-filter-row {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+}
+
+.tf-app .tf-filter-row code {
+  display: inline-block;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  color: var(--tf-text);
+}
+
+.tf-app .tf-filter-summary {
+  margin-top: 0.5rem !important;
+}
+
+.tf-app .tf-filter-actions,
+.tf-app .tf-filter-advanced {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.tf-app .tf-filter-advanced {
+  align-items: flex-start;
+}
+
+.tf-app .tf-filter-advanced h2,
+.tf-app .tf-filter-advanced p {
+  flex-basis: 100%;
+}
+
+.tf-app .tf-filter-action {
+  min-height: 2.75rem;
+  padding: 0.5rem 0.75rem;
+  color: var(--tf-signal-black);
+  font: inherit;
+  font-weight: 700;
+  background: var(--tf-cyan);
+  border: 1px solid var(--tf-cyan);
+  border-radius: 0.375rem;
+}
+
+.tf-app .tf-filter-delete-action {
+  color: var(--tf-text);
+  background: transparent;
+  border-color: var(--tf-fault-red);
+}
+
+.tf-app .tf-filter-empty {
+  min-height: 14rem;
+  place-content: center;
+  text-align: center;
+}
+
+.tf-filter-popup .tf-filter-field-help,
+.tf-filter-popup .tf-filter-field-error,
+.tf-filter-popup .tf-filter-rule-summary,
+.tf-filter-popup .tf-filter-form-status {
+  padding: 0.35rem 0;
+  white-space: normal;
+}
+
+.tf-filter-popup .tf-filter-field-help,
+.tf-filter-popup .tf-filter-rule-summary {
+  color: #aebbc3;
+}
+
+.tf-filter-popup .tf-filter-field-error,
+.tf-filter-popup .tf-filter-form-status[data-state="error"] {
+  color: #e26060;
 }
 
 .tf-app .tf-source-page-status,
@@ -808,6 +950,11 @@
   outline-offset: 3px;
 }
 
+.tf-filter-popup :focus-visible {
+  outline: 3px solid var(--tf-cyan);
+  outline-offset: 3px;
+}
+
 @media (max-width: 52rem) {
   .tf-app {
     grid-template-columns: minmax(0, 1fr);
@@ -859,6 +1006,11 @@
     min-inline-size: 44px;
   }
 
+  .tf-filter-popup :is(button, input, select, [role="button"]) {
+    min-height: 44px;
+    min-inline-size: 44px;
+  }
+
   .tf-app #main-content {
     padding: 1rem;
   }
@@ -882,7 +1034,9 @@
   .tf-app .tf-sources-header,
   .tf-app .tf-source-page-status,
   .tf-app .tf-source-mode-note,
-  .tf-app .tf-source-row {
+  .tf-app .tf-source-row,
+  .tf-app .tf-filters-header,
+  .tf-app .tf-filter-row {
     grid-template-columns: minmax(0, 1fr);
     flex-direction: column;
     align-items: stretch;
@@ -893,6 +1047,19 @@
   }
 
   .tf-app .tf-source-actions button {
+    flex: 1 1 auto;
+  }
+
+  .tf-app .tf-filter-counts {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .tf-app .tf-filter-actions,
+  .tf-app .tf-filter-advanced {
+    align-items: stretch;
+  }
+
+  .tf-app .tf-filter-action {
     flex: 1 1 auto;
   }
 

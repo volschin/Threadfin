@@ -67,6 +67,9 @@ class Server {
             if (typeof completeSourceRequest == "function") {
                 completeSourceRequest(data["cmd"], data, response);
             }
+            if (typeof completeFilterRequest == "function") {
+                completeFilterRequest(data["cmd"], data, response);
+            }
             if (data["cmd"] == "saveWizard" && typeof completeConfigurationWizardRequest == "function") {
                 completeConfigurationWizardRequest(response);
             }
@@ -144,6 +147,9 @@ function completeTask5RequestFailure(command, data, message) {
     var response = { status: false, err: message };
     if (typeof completeSourceRequest == "function") {
         completeSourceRequest(command, data, response);
+    }
+    if (typeof completeFilterRequest == "function") {
+        completeFilterRequest(command, data, response);
     }
     if (command == "saveWizard" && typeof completeConfigurationWizardRequest == "function") {
         completeConfigurationWizardRequest(response);

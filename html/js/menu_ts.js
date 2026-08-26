@@ -665,6 +665,11 @@ class ShowContent extends Content {
             showElement("loading", false);
             return;
         }
+        if (menuKey == "filter") {
+            renderFilterManagementPage(doc);
+            showElement("loading", false);
+            return;
+        }
         var h = this.createHeadline(headline);
         var existingHeader = popup_header.querySelector('h3');
         if (existingHeader) {
@@ -1686,6 +1691,9 @@ function openPopUp(dataType, element) {
             break;
     }
     enhanceSourcePopup(dataType);
+    if (typeof enhanceFilterPopup == "function") {
+        enhanceFilterPopup(dataType);
+    }
     showPopUpElement('popup-custom');
 }
 class XMLTVFile {
@@ -1989,11 +1997,12 @@ function changeChannelLogo(epgMapId) {
     }
 }
 function savePopupData(dataType, id, remove, option) {
-    if (remove != true && option == 0 && !validateSourcePopup(dataType)) {
+    var filterPopupValid = typeof validateFilterPopup != "function" || validateFilterPopup(dataType);
+    if (remove != true && option == 0 && (!validateSourcePopup(dataType) || !filterPopupValid)) {
         return;
     }
-    showElement("loading", true);
     if (dataType == "mapping") {
+        showElement("loading", true);
         var data = new Object();
         console.log("Save mapping data");
         cmd = "saveEpgMapping";
@@ -2128,8 +2137,12 @@ function savePopupData(dataType, id, remove, option) {
             return;
         }
     }
+    showElement("loading", true);
     console.log("SEND TO SERVER");
     beginSourceRequest(dataType, id, remove, option);
+    if (typeof beginFilterRequest == "function") {
+        beginFilterRequest(dataType, id, remove);
+    }
     var server = new Server(cmd);
     server.request(data);
     showElement("loading", false);
