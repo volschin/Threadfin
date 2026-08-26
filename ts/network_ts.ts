@@ -103,6 +103,7 @@ class Server {
       switch (data["cmd"]) {
         case "updateLog":
           SERVER["log"] = response["log"]
+          refreshOverviewOperationalState(response)
           if (document.getElementById("content_log")) {
             showLogs(false)
           }

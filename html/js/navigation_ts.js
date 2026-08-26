@@ -120,6 +120,9 @@ function openDestination(destination, addHistory) {
     }
     else {
         showDestinationHost(destination);
+        if (destination == "overview") {
+            renderOverview(SERVER);
+        }
         setCurrentDestination(destination);
         dismissMobileNavigation();
         focusMainContent();
@@ -202,7 +205,7 @@ function focusMainContent() {
     var main = document.getElementById("main-content");
     if (main) {
         window.setTimeout(function () {
-            main.focus();
+            main.focus({ preventScroll: true });
         }, 0);
     }
 }
@@ -213,14 +216,19 @@ function restoreDestinationFromHistory() {
     }
     if (navigationDestinationIsKnown(destination) && navigationDestinationIsVisible(destination)) {
         openDestination(destination, false);
+        return true;
     }
+    return false;
 }
 function restoreInitialDestinationFromHistory() {
     if (initialDestinationRestored || currentDestination !== undefined) {
         return;
     }
     initialDestinationRestored = true;
-    restoreDestinationFromHistory();
+    if (!restoreDestinationFromHistory()) {
+        openDestination("overview", false);
+        window.history.replaceState({ threadfinDestination: "overview" }, "", "#overview");
+    }
 }
 function navigationDestinationIsKnown(destination) {
     return navigationGroups.some(group => group.items.indexOf(destination) != -1);

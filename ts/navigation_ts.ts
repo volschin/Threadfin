@@ -143,6 +143,9 @@ function openDestination(destination: AppDestination, addHistory: boolean): void
     openLegacyMenu(legacyIndex, false)
   } else {
     showDestinationHost(destination)
+    if (destination == "overview") {
+      renderOverview(SERVER)
+    }
     setCurrentDestination(destination)
     dismissMobileNavigation()
     focusMainContent()
@@ -234,19 +237,21 @@ function focusMainContent(): void {
   var main = document.getElementById("main-content") as HTMLElement
   if (main) {
     window.setTimeout(function () {
-      main.focus()
+      main.focus({ preventScroll: true })
     }, 0)
   }
 }
 
-function restoreDestinationFromHistory(): void {
+function restoreDestinationFromHistory(): boolean {
   var destination = window.history.state && window.history.state.threadfinDestination
   if (!destination && window.location.hash.length > 1) {
     destination = window.location.hash.slice(1)
   }
   if (navigationDestinationIsKnown(destination) && navigationDestinationIsVisible(destination)) {
     openDestination(destination, false)
+    return true
   }
+  return false
 }
 
 function restoreInitialDestinationFromHistory(): void {
@@ -254,7 +259,10 @@ function restoreInitialDestinationFromHistory(): void {
     return
   }
   initialDestinationRestored = true
-  restoreDestinationFromHistory()
+  if (!restoreDestinationFromHistory()) {
+    openDestination("overview", false)
+    window.history.replaceState({ threadfinDestination: "overview" }, "", "#overview")
+  }
 }
 
 function navigationDestinationIsKnown(destination: string): destination is AppDestination {
