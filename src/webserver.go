@@ -865,6 +865,15 @@ func Web(w http.ResponseWriter, r *http.Request) {
 }
 
 // API : API request /api/
+func decodeAPIRequest(reader io.Reader) (request APIRequestStruct, err error) {
+	body, err := io.ReadAll(reader)
+	if err != nil {
+		return request, err
+	}
+	err = json.Unmarshal(body, &request)
+	return request, err
+}
+
 func API(w http.ResponseWriter, r *http.Request) {
 
 	/*
@@ -921,6 +930,7 @@ func API(w http.ResponseWriter, r *http.Request) {
 	}
 	var request APIRequestStruct
 	var response APIResponseStruct
+	var err error
 
 	var responseAPIError = func(err error) {
 
@@ -945,17 +955,10 @@ func API(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	b, err := io.ReadAll(r.Body)
+	request, err = decodeAPIRequest(r.Body)
 	defer r.Body.Close()
 	if err != nil {
-		httpStatusError(w, r, 400)
-		return
-
-	}
-
-	err = json.Unmarshal(b, &request)
-	if err != nil {
-		httpStatusError(w, r, 400)
+		httpStatusError(w, r, http.StatusBadRequest)
 		return
 	}
 

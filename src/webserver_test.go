@@ -2,11 +2,13 @@ package src
 
 import (
 	"bytes"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"testing"
 )
 
@@ -71,5 +73,36 @@ func TestImageHandlersPreserveCurrentDeliveryContract(t *testing.T) {
 				t.Fatalf("missing status = %d, want %d", missing.Code, http.StatusNotFound)
 			}
 		})
+	}
+}
+
+type failingJSONReader struct {
+	err error
+}
+
+func (reader failingJSONReader) Read([]byte) (int, error) {
+	return 0, reader.err
+}
+
+func TestDecodeAPIRequestPreservesCurrentJSONSemantics(t *testing.T) {
+	request, err := decodeAPIRequest(strings.NewReader(
+		`{"CMD":"status","username":"benchmark","unknown":"ignored"}`,
+	))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if request.Cmd != "status" || request.Username != "benchmark" {
+		t.Fatalf("decoded request = %#v", request)
+	}
+
+	for _, body := range []string{"", `{"cmd":`, `{"cmd":"status"} trailing`} {
+		if _, err := decodeAPIRequest(strings.NewReader(body)); err == nil {
+			t.Fatalf("decodeAPIRequest(%q) error = nil", body)
+		}
+	}
+
+	readErr := errors.New("request read failed")
+	if _, err := decodeAPIRequest(failingJSONReader{err: readErr}); !errors.Is(err, readErr) {
+		t.Fatalf("decodeAPIRequest() error = %v, want %v", err, readErr)
 	}
 }
