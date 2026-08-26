@@ -30,6 +30,36 @@ type imageFunc struct {
 }
 
 // New : New cahce
+func (c *Cache) cacheImage(src string) (filteredSource string, cached bool) {
+	resp, err := http.Get(src)
+	if err != nil {
+		return "", false
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return "", false
+	}
+
+	filteredSource = strings.Split(src, "?")[0]
+	filename := fmt.Sprintf("%s%s%s", c.path, strToMD5(filteredSource), filepath.Ext(filteredSource))
+	file, err := os.Create(filename)
+	if err != nil {
+		return "", false
+	}
+	defer file.Close()
+
+	if _, err = io.Copy(file, resp.Body); err != nil {
+		return "", false
+	}
+
+	if u, err := url.Parse(filteredSource); err == nil {
+		c.images[fmt.Sprintf("%s%s", strToMD5(filteredSource), filepath.Ext(u.Path))] = c.cacheURL + filename
+	}
+
+	return filteredSource, true
+}
+
 func New(path, cacheURL string, caching bool) (c *Cache, err error) {
 
 	c = &Cache{}
@@ -102,42 +132,10 @@ func New(path, cacheURL string, caching bool) (c *Cache, err error) {
 		c.Lock()
 		defer c.Unlock()
 
-		var filename string
-
 		for _, src := range c.Queue {
-
-			resp, err := http.Get(src)
-			if err != nil {
-				continue
+			if filteredSource, cached := c.cacheImage(src); cached {
+				queue = append(queue, filteredSource)
 			}
-			defer resp.Body.Close()
-
-			if resp.StatusCode != http.StatusOK {
-				continue
-			}
-
-			src_filtered := strings.Split(src, "?")
-			filename = fmt.Sprintf("%s%s%s", c.path, strToMD5(src_filtered[0]), filepath.Ext(src_filtered[0]))
-
-			file, err := os.Create(filename)
-			if err != nil {
-				continue
-			}
-
-			defer file.Close()
-
-			_, err = io.Copy(file, resp.Body)
-			if err != nil {
-				continue
-			}
-
-			u, err := url.Parse(src_filtered[0])
-			if err == nil {
-				c.images[fmt.Sprintf("%s%s", strToMD5(src_filtered[0]), filepath.Ext(u.Path))] = c.cacheURL + filename
-			}
-
-			queue = append(queue, src_filtered[0])
-
 		}
 
 		for _, q := range queue {
@@ -157,18 +155,12 @@ func New(path, cacheURL string, caching bool) (c *Cache, err error) {
 		}
 
 		for _, file := range files {
-
-			switch c.caching {
-
-			case true:
-				if _, ok := c.images[file.Name()]; !ok {
-					os.RemoveAll(c.path + file.Name())
+			if c.caching {
+				if _, ok := c.images[file.Name()]; ok {
+					continue
 				}
-
-			case false:
-				os.RemoveAll(c.path + file.Name())
 			}
-
+			os.RemoveAll(c.path + file.Name())
 		}
 
 	}

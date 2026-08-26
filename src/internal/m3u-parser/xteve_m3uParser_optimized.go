@@ -12,12 +12,10 @@ import (
 
 // Precompiled regex patterns for better performance
 var (
-	parameterRegex    = regexp.MustCompile(`[a-z-A-Z&=]*(".*?")`)
-	channelNameRegex  = regexp.MustCompile(`,([^\n]*|,[^\r]*)`)
-	crlfReplacer      = strings.NewReplacer("\r\n", "\n")
-	quoteReplacer     = strings.NewReplacer(`"`, "")
-	commaReplacer     = strings.NewReplacer(`,`, "")
-	oldM3UReplacer    = strings.NewReplacer(":-1", "", "'", `"`)
+	parameterRegex   = regexp.MustCompile(`[a-z-A-Z&=]*(".*?")`)
+	channelNameRegex = regexp.MustCompile(`,([^\n]*|,[^\r]*)`)
+	quoteReplacer    = strings.NewReplacer(`"`, "")
+	commaReplacer    = strings.NewReplacer(`,`, "")
 )
 
 // MakeInterfaceFromM3UOptimized : Optimized version for large M3U files
@@ -39,7 +37,6 @@ func MakeInterfaceFromM3UOptimized(byteStream []byte) (allChannels []interface{}
 
 	var currentChannel strings.Builder
 	var isInChannel bool
-	var lineCount int
 
 	// Pre-allocate channels slice with estimated capacity
 	estimatedChannels := bytes.Count(byteStream, []byte("#EXTINF"))
@@ -47,7 +44,6 @@ func MakeInterfaceFromM3UOptimized(byteStream []byte) (allChannels []interface{}
 
 	for scanner.Scan() {
 		line := scanner.Text()
-		lineCount++
 
 		// Skip empty lines
 		if len(line) == 0 {
@@ -107,9 +103,13 @@ func parseMetaDataOptimized(channel string) map[string]string {
 	// Use bufio.Scanner for line splitting
 	scanner := bufio.NewScanner(strings.NewReader(channel))
 	lines := make([]string, 0, 3) // Most channels have 2-3 lines
+	extinfLine := ""
 
 	for scanner.Scan() {
 		line := scanner.Text()
+		if strings.HasPrefix(line, "#EXTINF") && extinfLine == "" {
+			extinfLine = line
+		}
 		if len(line) > 0 && !strings.HasPrefix(line, "#") {
 			lines = append(lines, line)
 		}
@@ -121,17 +121,6 @@ func parseMetaDataOptimized(channel string) map[string]string {
 
 	// URL is always the last non-# line
 	stream["url"] = strings.TrimSpace(lines[len(lines)-1])
-
-	// Parse the #EXTINF line (first line in channel string)
-	extinfLine := ""
-	scanner = bufio.NewScanner(strings.NewReader(channel))
-	for scanner.Scan() {
-		line := scanner.Text()
-		if strings.HasPrefix(line, "#EXTINF") {
-			extinfLine = line
-			break
-		}
-	}
 
 	if extinfLine == "" {
 		return nil

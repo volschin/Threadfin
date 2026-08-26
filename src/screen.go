@@ -6,7 +6,6 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 )
 
@@ -54,7 +53,6 @@ func showDebug(str string, level int) {
 	var msg = strings.SplitN(str, ":", 2)
 	var length = len(msg[0])
 	var space string
-	var mutex = sync.RWMutex{}
 
 	if len(msg) == 2 {
 
@@ -67,11 +65,9 @@ func showDebug(str string, level int) {
 
 		printLogOnScreen(logMsg, "debug")
 
-		mutex.Lock()
 		logMsg = strings.Replace(logMsg, " ", "&nbsp;", -1)
 		WebScreenLog.Log = append(WebScreenLog.Log, time.Now().Format("2006-01-02 15:04:05")+" "+logMsg)
 		logCleanUp()
-		mutex.Unlock()
 
 	}
 
@@ -120,14 +116,11 @@ func showWarning(errCode int) {
 
 	var errMsg = getErrMsg(errCode)
 	var logMsg = fmt.Sprintf("[%s] [WARNING] %s", System.Name, errMsg)
-	var mutex = sync.RWMutex{}
 
 	printLogOnScreen(logMsg, "warning")
 
-	mutex.Lock()
 	WebScreenLog.Log = append(WebScreenLog.Log, time.Now().Format("2006-01-02 15:04:05")+" "+logMsg)
 	WebScreenLog.Warnings++
-	mutex.Unlock()
 
 	return
 }
@@ -135,17 +128,13 @@ func showWarning(errCode int) {
 // ShowError : Zeigt die Fehlermeldungen in der Konsole
 func ShowError(err error, errCode int) {
 
-	var mutex = sync.RWMutex{}
-
 	var errMsg = getErrMsg(errCode)
 	var logMsg = fmt.Sprintf("[%s] [ERROR] %s (%s) - EC: %d", System.Name, err, errMsg, errCode)
 
 	printLogOnScreen(logMsg, "error")
 
-	mutex.Lock()
 	WebScreenLog.Log = append(WebScreenLog.Log, time.Now().Format("2006-01-02 15:04:05")+" "+logMsg)
 	WebScreenLog.Errors++
-	mutex.Unlock()
 
 	return
 }

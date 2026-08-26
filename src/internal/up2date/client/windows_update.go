@@ -690,7 +690,7 @@ func restoreKnownGoodCopy(backup, canonical string) (err error) {
 	if err = temporary.Close(); err != nil {
 		return err
 	}
-	if err = os.Remove(canonical); err != nil && !os.IsNotExist(err) {
+	if err = removeFileIfExists(canonical); err != nil {
 		return err
 	}
 	if err = os.Rename(temporaryPath, canonical); err != nil {
