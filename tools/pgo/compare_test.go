@@ -69,6 +69,10 @@ func TestCompareScreen(t *testing.T) {
 			}
 		}, wantFailure: "cpu_improves_3_percent_in_4_pairs"},
 		{name: "stream success", mutate: func(rows []runResult) { rows[0].StreamSuccesses = 98 }, wantFailure: "valid_complete_runs"},
+		{name: "stream success overflow", mutate: func(rows []runResult) {
+			rows[0].StreamAttempts = int(^uint(0) >> 1)
+			rows[0].StreamSuccesses = 0
+		}, wantFailure: "valid_complete_runs"},
 		{name: "binary growth", mutate: func(rows []runResult) {
 			for i := range rows {
 				if rows[i].Variant == "pgo" {
@@ -166,6 +170,131 @@ func TestCompareScreen(t *testing.T) {
 			}
 			if !slices.Contains(got.FailedPredicates, test.wantFailure) {
 				t.Fatalf("failures = %v, want %s", got.FailedPredicates, test.wantFailure)
+			}
+		})
+	}
+}
+
+func TestCompareScreenAllowsExactBoundaries(t *testing.T) {
+	tests := []struct {
+		name   string
+		mutate func([]runResult)
+	}{
+		{name: "99 percent stream success", mutate: func(rows []runResult) {
+			rows[0].StreamAttempts, rows[0].StreamSuccesses = 100, 99
+		}},
+		{name: "256 MiB stream bytes", mutate: func(rows []runResult) { rows[0].StreamBytes = 256 << 20 }},
+		{name: "cpu minus 3 percent in four pairs", mutate: func(rows []runResult) {
+			unchanged := true
+			for i := range rows {
+				if rows[i].Variant == "pgo" {
+					rows[i].ThreadfinCPUSeconds = 97
+					if unchanged {
+						rows[i].ThreadfinCPUSeconds = 100
+						unchanged = false
+					}
+				}
+			}
+		}},
+		{name: "two throughputs plus 3 percent in four pairs", mutate: func(rows []runResult) {
+			unchanged := true
+			for i := range rows {
+				if rows[i].Variant == "pgo" {
+					rows[i].PlaylistEntriesPerSecond = 10_300
+					rows[i].XEPGProgramsPerSecond = 2_060
+					rows[i].StreamBytesPerSecond = 8 << 20
+					if unchanged {
+						rows[i].PlaylistEntriesPerSecond = 10_000
+						rows[i].XEPGProgramsPerSecond = 2_000
+						unchanged = false
+					}
+				}
+			}
+		}},
+		{name: "throughput minus 1 percent", mutate: func(rows []runResult) {
+			for i := range rows {
+				if rows[i].Variant == "pgo" {
+					rows[i].StreamBytesPerSecond = float64(8<<20) * .99
+				}
+			}
+		}},
+		{name: "ttfb plus 2 percent", mutate: func(rows []runResult) {
+			for i := range rows {
+				if rows[i].Variant == "pgo" {
+					rows[i].StreamTTFBP95Milliseconds = 102
+				}
+			}
+		}},
+		{name: "rss plus 2 percent", mutate: func(rows []runResult) {
+			for i := range rows {
+				if rows[i].Variant == "pgo" {
+					rows[i].PeakRSSBytes = 102 << 20
+				}
+			}
+		}},
+		{name: "allocation plus 2 percent", mutate: func(rows []runResult) {
+			for i := range rows {
+				if rows[i].Variant == "pgo" {
+					rows[i].TotalAllocBytes = 1_020_000_000
+				}
+			}
+		}},
+		{name: "mallocs plus 2 percent", mutate: func(rows []runResult) {
+			for i := range rows {
+				if rows[i].Variant == "pgo" {
+					rows[i].Mallocs = 1_020_000
+				}
+			}
+		}},
+		{name: "gc pause plus 2 percent", mutate: func(rows []runResult) {
+			for i := range rows {
+				if rows[i].Variant == "pgo" {
+					rows[i].PauseTotalNanoseconds = 10_200_000
+				}
+			}
+		}},
+		{name: "gc cycles plus 5 percent", mutate: func(rows []runResult) {
+			for i := range rows {
+				if rows[i].Variant == "pgo" {
+					rows[i].NumGC = 105
+				}
+			}
+		}},
+		{name: "binary growth plus 5 percent", mutate: func(rows []runResult) {
+			for i := range rows {
+				if rows[i].Variant == "pgo" {
+					rows[i].BinarySizeBytes = 10_500_000
+				}
+			}
+		}},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			rows := passingSession()
+			test.mutate(rows)
+			if got := screenSession(rows); len(got.FailedPredicates) != 0 {
+				t.Fatalf("failures = %v", got.FailedPredicates)
+			}
+		})
+	}
+}
+
+func TestCompareScreenRejectsNonTenRowSessions(t *testing.T) {
+	tests := []struct {
+		name string
+		rows func() []runResult
+	}{
+		{name: "nine rows", rows: func() []runResult { return passingSession()[:9] }},
+		{name: "eleven rows", rows: func() []runResult {
+			rows := passingSession()
+			return append(rows, baselineResult("off", 1, 1))
+		}},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			got := screenSession(test.rows())
+			if !slices.Contains(got.FailedPredicates, "exactly_five_complete_pairs") || len(got.Metrics) != 0 {
+				t.Fatalf("summary = %#v", got)
 			}
 		})
 	}

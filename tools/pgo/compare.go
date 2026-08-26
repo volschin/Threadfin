@@ -24,6 +24,25 @@ type sessionSummary struct {
 	FailedPredicates []string                 `json:"failed_predicates"`
 }
 
+// percentageComparisonTolerance absorbs only floating-point representation
+// error around exact engineering screen ratios, in percentage points.
+const percentageComparisonTolerance = 1e-9
+
+func atMostPercent(got, limit float64) bool {
+	return got <= limit || math.Abs(got-limit) <= percentageComparisonTolerance
+}
+
+func atLeastPercent(got, limit float64) bool {
+	return got >= limit || math.Abs(got-limit) <= percentageComparisonTolerance
+}
+
+func hasMinimumStreamSuccesses(attempts, successes int) bool {
+	if attempts <= 0 || successes < 0 || successes > attempts {
+		return false
+	}
+	return attempts-successes <= attempts/100
+}
+
 func summarizePairs(off, pgo [5]float64, higherIsBetter bool) (metricSummary, error) {
 	changes := make([]float64, 5)
 	improved := 0
@@ -99,7 +118,7 @@ func screenSession(results []runResult) sessionSummary {
 		commits[result.GitCommit], goVersions[result.GoVersion], goamd64s[result.GOAMD64] = true, true, true
 		playlists[result.PlaylistSHA256], guides[result.GuideSHA256], starts[result.GuideStartUTC] = true, true, true
 		if result.PlaylistEntries != playlistEntryCount || result.XMLTVChannels != xmltvChannelCount || result.XMLTVPrograms != xmltvProgramCount ||
-			result.StreamAttempts == 0 || 100*result.StreamSuccesses < 99*result.StreamAttempts || result.StreamBytes < 256<<20 || result.ProfileStopReason != "signal" {
+			!hasMinimumStreamSuccesses(result.StreamAttempts, result.StreamSuccesses) || result.StreamBytes < 256<<20 || result.ProfileStopReason != "signal" {
 			validRuns = false
 		}
 	}
@@ -156,15 +175,15 @@ func screenSession(results []runResult) sessionSummary {
 	gc := metric("gc_cycles", false, func(r runResult) float64 { return float64(r.NumGC) })
 	size := metric("binary_size", false, func(r runResult) float64 { return float64(r.BinarySizeBytes) })
 
-	if cpu.MedianPercentChange > -3 || cpu.ImprovedPairs < 4 {
+	if !atMostPercent(cpu.MedianPercentChange, -3) || cpu.ImprovedPairs < 4 {
 		fail("cpu_improves_3_percent_in_4_pairs")
 	}
 	qualifying := 0
 	for _, value := range []metricSummary{playlist, xepg, stream} {
-		if value.MedianPercentChange >= 3 && value.ImprovedPairs >= 4 {
+		if atLeastPercent(value.MedianPercentChange, 3) && value.ImprovedPairs >= 4 {
 			qualifying++
 		}
-		if value.MedianPercentChange < -1 {
+		if !atLeastPercent(value.MedianPercentChange, -1) {
 			fail("no_throughput_regression_over_1_percent")
 		}
 	}
@@ -172,14 +191,14 @@ func screenSession(results []runResult) sessionSummary {
 		fail("two_throughputs_improve_3_percent_in_4_pairs")
 	}
 	for name, value := range map[string]metricSummary{"ttfb": ttfb, "rss": rss, "alloc": alloc, "mallocs": mallocs, "pause": pause} {
-		if value.MedianPercentChange > 2 {
+		if !atMostPercent(value.MedianPercentChange, 2) {
 			fail(name + "_regression_at_most_2_percent")
 		}
 	}
-	if gc.MedianPercentChange > 5 {
+	if !atMostPercent(gc.MedianPercentChange, 5) {
 		fail("gc_cycle_regression_at_most_5_percent")
 	}
-	if size.MedianPercentChange > 5 {
+	if !atMostPercent(size.MedianPercentChange, 5) {
 		fail("binary_growth_at_most_5_percent")
 	}
 	slices.Sort(summary.FailedPredicates)
