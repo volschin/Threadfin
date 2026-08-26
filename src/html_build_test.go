@@ -1,6 +1,7 @@
 package src
 
 import (
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"os"
@@ -136,6 +137,42 @@ func TestIndexHTMLProvidesSemanticApplicationShell(t *testing.T) {
 
 	for _, id := range []string{"content", "overview-content", "connections-content", "activity-content"} {
 		findElement(t, doc, "section", "id", id)
+	}
+}
+
+func TestIndexHTMLEmbeddedAssetsMatchSource(t *testing.T) {
+	webUI = make(map[string]interface{})
+	loadHTMLMap()
+
+	for _, name := range []string{"html/index.html", "html/css/app-shell.css"} {
+		t.Run(name, func(t *testing.T) {
+			encoded, ok := webUI[name].(string)
+			if !ok {
+				t.Fatalf("embedded asset %q is missing or is not a string", name)
+			}
+
+			got, err := base64.StdEncoding.DecodeString(encoded)
+			if err != nil {
+				t.Fatalf("decode embedded asset %q: %v", name, err)
+			}
+			want, err := os.ReadFile(filepath.Join("..", name))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if string(got) != string(want) {
+				t.Errorf("embedded asset %q does not match its source file", name)
+			}
+		})
+	}
+}
+
+func TestIndexHTMLMobileTargetsHaveMinimumInlineSize(t *testing.T) {
+	content, err := os.ReadFile(filepath.Join("..", "html", "css", "app-shell.css"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(content), "min-inline-size: 44px;") {
+		t.Error("mobile interactive targets lack a 44px minimum inline size")
 	}
 }
 
