@@ -68,3 +68,52 @@ func BenchmarkCachedImageDelivery(b *testing.B) {
 		})
 	}
 }
+
+var benchmarkAPIRequestResult APIRequestStruct
+
+func benchmarkPaddedJSON(prefix, suffix string, size int) []byte {
+	padding := size - len(prefix) - len(suffix)
+	if padding < 0 {
+		panic("JSON fixture size is smaller than its fixed fields")
+	}
+	result := make([]byte, 0, size)
+	result = append(result, prefix...)
+	result = append(result, bytes.Repeat([]byte{'x'}, padding)...)
+	result = append(result, suffix...)
+	return result
+}
+
+func BenchmarkAPIJSONDecoding(b *testing.B) {
+	cases := []struct {
+		name    string
+		payload []byte
+	}{
+		{name: "Small", payload: []byte(`{"cmd":"status","token":"fixed-token"}`)},
+		{
+			name: "Large_1MiB",
+			payload: benchmarkPaddedJSON(
+				`{"cmd":"update.xepg","username":"benchmark","password":"benchmark","token":"fixed-token","padding":"`,
+				`"}`,
+				1<<20,
+			),
+		},
+	}
+
+	for _, tc := range cases {
+		b.Run(tc.name, func(b *testing.B) {
+			if tc.name == "Large_1MiB" && len(tc.payload) != 1<<20 {
+				b.Fatalf("large fixture size = %d, want %d", len(tc.payload), 1<<20)
+			}
+			reader := bytes.NewReader(tc.payload)
+			b.ReportAllocs()
+			for b.Loop() {
+				reader.Reset(tc.payload)
+				request, err := decodeAPIRequest(reader)
+				if err != nil {
+					b.Fatal(err)
+				}
+				benchmarkAPIRequestResult = request
+			}
+		})
+	}
+}
