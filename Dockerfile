@@ -2,7 +2,7 @@
 # -----------------------------------------------------------------------------
 ARG USE_NVIDIA
 
-FROM golang:1.27-bookworm AS builder
+FROM golang:1.27-trixie AS builder
 
 WORKDIR /app
 
@@ -16,7 +16,7 @@ RUN CGO_ENABLED=0 go build -mod=vendor -ldflags="-s -w" -trimpath -o threadfin t
 # -----------------------------------------------------------------------------
 ARG USE_NVIDIA
 FROM ubuntu:24.04 AS standard
-FROM nvidia/cuda:12.8.2-base-ubuntu24.04 AS nvidia
+FROM nvidia/cuda:13.3.1-base-ubuntu26.04 AS nvidia
 FROM standard AS final
 FROM nvidia AS final-nvidia
 
