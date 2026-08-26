@@ -17,7 +17,6 @@ import (
 	"time"
 
 	"threadfin/src/internal/authentication"
-	"threadfin/src/internal/jsoncompat"
 
 	"github.com/gorilla/websocket"
 )
@@ -889,7 +888,11 @@ func Web(w http.ResponseWriter, r *http.Request) {
 
 // API : API request /api/
 func decodeAPIRequest(reader io.Reader) (request APIRequestStruct, err error) {
-	err = jsoncompat.UnmarshalRead(reader, &request)
+	body, err := io.ReadAll(reader)
+	if err != nil {
+		return request, err
+	}
+	err = json.Unmarshal(body, &request)
 	return request, err
 }
 
