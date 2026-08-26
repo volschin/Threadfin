@@ -45,7 +45,7 @@ func TestStreamRouteContract(t *testing.T) {
 	}
 
 	mux := http.NewServeMux()
-	mux.HandleFunc("/stream/", Stream)
+	registerStreamRoute(mux)
 
 	tests := []struct {
 		name           string

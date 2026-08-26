@@ -21,6 +21,16 @@ import (
 	"github.com/gorilla/websocket"
 )
 
+const (
+	streamRoutePrefix    = "/stream/"
+	streamRoutePattern   = "/stream/{streamID...}"
+	streamRoutePathValue = "streamID"
+)
+
+func registerStreamRoute(mux *http.ServeMux) {
+	mux.HandleFunc(streamRoutePattern, Stream)
+}
+
 // StartWebserver : Startet den Webserver
 func StartWebserver() (err error) {
 	systemMutex.Lock()
@@ -32,7 +42,7 @@ func StartWebserver() (err error) {
 	systemMutex.Unlock()
 
 	http.HandleFunc("/", Index)
-	http.HandleFunc("/stream/", Stream)
+	registerStreamRoute(http.DefaultServeMux)
 	http.HandleFunc("/xmltv/", Threadfin)
 	http.HandleFunc("/m3u/", Threadfin)
 	http.HandleFunc("/data/", WS)
