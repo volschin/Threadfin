@@ -11,8 +11,6 @@ import (
 	"net/url"
 	"runtime"
 	"time"
-
-	"threadfin/src/internal/jsoncompat"
 )
 
 // ClientInfo : Information about the key (NAME OS, ARCH, UUID, KEY)
@@ -59,7 +57,11 @@ func GetVersion() (err error) {
 }
 
 func decodeServerResponse(reader io.Reader) (response ServerResponse, err error) {
-	err = jsoncompat.UnmarshalRead(reader, &response)
+	body, err := io.ReadAll(reader)
+	if err != nil {
+		return response, err
+	}
+	err = json.Unmarshal(body, &response)
 	return response, err
 }
 
