@@ -4,7 +4,7 @@ import (
 	"crypto/rand"
 	"crypto/subtle"
 	"encoding/base64"
-	"fmt"
+	"strconv"
 	"strings"
 
 	"golang.org/x/crypto/argon2"
@@ -28,15 +28,24 @@ func hashPassword(password string) (string, error) {
 }
 
 func serializeArgon2IDHash(salt, key []byte) string {
-	return fmt.Sprintf(
-		"$argon2id$v=%d$m=%d,t=%d,p=%d$%s$%s",
-		argon2.Version,
-		passwordMemory,
-		passwordIterations,
-		passwordParallelism,
-		base64.RawStdEncoding.EncodeToString(salt),
-		base64.RawStdEncoding.EncodeToString(key),
+	encoded := make([]byte, 0,
+		len("$argon2id$v=19$m=19456,t=2,p=1$$")+
+			base64.RawStdEncoding.EncodedLen(len(salt))+
+			base64.RawStdEncoding.EncodedLen(len(key)),
 	)
+	encoded = append(encoded, "$argon2id$v="...)
+	encoded = strconv.AppendInt(encoded, int64(argon2.Version), 10)
+	encoded = append(encoded, "$m="...)
+	encoded = strconv.AppendInt(encoded, int64(passwordMemory), 10)
+	encoded = append(encoded, ",t="...)
+	encoded = strconv.AppendInt(encoded, int64(passwordIterations), 10)
+	encoded = append(encoded, ",p="...)
+	encoded = strconv.AppendInt(encoded, int64(passwordParallelism), 10)
+	encoded = append(encoded, '$')
+	encoded = base64.RawStdEncoding.AppendEncode(encoded, salt)
+	encoded = append(encoded, '$')
+	encoded = base64.RawStdEncoding.AppendEncode(encoded, key)
+	return string(encoded)
 }
 
 func verifyPassword(password, stored string) (matches bool, legacy bool) {
