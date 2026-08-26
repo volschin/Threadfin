@@ -219,7 +219,7 @@ function createOverviewEndpointsPanel(endpoints: OverviewEndpointState[]): HTMLE
   return panel
 }
 
-function bindOverviewCopyAction(button: HTMLButtonElement, value: string, label: string): void {
+function bindOverviewCopyAction(button: HTMLButtonElement, value: string, label: string, statusID: string = "overview-copy-status"): void {
   if (typeof ClipboardJS != "undefined") {
     var helper = new ClipboardJS(button, {
       text: function () { return value },
@@ -228,32 +228,32 @@ function bindOverviewCopyAction(button: HTMLButtonElement, value: string, label:
       if (event && event.clearSelection) {
         event.clearSelection()
       }
-      announceOverviewCopyStatus(label + " copied.")
+      announceOverviewCopyStatus(label + " copied.", statusID)
     })
     helper.on("error", function () {
-      copyOverviewWithFallback(value, label)
+      copyOverviewWithFallback(value, label, statusID)
     })
     return
   }
 
   button.addEventListener("click", function () {
-    copyOverviewWithFallback(value, label)
+    copyOverviewWithFallback(value, label, statusID)
   })
 }
 
-function copyOverviewWithFallback(value: string, label: string): void {
+function copyOverviewWithFallback(value: string, label: string, statusID: string = "overview-copy-status"): void {
   if (navigator.clipboard && navigator.clipboard.writeText) {
     navigator.clipboard.writeText(value).then(function () {
-      announceOverviewCopyStatus(label + " copied.")
+      announceOverviewCopyStatus(label + " copied.", statusID)
     }).catch(function () {
-      copyOverviewWithSelection(value, label)
+      copyOverviewWithSelection(value, label, statusID)
     })
     return
   }
-  copyOverviewWithSelection(value, label)
+  copyOverviewWithSelection(value, label, statusID)
 }
 
-function copyOverviewWithSelection(value: string, label: string): void {
+function copyOverviewWithSelection(value: string, label: string, statusID: string = "overview-copy-status"): void {
   var temporary = document.createElement("textarea")
   temporary.value = value
   temporary.setAttribute("readonly", "")
@@ -268,11 +268,11 @@ function copyOverviewWithSelection(value: string, label: string): void {
     copied = false
   }
   document.body.removeChild(temporary)
-  announceOverviewCopyStatus(copied ? label + " copied." : "Copy failed. Select and copy the endpoint manually.")
+  announceOverviewCopyStatus(copied ? label + " copied." : "Copy failed. Select and copy the endpoint manually.", statusID)
 }
 
-function announceOverviewCopyStatus(message: string): void {
-  var status = document.getElementById("overview-copy-status")
+function announceOverviewCopyStatus(message: string, statusID: string = "overview-copy-status"): void {
+  var status = document.getElementById(statusID)
   if (status) {
     status.textContent = message
   }

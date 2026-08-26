@@ -372,6 +372,141 @@
   color: var(--tf-on-air-green);
 }
 
+.tf-app .tf-connections,
+.tf-app .tf-activity {
+  display: grid;
+  gap: 1rem;
+  max-width: 96rem;
+  margin-inline: auto;
+  letter-spacing: normal;
+}
+
+.tf-app .tf-operations-header h1,
+.tf-app .tf-operations-panel h2,
+.tf-app .tf-connection-endpoint h3,
+.tf-app .tf-activity-capacity h2 {
+  margin: 0;
+  letter-spacing: normal;
+}
+
+.tf-app .tf-operations-header h1 {
+  font-size: clamp(1.75rem, 3vw, 2.4rem);
+}
+
+.tf-app .tf-operations-header p,
+.tf-app .tf-operations-panel p,
+.tf-app .tf-connection-endpoint p,
+.tf-app .tf-activity-capacity p {
+  margin: 0;
+  color: var(--tf-text-muted);
+  line-height: 1.5;
+  letter-spacing: normal;
+}
+
+.tf-app .tf-operations-panel,
+.tf-app .tf-activity-capacity > div,
+.tf-app .tf-activity-tables {
+  min-width: 0;
+  padding: 1rem;
+  background: var(--tf-console-graphite);
+  border: 1px solid var(--tf-panel-steel);
+  border-radius: 0.5rem;
+}
+
+.tf-app .tf-operations-panel {
+  display: grid;
+  gap: 1rem;
+}
+
+.tf-app .tf-connections-endpoints {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.75rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.tf-app .tf-connection-endpoint {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 1rem;
+  background: var(--tf-panel-steel);
+  border-left: 0.25rem solid var(--tf-on-air-green);
+  border-radius: 0.375rem;
+}
+
+.tf-app .tf-connection-endpoint[data-available="false"] {
+  border-left-color: var(--tf-warning-amber);
+}
+
+.tf-app .tf-endpoint-value {
+  display: block;
+  min-width: 0;
+  color: var(--tf-text);
+  overflow-wrap: anywhere;
+}
+
+.tf-app .tf-endpoint-unavailable {
+  color: var(--tf-warning-amber);
+}
+
+.tf-app .tf-client-notes details {
+  padding: 0.75rem;
+  background: var(--tf-panel-steel);
+  border-radius: 0.375rem;
+}
+
+.tf-app .tf-client-notes summary {
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.tf-app .tf-client-notes details p {
+  padding-top: 0.75rem;
+}
+
+.tf-app .tf-activity-capacity {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.tf-app .tf-activity-capacity > div {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.tf-app .tf-activity-capacity h2,
+.tf-app .tf-operations-panel h2 {
+  font-size: 1.15rem;
+}
+
+.tf-app .tf-activity-capacity :is(#playlist-connection-information, #client-connection-information) {
+  color: var(--tf-text);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 1.1rem;
+  font-weight: 700;
+}
+
+.tf-app .tf-activity-tables #myStreamsBox {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.tf-app .tf-activity-table-scroll {
+  min-width: 0;
+  overflow-x: auto;
+}
+
+.tf-app .tf-activity-table-scroll table {
+  min-width: 32rem;
+  margin: 0;
+}
+
 .tf-app :focus-visible {
   outline: 3px solid var(--tf-cyan);
   outline-offset: 3px;
@@ -427,7 +562,10 @@
   }
 
   .tf-app .tf-signal-path,
-  .tf-app .tf-overview-panels {
+  .tf-app .tf-overview-panels,
+  .tf-app .tf-connections-endpoints,
+  .tf-app .tf-activity-capacity,
+  .tf-app .tf-activity-tables #myStreamsBox {
     grid-template-columns: minmax(0, 1fr);
   }
 

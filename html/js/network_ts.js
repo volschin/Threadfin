@@ -72,29 +72,9 @@ class Server {
                 case "updateLog":
                     mergeUpdateLogResponse(response);
                     refreshOverviewOperationalState(SERVER);
-                    var updateClientInfo = overviewRecord(SERVER["clientInfo"]);
+                    refreshActivityOperationalState(SERVER);
                     if (document.getElementById("content_log")) {
                         showLogs(false);
-                    }
-                    if (document.getElementById("playlist-connection-information")) {
-                        let activeClass = "text-primary";
-                        if (updateClientInfo["activePlaylist"] / updateClientInfo["totalPlaylist"] >= 0.6 && updateClientInfo["activePlaylist"] / updateClientInfo["totalPlaylist"] < 0.8) {
-                            activeClass = "text-warning";
-                        }
-                        else if (updateClientInfo["activePlaylist"] / updateClientInfo["totalPlaylist"] >= 0.8) {
-                            activeClass = "text-danger";
-                        }
-                        document.getElementById("playlist-connection-information").innerHTML = "Playlist Connections: <span class='" + activeClass + "'>" + updateClientInfo["activePlaylist"] + " / " + updateClientInfo["totalPlaylist"] + "</span>";
-                    }
-                    if (document.getElementById("client-connection-information")) {
-                        let activeClass = "text-primary";
-                        if (updateClientInfo["activeClients"] / updateClientInfo["totalClients"] >= 0.6 && updateClientInfo["activeClients"] / updateClientInfo["totalClients"] < 0.8) {
-                            activeClass = "text-warning";
-                        }
-                        else if (updateClientInfo["activeClients"] / updateClientInfo["totalClients"] >= 0.8) {
-                            activeClass = "text-danger";
-                        }
-                        document.getElementById("client-connection-information").innerHTML = "Client Connections: <span class='" + activeClass + "'>" + updateClientInfo["activeClients"] + " / " + updateClientInfo["totalClients"] + "</span>";
                     }
                     return;
                     break;

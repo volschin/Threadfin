@@ -89,7 +89,19 @@ function renderNavigation(): void {
   })
 
   renderLegacyMenuAdapters(navigationElement)
+  bindServerInformationCompatibilityLink()
   updateNavigationCurrentPage()
+}
+
+function bindServerInformationCompatibilityLink(): void {
+  var link = document.getElementById("server-information-link")
+  if (!link || link.getAttribute("data-navigation-bound") == "true") {
+    return
+  }
+  link.setAttribute("data-navigation-bound", "true")
+  link.addEventListener("click", function () {
+    openDestination("connections", true)
+  })
 }
 
 function initializeLegacyMenuItems(): void {
@@ -145,6 +157,10 @@ function openDestination(destination: AppDestination, addHistory: boolean): void
     showDestinationHost(destination)
     if (destination == "overview") {
       renderOverview(SERVER)
+    } else if (destination == "connections") {
+      renderConnections(SERVER)
+    } else if (destination == "activity") {
+      renderActivity(SERVER)
     }
     setCurrentDestination(destination)
     dismissMobileNavigation()
@@ -190,10 +206,6 @@ function showDestinationHost(destination: AppDestination | "content"): void {
       host.hidden = key != destination
     }
   })
-
-  if (destination == "activity") {
-    showPreview(true)
-  }
 }
 
 function setCurrentDestination(destination: AppDestination): void {

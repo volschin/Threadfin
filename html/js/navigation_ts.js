@@ -71,7 +71,18 @@ function renderNavigation() {
         navigationElement.appendChild(groupElement);
     });
     renderLegacyMenuAdapters(navigationElement);
+    bindServerInformationCompatibilityLink();
     updateNavigationCurrentPage();
+}
+function bindServerInformationCompatibilityLink() {
+    var link = document.getElementById("server-information-link");
+    if (!link || link.getAttribute("data-navigation-bound") == "true") {
+        return;
+    }
+    link.setAttribute("data-navigation-bound", "true");
+    link.addEventListener("click", function () {
+        openDestination("connections", true);
+    });
 }
 function initializeLegacyMenuItems() {
     menuItems.forEach(item => item.initializeTableHeader());
@@ -123,6 +134,12 @@ function openDestination(destination, addHistory) {
         if (destination == "overview") {
             renderOverview(SERVER);
         }
+        else if (destination == "connections") {
+            renderConnections(SERVER);
+        }
+        else if (destination == "activity") {
+            renderActivity(SERVER);
+        }
         setCurrentDestination(destination);
         dismissMobileNavigation();
         focusMainContent();
@@ -162,9 +179,6 @@ function showDestinationHost(destination) {
             host.hidden = key != destination;
         }
     });
-    if (destination == "activity") {
-        showPreview(true);
-    }
 }
 function setCurrentDestination(destination) {
     currentDestination = destination;

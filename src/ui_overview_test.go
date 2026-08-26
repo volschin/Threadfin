@@ -605,7 +605,7 @@ const context = {
   navigator: { clipboard: { writeText() { return Promise.resolve(); } } },
   ClipboardJS: TestClipboard,
   WebSocket: TestWebSocket,
-  SERVER: JSON.parse(fs.readFileSync(process.argv[6], "utf8")),
+  SERVER: JSON.parse(fs.readFileSync(process.argv[8], "utf8")),
   SERVER_CONNECTION: false,
   WS_AVAILABLE: false,
   UNDO: {},
@@ -627,7 +627,7 @@ context.window.history = {
 };
 context.location = context.window.location;
 vm.createContext(context);
-for (let index = 2; index <= 5; index++) {
+for (let index = 2; index <= 7; index++) {
   vm.runInContext(fs.readFileSync(process.argv[index], "utf8"), context);
 }
 
@@ -680,6 +680,8 @@ process.stdout.write(JSON.stringify(result));
 		"node", scriptPath,
 		filepath.Join("..", "html", "js", "app_state_ts.js"),
 		filepath.Join("..", "html", "js", "overview_ts.js"),
+		filepath.Join("..", "html", "js", "connections_ts.js"),
+		filepath.Join("..", "html", "js", "activity_ts.js"),
 		filepath.Join("..", "html", "js", "navigation_ts.js"),
 		filepath.Join("..", "html", "js", "network_ts.js"),
 		fixturePath,

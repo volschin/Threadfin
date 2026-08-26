@@ -189,7 +189,7 @@ function createOverviewEndpointsPanel(endpoints) {
     panel.appendChild(list);
     return panel;
 }
-function bindOverviewCopyAction(button, value, label) {
+function bindOverviewCopyAction(button, value, label, statusID = "overview-copy-status") {
     if (typeof ClipboardJS != "undefined") {
         var helper = new ClipboardJS(button, {
             text: function () { return value; },
@@ -198,29 +198,29 @@ function bindOverviewCopyAction(button, value, label) {
             if (event && event.clearSelection) {
                 event.clearSelection();
             }
-            announceOverviewCopyStatus(label + " copied.");
+            announceOverviewCopyStatus(label + " copied.", statusID);
         });
         helper.on("error", function () {
-            copyOverviewWithFallback(value, label);
+            copyOverviewWithFallback(value, label, statusID);
         });
         return;
     }
     button.addEventListener("click", function () {
-        copyOverviewWithFallback(value, label);
+        copyOverviewWithFallback(value, label, statusID);
     });
 }
-function copyOverviewWithFallback(value, label) {
+function copyOverviewWithFallback(value, label, statusID = "overview-copy-status") {
     if (navigator.clipboard && navigator.clipboard.writeText) {
         navigator.clipboard.writeText(value).then(function () {
-            announceOverviewCopyStatus(label + " copied.");
+            announceOverviewCopyStatus(label + " copied.", statusID);
         }).catch(function () {
-            copyOverviewWithSelection(value, label);
+            copyOverviewWithSelection(value, label, statusID);
         });
         return;
     }
-    copyOverviewWithSelection(value, label);
+    copyOverviewWithSelection(value, label, statusID);
 }
-function copyOverviewWithSelection(value, label) {
+function copyOverviewWithSelection(value, label, statusID = "overview-copy-status") {
     var temporary = document.createElement("textarea");
     temporary.value = value;
     temporary.setAttribute("readonly", "");
@@ -236,10 +236,10 @@ function copyOverviewWithSelection(value, label) {
         copied = false;
     }
     document.body.removeChild(temporary);
-    announceOverviewCopyStatus(copied ? label + " copied." : "Copy failed. Select and copy the endpoint manually.");
+    announceOverviewCopyStatus(copied ? label + " copied." : "Copy failed. Select and copy the endpoint manually.", statusID);
 }
-function announceOverviewCopyStatus(message) {
-    var status = document.getElementById("overview-copy-status");
+function announceOverviewCopyStatus(message, statusID = "overview-copy-status") {
+    var status = document.getElementById(statusID);
     if (status) {
         status.textContent = message;
     }
