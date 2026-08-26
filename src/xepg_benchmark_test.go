@@ -39,6 +39,7 @@ func setupXMLTVBenchmark(b *testing.B, channelCount, programCount int) {
 	}
 
 	System = SystemStruct{}
+	System.Flag.Info = true
 	System.Name = "Threadfin"
 	System.Version = "benchmark"
 	System.Branch = "main"
