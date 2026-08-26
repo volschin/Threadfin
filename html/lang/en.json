@@ -339,6 +339,30 @@
     }
   },
   "mapping": {
+    "workspace": {
+      "views": {
+        "attention": "Needs attention",
+        "active": "Active",
+        "inactive": "Inactive"
+      },
+      "reasons": {
+        "missing": "Missing EPG assignment",
+        "invalid": "Invalid EPG assignment",
+        "hidden": "Hidden from outputs",
+        "inactive": "Inactive"
+      },
+      "actions": {
+        "apply": "Apply to draft",
+        "save": "Save mapping",
+        "discard": "Discard draft",
+        "stay": "Stay"
+      },
+      "feedback": {
+        "saving": "Saving mapping and rebuilding outputs",
+        "rebuilt": "Mapping saved; outputs rebuilt",
+        "queued": "Mapping saved; output rebuild requested"
+      }
+    },
     "table": {
       "chNo": "Ch. No.",
       "logo": "Logo",

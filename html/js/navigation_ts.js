@@ -31,6 +31,7 @@ var legacyDestinationByMenuIndex = {
 };
 var currentDestination;
 var initialDestinationRestored = false;
+var navigationGuardBypass = false;
 function renderNavigation() {
     var navigation = document.getElementById("main-menu");
     if (!navigation) {
@@ -62,7 +63,7 @@ function renderNavigation() {
             button.setAttribute("data-destination", destination);
             button.textContent = navigationDestinationLabel(destination);
             button.addEventListener("click", function () {
-                openDestination(destination, true);
+                openDestination(destination, true, button);
             });
             listItem.appendChild(button);
             list.appendChild(listItem);
@@ -81,7 +82,7 @@ function bindServerInformationCompatibilityLink() {
     }
     link.setAttribute("data-navigation-bound", "true");
     link.addEventListener("click", function () {
-        openDestination("connections", true);
+        openDestination("connections", true, link);
     });
 }
 function initializeLegacyMenuItems() {
@@ -98,7 +99,7 @@ function renderLegacyMenuAdapters(navigation) {
         adapter.id = key;
         adapter.setAttribute("data-legacy-menu-index", key);
         adapter.addEventListener("click", function () {
-            openLegacyMenu(index);
+            openLegacyMenu(index, true, adapter);
         });
         adapters.appendChild(adapter);
     });
@@ -124,10 +125,19 @@ function navigationDestinationLabel(destination) {
             return menuItems[index].value;
     }
 }
-function openDestination(destination, addHistory) {
+function openDestination(destination, addHistory, invoker) {
+    if (guardMappingDestination(destination, function () { openDestination(destination, addHistory, invoker); }, invoker)) {
+        return;
+    }
     var legacyIndex = legacyMenuIndexByDestination[destination];
     if (legacyIndex !== undefined) {
-        openLegacyMenu(legacyIndex, false);
+        navigationGuardBypass = true;
+        try {
+            openLegacyMenu(legacyIndex, false);
+        }
+        finally {
+            navigationGuardBypass = false;
+        }
     }
     else {
         showDestinationHost(destination);
@@ -149,10 +159,13 @@ function openDestination(destination, addHistory) {
     }
 }
 // This is the only adapter for numeric destinations sent by the backend.
-function openLegacyMenu(index, replaceHistory = true) {
+function openLegacyMenu(index, replaceHistory = true, invoker) {
     var destination = legacyDestinationByMenuIndex[index];
     if (!destination) {
         console.warn("Ignoring unknown legacy menu index", index);
+        return;
+    }
+    if (guardMappingDestination(destination, function () { openLegacyMenu(index, replaceHistory, invoker); }, invoker)) {
         return;
     }
     showDestinationHost("content");
@@ -165,6 +178,23 @@ function openLegacyMenu(index, replaceHistory = true) {
     if (replaceHistory) {
         window.history.replaceState({ threadfinDestination: destination }, "", "#" + destination);
     }
+}
+function guardMappingDestination(destination, continuation, invoker) {
+    if (navigationGuardBypass || currentDestination != "mapping" || destination == "mapping" ||
+        typeof mappingHasDirtyDraft != "function" || !mappingHasDirtyDraft() ||
+        typeof mappingRequestNavigation != "function") {
+        return false;
+    }
+    mappingRequestNavigation(function () {
+        navigationGuardBypass = true;
+        try {
+            continuation();
+        }
+        finally {
+            navigationGuardBypass = false;
+        }
+    }, invoker);
+    return true;
 }
 function showDestinationHost(destination) {
     var hostByDestination = {
@@ -229,6 +259,22 @@ function restoreDestinationFromHistory() {
         destination = window.location.hash.slice(1);
     }
     if (navigationDestinationIsKnown(destination) && navigationDestinationIsVisible(destination)) {
+        if (currentDestination == "mapping" && destination != "mapping" &&
+            typeof mappingHasDirtyDraft == "function" && mappingHasDirtyDraft() &&
+            typeof mappingRequestNavigation == "function") {
+            window.history.replaceState({ threadfinDestination: "mapping" }, "", "#mapping");
+            mappingRequestNavigation(function () {
+                navigationGuardBypass = true;
+                try {
+                    openDestination(destination, false);
+                    window.history.replaceState({ threadfinDestination: destination }, "", "#" + destination);
+                }
+                finally {
+                    navigationGuardBypass = false;
+                }
+            }, undefined);
+            return true;
+        }
         openDestination(destination, false);
         return true;
     }

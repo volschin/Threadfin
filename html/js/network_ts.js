@@ -7,6 +7,9 @@ class Server {
         if (SERVER_CONNECTION == true) {
             console.warn("WebSocket request skipped because another request is active:", this.cmd);
             completeTask5RequestFailure(this.cmd, data, "{{.sources.requestBusy}}");
+            if (typeof completeMappingRequest == "function") {
+                completeMappingRequest(this.cmd, data, { status: false, err: "{{.sources.requestBusy}}" }, "busy");
+            }
             return;
         }
         SERVER_CONNECTION = true;
@@ -36,6 +39,9 @@ class Server {
             showElement("loading", false);
             console.warn("WebSocket request failed:", command);
             completeTask5RequestFailure(command, data, "{{.sources.transportError}}");
+            if (typeof completeMappingRequest == "function") {
+                completeMappingRequest(command, data, { status: false, err: "{{.sources.transportError}}" }, "transport");
+            }
         };
         ws.onopen = function () {
             WS_AVAILABLE = true;
@@ -73,8 +79,17 @@ class Server {
             if (data["cmd"] == "saveWizard" && typeof completeConfigurationWizardRequest == "function") {
                 completeConfigurationWizardRequest(response);
             }
+            if (typeof completeMappingRequest == "function") {
+                completeMappingRequest(data["cmd"], data, response);
+            }
             var responseIsObject = response && typeof response == "object" && !Array.isArray(response);
             if (!responseIsObject || response["status"] !== true) {
+                if (data["cmd"] == "saveEpgMapping") {
+                    if (responseIsObject && response["xepg"] && response["xepg"]["epgMapping"] && SERVER["xepg"]) {
+                        SERVER["xepg"]["epgMapping"] = response["xepg"]["epgMapping"];
+                    }
+                    return;
+                }
                 if (responseIsObject && response["status"] === false) {
                     alert(response["err"] || "{{.sources.responseInvalid}}");
                     if (response.hasOwnProperty("reload")) {

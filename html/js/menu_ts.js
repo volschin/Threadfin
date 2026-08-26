@@ -670,6 +670,11 @@ class ShowContent extends Content {
             showElement("loading", false);
             return;
         }
+        if (menuKey == "mapping") {
+            renderMappingPage(doc);
+            showElement("loading", false);
+            return;
+        }
         var h = this.createHeadline(headline);
         var existingHeader = popup_header.querySelector('h3');
         if (existingHeader) {

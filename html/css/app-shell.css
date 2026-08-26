@@ -507,6 +507,287 @@
   margin: 0;
 }
 
+.tf-app .tf-mapping {
+  display: grid;
+  gap: 1rem;
+  max-width: 110rem;
+  margin-inline: auto;
+  padding-bottom: 5.5rem;
+  letter-spacing: normal;
+}
+
+.tf-app .tf-mapping-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.tf-app .tf-mapping-header h1,
+.tf-app .tf-mapping-header p,
+.tf-app .tf-mapping-counts,
+.tf-app .tf-mapping-save-bar p {
+  margin: 0;
+  letter-spacing: normal;
+}
+
+.tf-app .tf-mapping-header h1 {
+  font-size: clamp(1.75rem, 3vw, 2.4rem);
+}
+
+.tf-app .tf-mapping-header p,
+.tf-app .tf-mapping-counts {
+  color: var(--tf-text-muted);
+}
+
+.tf-app .tf-mapping-segments,
+.tf-app .tf-mapping-bulk-bar,
+.tf-app .tf-mapping-save-bar,
+.tf-mapping-editor-actions,
+.tf-mapping-guard-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.tf-app .tf-mapping button,
+.tf-mapping-editor button,
+.tf-mapping-guard button {
+  min-height: 2.5rem;
+  padding: 0.5rem 0.75rem;
+  color: var(--tf-text);
+  font: inherit;
+  background: var(--tf-panel-steel);
+  border: 1px solid transparent;
+  border-radius: 0.375rem;
+}
+
+.tf-app .tf-mapping button:hover,
+.tf-mapping-editor button:hover,
+.tf-mapping-guard button:hover {
+  border-color: var(--tf-cyan);
+}
+
+.tf-app .tf-mapping button[aria-pressed="true"],
+.tf-app #mapping-save,
+.tf-mapping-editor #mapping-apply,
+.tf-mapping-guard [data-mapping-guard="save"] {
+  color: var(--tf-signal-black);
+  font-weight: 700;
+  background: var(--tf-cyan);
+}
+
+.tf-app .tf-mapping button:disabled,
+.tf-mapping-editor button:disabled,
+.tf-mapping-guard button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.tf-app .tf-mapping-filters {
+  display: grid;
+  grid-template-columns: minmax(14rem, 2fr) repeat(5, minmax(9rem, 1fr));
+  gap: 0.75rem;
+  padding: 1rem;
+  background: var(--tf-console-graphite);
+  border: 1px solid var(--tf-panel-steel);
+  border-radius: 0.5rem;
+}
+
+.tf-app .tf-mapping-filters label,
+.tf-mapping-editor-field {
+  display: grid;
+  gap: 0.375rem;
+  color: var(--tf-text-muted);
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.tf-app .tf-mapping :is(input, select),
+.tf-mapping-editor :is(input, select) {
+  width: 100%;
+  min-height: 2.5rem;
+  padding: 0.45rem 0.625rem;
+  color: var(--tf-text);
+  background: var(--tf-signal-black);
+  border: 1px solid var(--tf-panel-steel);
+  border-radius: 0.375rem;
+}
+
+.tf-app .tf-mapping :is(input, select):focus,
+.tf-mapping-editor :is(input, select):focus {
+  border-color: var(--tf-cyan);
+}
+
+.tf-app .tf-mapping-bulk-bar,
+.tf-app .tf-mapping-save-bar {
+  position: sticky;
+  z-index: 10;
+  justify-content: flex-end;
+  padding: 0.75rem 1rem;
+  background: var(--tf-console-graphite);
+  border: 1px solid var(--tf-cyan);
+  border-radius: 0.5rem;
+  box-shadow: 0 0.5rem 1.5rem rgb(0 0 0 / 30%);
+}
+
+.tf-app .tf-mapping-bulk-bar {
+  top: 1rem;
+}
+
+.tf-app .tf-mapping-bulk-bar strong,
+.tf-app .tf-mapping-save-bar p {
+  margin-right: auto;
+}
+
+.tf-app .tf-mapping-bulk-bar select {
+  width: auto;
+}
+
+.tf-app .tf-mapping-save-bar {
+  position: fixed;
+  right: clamp(1rem, 3vw, 2rem);
+  bottom: 1rem;
+  left: calc(var(--tf-sidebar-width) + clamp(1rem, 3vw, 2rem));
+}
+
+.tf-app .tf-mapping-table-scroll {
+  min-width: 0;
+  overflow: auto;
+  background: var(--tf-console-graphite);
+  border: 1px solid var(--tf-panel-steel);
+  border-radius: 0.5rem;
+}
+
+.tf-app .tf-mapping-table {
+  width: 100%;
+  min-width: 74rem;
+  border-collapse: collapse;
+}
+
+.tf-app .tf-mapping-table caption {
+  padding: 0.75rem 1rem;
+  color: var(--tf-text-muted);
+  text-align: left;
+}
+
+.tf-app .tf-mapping-table :is(th, td) {
+  padding: 0.625rem 0.75rem;
+  text-align: left;
+  vertical-align: middle;
+  border-top: 1px solid var(--tf-panel-steel);
+}
+
+.tf-app .tf-mapping-table th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--tf-panel-steel);
+}
+
+.tf-app .tf-mapping-table tr:has(input[type="checkbox"]:checked) {
+  background: rgb(39 194 209 / 10%);
+}
+
+.tf-app .tf-mapping-table input[type="checkbox"],
+.tf-mapping-editor-checkbox input[type="checkbox"] {
+  width: 1.25rem;
+  min-height: 1.25rem;
+}
+
+.tf-app .tf-mapping-state {
+  max-width: 18rem;
+  color: var(--tf-warning-amber);
+  font-weight: 700;
+}
+
+.tf-app .tf-mapping-empty {
+  padding: 2rem;
+  text-align: center;
+  background: var(--tf-console-graphite);
+  border: 1px dashed var(--tf-panel-steel);
+  border-radius: 0.5rem;
+}
+
+.tf-app .tf-mapping-editor,
+.tf-mapping-editor,
+.tf-mapping-guard {
+  position: fixed;
+  inset: 0;
+  z-index: 1080;
+  display: flex;
+  justify-content: flex-end;
+  background: rgb(16 20 23 / 78%);
+}
+
+.tf-mapping-editor-panel {
+  width: min(38rem, 100%);
+  height: 100%;
+  padding: 1.25rem;
+  overflow-y: auto;
+  color: var(--tf-text);
+  background: var(--tf-console-graphite);
+  border-left: 1px solid var(--tf-cyan);
+  box-shadow: -1rem 0 2rem rgb(0 0 0 / 35%);
+}
+
+.tf-mapping-editor-panel h2,
+.tf-mapping-guard-panel h2 {
+  margin-top: 0;
+}
+
+.tf-mapping-editor-form,
+.tf-mapping-editor-fields,
+.tf-mapping-editor-advanced {
+  display: grid;
+  gap: 0.9rem;
+}
+
+.tf-mapping-editor-form {
+  margin-top: 1rem;
+}
+
+.tf-mapping-editor-advanced {
+  padding: 0.75rem;
+  background: var(--tf-panel-steel);
+  border-radius: 0.5rem;
+}
+
+.tf-mapping-editor-advanced summary {
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.tf-mapping-editor-checkbox {
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+}
+
+.tf-mapping-editor-actions {
+  justify-content: flex-end;
+}
+
+.tf-mapping-guard {
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+}
+
+.tf-mapping-guard-panel {
+  width: min(32rem, 100%);
+  padding: 1.25rem;
+  color: var(--tf-text);
+  background: var(--tf-console-graphite);
+  border: 1px solid var(--tf-cyan);
+  border-radius: 0.5rem;
+  box-shadow: 0 1rem 3rem rgb(0 0 0 / 45%);
+}
+
+.tf-mapping-guard-actions {
+  justify-content: flex-end;
+}
+
 .tf-app .tf-sources {
   display: grid;
   gap: 1rem;
@@ -950,7 +1231,9 @@
   outline-offset: 3px;
 }
 
-.tf-filter-popup :focus-visible {
+.tf-filter-popup :focus-visible,
+.tf-mapping-editor :focus-visible,
+.tf-mapping-guard :focus-visible {
   outline: 3px solid var(--tf-cyan);
   outline-offset: 3px;
 }
@@ -1011,6 +1294,12 @@
     min-inline-size: 44px;
   }
 
+  .tf-mapping-editor :is(button, input, select, [role="button"]),
+  .tf-mapping-guard :is(button, input, select, [role="button"]) {
+    min-height: 44px;
+    min-inline-size: 44px;
+  }
+
   .tf-app #main-content {
     padding: 1rem;
   }
@@ -1052,6 +1341,29 @@
 
   .tf-app .tf-filter-counts {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  .tf-app .tf-mapping-header,
+  .tf-app .tf-mapping-filters {
+    grid-template-columns: minmax(0, 1fr);
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .tf-app .tf-mapping-segments button,
+  .tf-app .tf-mapping-bulk-bar button {
+    flex: 1 1 auto;
+  }
+
+  .tf-app .tf-mapping-save-bar {
+    right: 1rem;
+    bottom: 1rem;
+    left: 1rem;
+  }
+
+  .tf-mapping-editor-panel {
+    width: 100%;
+    border-left: 0;
   }
 
   .tf-app .tf-filter-actions,

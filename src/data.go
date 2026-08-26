@@ -518,7 +518,7 @@ func saveFilter(request RequestStruct) (settings SettingsStruct, err error) {
 }
 
 // XEPG Mapping speichern
-func saveXEpgMapping(request RequestStruct) (err error) {
+func saveXEpgMapping(request RequestStruct) (result MappingSaveResult, err error) {
 
 	var tmp = Data.XEPG
 
@@ -536,7 +536,7 @@ func saveXEpgMapping(request RequestStruct) (err error) {
 
 	err = saveMapToJSONFile(System.File.XEPG, request.EpgMapping)
 	if err != nil {
-		return err
+		return
 	}
 
 	Data.XEPG.Channels = request.EpgMapping
@@ -550,8 +550,10 @@ func saveXEpgMapping(request RequestStruct) (err error) {
 		}
 		System.ScanInProgress = 0
 		showInfo("XEPG:" + fmt.Sprintf("Ready to use"))
+		result = MappingOutputsRebuilt
 
 	} else {
+		result = MappingOutputRebuildRequested
 
 		// Wenn während des erstellen der Datanbank das Mapping erneut gespeichert wird, wird die Datenbank erst später erneut aktualisiert.
 		go func() {

@@ -140,9 +140,19 @@ type ResponseStruct struct {
 	Wizard              int                    `json:"wizard,omitempty"`
 	XEPG                map[string]interface{} `json:"xepg"`
 	ProbeInfo           ProbeInfoStruct        `json:"probeInfo,omitempty"`
+	MappingSaveResult   MappingSaveResult      `json:"mappingSaveResult,omitempty"`
 
 	Notification map[string]Notification `json:"notification,omitempty"`
 }
+
+// MappingSaveResult is command-specific evidence about output generation after
+// saveEpgMapping has persisted the submitted map.
+type MappingSaveResult string
+
+const (
+	MappingOutputsRebuilt         MappingSaveResult = "outputsRebuilt"
+	MappingOutputRebuildRequested MappingSaveResult = "outputRebuildRequested"
+)
 
 type ProbeInfoStruct struct {
 	Resolution   string `json:"resolution,omitempty"`

@@ -43,6 +43,7 @@ var legacyDestinationByMenuIndex: { [key: number]: AppDestination } = {
 
 var currentDestination: AppDestination
 var initialDestinationRestored: boolean = false
+var navigationGuardBypass: boolean = false
 
 function renderNavigation(): void {
   var navigation = document.getElementById("main-menu")
@@ -79,7 +80,7 @@ function renderNavigation(): void {
       button.setAttribute("data-destination", destination)
       button.textContent = navigationDestinationLabel(destination)
       button.addEventListener("click", function () {
-        openDestination(destination, true)
+        openDestination(destination, true, button)
       })
       listItem.appendChild(button)
       list.appendChild(listItem)
@@ -100,7 +101,7 @@ function bindServerInformationCompatibilityLink(): void {
   }
   link.setAttribute("data-navigation-bound", "true")
   link.addEventListener("click", function () {
-    openDestination("connections", true)
+    openDestination("connections", true, link)
   })
 }
 
@@ -120,7 +121,7 @@ function renderLegacyMenuAdapters(navigation: HTMLElement): void {
     adapter.id = key
     adapter.setAttribute("data-legacy-menu-index", key)
     adapter.addEventListener("click", function () {
-      openLegacyMenu(index)
+      openLegacyMenu(index, true, adapter)
     })
     adapters.appendChild(adapter)
   })
@@ -149,10 +150,18 @@ function navigationDestinationLabel(destination: AppDestination): string {
   }
 }
 
-function openDestination(destination: AppDestination, addHistory: boolean): void {
+function openDestination(destination: AppDestination, addHistory: boolean, invoker?: HTMLElement): void {
+  if (guardMappingDestination(destination, function () { openDestination(destination, addHistory, invoker) }, invoker)) {
+    return
+  }
   var legacyIndex = legacyMenuIndexByDestination[destination]
   if (legacyIndex !== undefined) {
-    openLegacyMenu(legacyIndex, false)
+    navigationGuardBypass = true
+    try {
+      openLegacyMenu(legacyIndex, false)
+    } finally {
+      navigationGuardBypass = false
+    }
   } else {
     showDestinationHost(destination)
     if (destination == "overview") {
@@ -173,10 +182,13 @@ function openDestination(destination: AppDestination, addHistory: boolean): void
 }
 
 // This is the only adapter for numeric destinations sent by the backend.
-function openLegacyMenu(index: number, replaceHistory: boolean = true): void {
+function openLegacyMenu(index: number, replaceHistory: boolean = true, invoker?: HTMLElement): void {
   var destination = legacyDestinationByMenuIndex[index]
   if (!destination) {
     console.warn("Ignoring unknown legacy menu index", index)
+    return
+  }
+  if (guardMappingDestination(destination, function () { openLegacyMenu(index, replaceHistory, invoker) }, invoker)) {
     return
   }
 
@@ -190,6 +202,23 @@ function openLegacyMenu(index: number, replaceHistory: boolean = true): void {
   if (replaceHistory) {
     window.history.replaceState({ threadfinDestination: destination }, "", "#" + destination)
   }
+}
+
+function guardMappingDestination(destination: AppDestination, continuation: () => void, invoker?: HTMLElement): boolean {
+  if (navigationGuardBypass || currentDestination != "mapping" || destination == "mapping" ||
+      typeof mappingHasDirtyDraft != "function" || !mappingHasDirtyDraft() ||
+      typeof mappingRequestNavigation != "function") {
+    return false
+  }
+  mappingRequestNavigation(function () {
+    navigationGuardBypass = true
+    try {
+      continuation()
+    } finally {
+      navigationGuardBypass = false
+    }
+  }, invoker)
+  return true
 }
 
 function showDestinationHost(destination: AppDestination | "content"): void {
@@ -260,6 +289,21 @@ function restoreDestinationFromHistory(): boolean {
     destination = window.location.hash.slice(1)
   }
   if (navigationDestinationIsKnown(destination) && navigationDestinationIsVisible(destination)) {
+    if (currentDestination == "mapping" && destination != "mapping" &&
+        typeof mappingHasDirtyDraft == "function" && mappingHasDirtyDraft() &&
+        typeof mappingRequestNavigation == "function") {
+      window.history.replaceState({ threadfinDestination: "mapping" }, "", "#mapping")
+      mappingRequestNavigation(function () {
+        navigationGuardBypass = true
+        try {
+          openDestination(destination, false)
+          window.history.replaceState({ threadfinDestination: destination }, "", "#" + destination)
+        } finally {
+          navigationGuardBypass = false
+        }
+      }, undefined)
+      return true
+    }
     openDestination(destination, false)
     return true
   }
