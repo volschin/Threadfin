@@ -934,13 +934,3 @@ func run(ctx context.Context, config runConfig) (result runResult, err error) {
 	}
 	return result, nil
 }
-
-// comparison and compareSessions reserve the Task 4 interface so this staged
-// command builds before the comparison implementation is added.
-type comparison struct {
-	Verdict string `json:"verdict"`
-}
-
-func compareSessions(_, _, _ string) (comparison, error) {
-	return comparison{}, errors.New("comparison is not implemented")
-}
