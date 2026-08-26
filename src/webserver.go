@@ -152,8 +152,19 @@ func Index(w http.ResponseWriter, r *http.Request) {
 }
 
 // Stream : Web Server /stream/
+func streamPathValue(r *http.Request) string {
+	value := r.PathValue(streamRoutePathValue)
+	if r.RequestURI == streamRoutePrefix+value {
+		return value
+	}
+
+	// PathValue intentionally decodes the path and excludes the query. Fall
+	// back to the old key for escaped, query-bearing, and absolute-form targets.
+	return strings.Replace(r.RequestURI, streamRoutePrefix, "", 1)
+}
+
 func Stream(w http.ResponseWriter, r *http.Request) {
-	var path = strings.Replace(r.RequestURI, "/stream/", "", 1)
+	var path = streamPathValue(r)
 	streamInfo, err := getStreamInfo(path)
 	if err != nil {
 		ShowError(err, 1203)
