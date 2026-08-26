@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"sort"
 )
 
 var htmlFolder string
@@ -69,10 +70,15 @@ func createMapFromFiles(folder string) (string, error) {
 	}
 
 	var content string
-
+	keys := make([]string, 0, len(blankMap))
 	for key := range blankMap {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+
+	for _, key := range keys {
 		var newKey = key
-		content += `  ` + mapName + `["` + newKey + `"` + `] = "` + blankMap[key].(string) + `"` + "\n"
+		content += "\t" + mapName + `["` + newKey + `"` + `] = "` + blankMap[key].(string) + `"` + "\n"
 	}
 
 	return content, nil
