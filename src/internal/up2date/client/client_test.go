@@ -75,6 +75,27 @@ func TestDecodeServerResponsePreservesCurrentJSONSemantics(t *testing.T) {
 	}
 }
 
+var errUpdaterRead = errors.New("updater read failed")
+var errUpdaterClose = errors.New("updater close failed")
+
+type updaterBody struct {
+	io.Reader
+	closeErr error
+}
+
+func (b updaterBody) Close() error { return b.closeErr }
+
+type updaterReadFailure struct{}
+
+func (updaterReadFailure) Read([]byte) (int, error) { return 0, errUpdaterRead }
+
+func TestDecodeAndCloseServerResponseJoinsErrors(t *testing.T) {
+	_, err := decodeAndCloseServerResponse(updaterBody{Reader: updaterReadFailure{}, closeErr: errUpdaterClose})
+	if !errors.Is(err, errUpdaterRead) || !errors.Is(err, errUpdaterClose) {
+		t.Fatalf("error=%v", err)
+	}
+}
+
 func TestServerRequestUsesCompactRequestJSON(t *testing.T) {
 	var calls atomic.Int32
 	var requestBody []byte

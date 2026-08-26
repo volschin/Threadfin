@@ -11,6 +11,8 @@ import (
 	"net/url"
 	"runtime"
 	"time"
+
+	"threadfin/src/internal/jsoncompat"
 )
 
 // ClientInfo : Information about the key (NAME OS, ARCH, UUID, KEY)
@@ -57,12 +59,13 @@ func GetVersion() (err error) {
 }
 
 func decodeServerResponse(reader io.Reader) (response ServerResponse, err error) {
-	body, err := io.ReadAll(reader)
-	if err != nil {
-		return response, err
-	}
-	err = json.Unmarshal(body, &response)
+	err = jsoncompat.UnmarshalRead(reader, &response)
 	return response, err
+}
+
+func decodeAndCloseServerResponse(body io.ReadCloser) (ServerResponse, error) {
+	response, decodeErr := decodeServerResponse(body)
+	return response, errors.Join(decodeErr, body.Close())
 }
 
 func serverRequest() (err error) {
@@ -103,9 +106,17 @@ func serverRequest() (err error) {
 	resp, err := client.Do(redirect)
 	if err != nil {
 		if resp == nil || resp.StatusCode < 301 || resp.StatusCode > 308 {
+			if resp != nil {
+				return errors.Join(err, resp.Body.Close())
+			}
 			return err
 		}
 		Updater.URL = resp.Header.Get("Location")
+	}
+	if resp != nil {
+		if closeErr := resp.Body.Close(); closeErr != nil {
+			return closeErr
+		}
 	}
 	// ---
 
@@ -119,14 +130,13 @@ func serverRequest() (err error) {
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
-
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("%d: %s (%s)", resp.StatusCode, http.StatusText(resp.StatusCode), Updater.URL)
+		statusErr := fmt.Errorf("%d: %s (%s)", resp.StatusCode, http.StatusText(resp.StatusCode), Updater.URL)
+		return errors.Join(statusErr, resp.Body.Close())
 	}
 
 	Updater.CMD = ""
-	serverResponse, err = decodeServerResponse(resp.Body)
+	serverResponse, err = decodeAndCloseServerResponse(resp.Body)
 	if err != nil {
 		return err
 	}
