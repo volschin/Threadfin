@@ -221,12 +221,12 @@ Mapping is the primary expert workspace and receives the most careful evolution.
 The top of the page contains:
 
 - segmented views: **Needs attention**, **Active**, and **Inactive**;
-- search plus filters for Playlist, group, XMLTV source, and online/offline state;
+- search plus filters for Playlist, group, XMLTV source, activation state, and explicit mapping-attention reason;
 - result and selection counts;
 - a sticky bulk-action bar when rows are selected;
 - a persistent dirty-state bar when changes are staged.
 
-The default view is **Needs attention** when unresolved channels exist; otherwise **Active**. “Red versus green” is supplemented with explicit text such as **Missing EPG assignment**, **Offline**, or **Inactive**. Color is never the only state signal.
+The default view is **Needs attention** when unresolved channels exist; otherwise **Active**. “Red versus green” is supplemented with explicit text such as **Missing EPG assignment**, **Invalid EPG assignment**, **Hidden from outputs**, or **Inactive**. Color is never the only state signal. Threadfin's current response does not contain per-channel reachability, so this screen must not label channels Online or Offline based on activation or filter selection.
 
 Editing one channel opens a side panel on wide screens and a full-screen dialog on small screens. Existing fields and behavior remain: active state, number, name, description, logo, update-name/logo flags, category, group, XMLTV file/channel, backup streams, and probe. Advanced fields are collapsed but searchable.
 
@@ -237,7 +237,7 @@ Save semantics become explicit without changing the backend transaction:
 - the sticky bar reports the number of staged channels;
 - navigating away with staged changes prompts **Save mapping**, **Discard draft**, or **Stay**;
 - while outputs are generated, the UI shows **Saving mapping and rebuilding outputs**;
-- success confirms **Mapping saved; outputs rebuilt** only after the server response succeeds.
+- success confirms **Mapping saved; outputs rebuilt** only when the server response proves the synchronous rebuild completed. If a running scan causes the rebuild to be queued, it instead confirms **Mapping saved; output rebuild requested**.
 
 Bulk edit remains a first-class operation. It must support the fields Threadfin already supports and must not promise auto-matching confidence, server-side pagination, or undo history until backend contracts exist.
 

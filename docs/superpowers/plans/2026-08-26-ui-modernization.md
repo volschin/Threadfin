@@ -180,10 +180,10 @@
 **Steps:**
 
 1. Characterize the current active/inactive data, multi-select, bulk edit, numbering, backup streams, probe, sorting, dummy guide, undo, and `saveEpgMapping` behavior before rendering changes.
-2. Derive explicit Needs attention reasons: Missing EPG assignment, Offline, and Inactive. Default to Needs attention when nonempty, otherwise Active.
-3. Add search and available playlist/group/XMLTV/online filters, result/selection counts, and a sticky bulk toolbar using existing operations.
+2. Derive explicit Needs attention reasons from response-backed state: Missing EPG assignment, Invalid EPG assignment, Hidden from outputs, and Inactive. Default to Needs attention when nonempty, otherwise Active. Do not mislabel activation or filter selection as per-channel Online/Offline state.
+3. Add search and available playlist/group/XMLTV/activation/attention filters, result/selection counts, and a sticky bulk toolbar using existing operations.
 4. Rename editor completion to Apply to draft. Track changed channel IDs locally and expose a persistent Save mapping bar.
-5. Guard navigation and unload while dirty with Save mapping, Discard draft, and Stay. Do not clear draft state until the server confirms `saveEpgMapping`; announce rebuild progress and confirmed completion.
+5. Guard navigation and unload while dirty with Save mapping, Discard draft, and Stay. Do not clear draft state until the server confirms `saveEpgMapping`; distinguish a proven synchronous output rebuild from a rebuild queued behind an active scan.
 6. Preserve every existing field and operation in a responsive side panel/dialog, with advanced fields collapsed but searchable.
 7. Test empty, small, near-480, and characterized very-large datasets; keyboard-only selection/edit/save; tablet operation; full payload/persistence parity.
 
