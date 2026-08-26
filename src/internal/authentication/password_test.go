@@ -182,7 +182,7 @@ func TestLegacyMigrationSaveFailureWithMultipleUsersReturnsPersistenceError(t *t
 	user["_password"] = legacy
 
 	users := data["users"].(map[string]interface{})
-	for i := 0; i < 1024; i++ {
+	for i := range 1024 {
 		otherUser := make(map[string]interface{}, len(user))
 		for key, value := range user {
 			otherUser[key] = value

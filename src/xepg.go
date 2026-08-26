@@ -1465,7 +1465,7 @@ func createDummyProgram(xepgChannel XEPGChannelStruct) (dummyXMLTV XMLTV) {
 		}
 	}
 
-	for d := 0; d < 4; d++ {
+	for d := range 4 {
 
 		var epgStartTime = startTime.Add(time.Hour * time.Duration(d*24))
 
