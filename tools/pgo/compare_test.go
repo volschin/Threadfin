@@ -54,6 +54,30 @@ func passingSession() []runResult {
 	return results
 }
 
+func TestHasMinimumStreamSuccesses(t *testing.T) {
+	maxInt := int(^uint(0) >> 1)
+	tests := []struct {
+		name                string
+		attempts, successes int
+		want                bool
+	}{
+		{name: "exact 99 percent", attempts: 100, successes: 99, want: true},
+		{name: "below 99 percent", attempts: 100, successes: 98, want: false},
+		{name: "zero attempts", attempts: 0, successes: 0, want: false},
+		{name: "negative successes", attempts: 100, successes: -1, want: false},
+		{name: "successes exceed attempts", attempts: 100, successes: 101, want: false},
+		{name: "maximum count exact threshold", attempts: maxInt, successes: maxInt - maxInt/100, want: true},
+		{name: "maximum count below threshold", attempts: maxInt, successes: maxInt - maxInt/100 - 1, want: false},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if got := hasMinimumStreamSuccesses(test.attempts, test.successes); got != test.want {
+				t.Fatalf("hasMinimumStreamSuccesses(%d, %d) = %t, want %t", test.attempts, test.successes, got, test.want)
+			}
+		})
+	}
+}
+
 func TestCompareScreen(t *testing.T) {
 	tests := []struct {
 		name        string
@@ -279,11 +303,30 @@ func TestCompareScreenAllowsExactBoundaries(t *testing.T) {
 	}
 }
 
+func TestPercentageBoundariesAllowFloatingPointRepresentationError(t *testing.T) {
+	tests := []struct {
+		name string
+		pass bool
+	}{
+		{name: "throughput minus 1 percent", pass: atLeastPercent(100*(0.99-1), -1)},
+		{name: "regression plus 2 percent", pass: atMostPercent(100*(1.02-1), 2)},
+		{name: "gc and binary plus 5 percent", pass: atMostPercent(100*(1.05-1), 5)},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if !test.pass {
+				t.Fatal("exact threshold ratio was rejected")
+			}
+		})
+	}
+}
+
 func TestCompareScreenRejectsNonTenRowSessions(t *testing.T) {
 	tests := []struct {
 		name string
 		rows func() []runResult
 	}{
+		{name: "zero rows", rows: func() []runResult { return nil }},
 		{name: "nine rows", rows: func() []runResult { return passingSession()[:9] }},
 		{name: "eleven rows", rows: func() []runResult {
 			rows := passingSession()

@@ -40,7 +40,10 @@ func hasMinimumStreamSuccesses(attempts, successes int) bool {
 	if attempts <= 0 || successes < 0 || successes > attempts {
 		return false
 	}
-	return attempts-successes <= attempts/100
+	// ceil(99% of attempts) is attempts - floor(attempts/100), which
+	// avoids multiplying potentially large run counters.
+	minimumSuccesses := attempts - attempts/100
+	return successes >= minimumSuccesses
 }
 
 func summarizePairs(off, pgo [5]float64, higherIsBetter bool) (metricSummary, error) {
