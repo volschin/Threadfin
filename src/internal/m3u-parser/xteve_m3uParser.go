@@ -110,11 +110,13 @@ func makeInterfaceFromM3UOriginal(byteStream []byte) (allChannels []interface{},
 	if strings.Contains(content, "#EXTM3U") {
 		content = strings.Replace(content, ":-1", "", -1)
 		content = strings.Replace(content, "'", "\"", -1)
-		var channels = strings.Split(content, "#EXTINF")
+		var skipPreamble = true
+		for channel := range strings.SplitSeq(content, "#EXTINF") {
+			if skipPreamble {
+				skipPreamble = false
+				continue
+			}
 
-		channels = append(channels[:0], channels[1:]...)
-
-		for _, channel := range channels {
 			var stream = parseMetaData(channel)
 			if len(stream) > 0 && stream != nil {
 				allChannels = append(allChannels, stream)
