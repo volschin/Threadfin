@@ -119,7 +119,7 @@
 
 **Steps:**
 
-1. Render DVR, M3U, XMLTV, and XMLTV-GZIP endpoint cards from existing response values, marking unavailable endpoints with a reason instead of an empty control.
+1. Render DVR, M3U, and XMLTV endpoint cards from existing response values, marking unavailable endpoints with a reason instead of an empty control. Do not invent the XMLTV-GZIP variant described as conditional in the design: the current response has no such field, so it remains absent until a verified backend contract exists.
 2. Add client-neutral help and collapsed Plex/Jellyfin/Emby notes that never claim the client was configured successfully.
 3. Move the current active/inactive stream presentation and source/client capacity summaries into Activity while keeping compatibility DOM IDs until legacy callers are removed.
 4. Refresh Activity after live responses without replacing focused controls.
@@ -263,4 +263,3 @@
    ```
 
 8. Review the exact diff, verify no fixture secrets or temp paths are tracked, commit atomically by task, push `feat/ui-modernization`, and report the exact remote SHA only after rereading it.
-
