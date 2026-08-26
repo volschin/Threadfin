@@ -85,7 +85,7 @@ function overviewEndpointAvailable(value, endpoint) {
         return false;
     }
     if (endpoint == "dvr") {
-        return !/\s/.test(address) && address.indexOf(":") > 0;
+        return !/\s/.test(address);
     }
     return /^https?:\/\//i.test(address);
 }

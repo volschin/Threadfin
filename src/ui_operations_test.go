@@ -33,6 +33,45 @@ type operationsInteractionResult struct {
 	InactiveRows              []string `json:"inactiveRows"`
 }
 
+type connectionsDVRResult struct {
+	SelectorAvailable bool   `json:"selectorAvailable"`
+	CardAvailable     bool   `json:"cardAvailable"`
+	RenderedValue     string `json:"renderedValue"`
+	CopyAction        bool   `json:"copyAction"`
+	UnavailableText   string `json:"unavailableText"`
+}
+
+func TestConnectionsAcceptsBackendDVRAddressForms(t *testing.T) {
+	tests := []struct {
+		name      string
+		address   string
+		available bool
+	}{
+		{name: "bare hostname", address: "threadfin.example.com", available: true},
+		{name: "bare IPv4", address: "192.0.2.10", available: true},
+		{name: "hostname and port", address: "threadfin.example.com:34400", available: true},
+		{name: "authentication prefix", address: "user:password@threadfin.example.com", available: true},
+		{name: "bracketed IPv6", address: "[2001:db8::10]", available: true},
+		{name: "whitespace", address: "threadfin example.com", available: false},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			result := evaluateConnectionsDVRFixture(t, test.address)
+			if result.SelectorAvailable != test.available || result.CardAvailable != test.available {
+				t.Fatalf("DVR %q availability = selector %t card %t, want %t", test.address, result.SelectorAvailable, result.CardAvailable, test.available)
+			}
+			if test.available {
+				if result.RenderedValue != test.address || !result.CopyAction || result.UnavailableText != "" {
+					t.Fatalf("available DVR %q rendered value %q copy=%t unavailable=%q", test.address, result.RenderedValue, result.CopyAction, result.UnavailableText)
+				}
+			} else if result.RenderedValue != "" || result.CopyAction || !strings.HasPrefix(result.UnavailableText, "Unavailable — ") {
+				t.Fatalf("invalid DVR %q rendered value %q copy=%t unavailable=%q", test.address, result.RenderedValue, result.CopyAction, result.UnavailableText)
+			}
+		})
+	}
+}
+
 func TestConnectionsAndActivityExecuteCurrentOperationsBehavior(t *testing.T) {
 	result := evaluateOperationsInteraction(t)
 
@@ -213,6 +252,113 @@ func evaluateOperationsInteraction(t *testing.T) operationsInteractionResult {
 	}
 	return result
 }
+
+func evaluateConnectionsDVRFixture(t *testing.T, address string) connectionsDVRResult {
+	t.Helper()
+
+	fixture := readyXEPGFixture()
+	fixture["clientInfo"].(map[string]any)["DVR"] = address
+	fixtureJSON, err := json.Marshal(fixture)
+	if err != nil {
+		t.Fatal(err)
+	}
+	temp := t.TempDir()
+	fixturePath := filepath.Join(temp, "fixture.json")
+	if err := os.WriteFile(fixturePath, fixtureJSON, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	scriptPath := filepath.Join(temp, "connections-dvr.js")
+	if err := os.WriteFile(scriptPath, []byte(connectionsDVRNodeScript), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	command := exec.Command(
+		"node", scriptPath,
+		filepath.Join("..", "html", "js", "app_state_ts.js"),
+		filepath.Join("..", "html", "js", "overview_ts.js"),
+		filepath.Join("..", "html", "js", "connections_ts.js"),
+		fixturePath,
+	)
+	output, err := command.CombinedOutput()
+	if err != nil {
+		t.Fatalf("execute generated DVR selector/Connections fixture: %v\n%s", err, output)
+	}
+
+	var result connectionsDVRResult
+	if err := json.Unmarshal(output, &result); err != nil {
+		t.Fatalf("decode DVR selector/Connections result: %v\n%s", err, output)
+	}
+	return result
+}
+
+const connectionsDVRNodeScript = `
+const fs = require("fs");
+const vm = require("vm");
+
+class Element {
+  constructor(tagName, document) {
+    this.tagName = tagName.toUpperCase();
+    this.ownerDocument = document;
+    this.children = [];
+    this.attributes = {};
+    this.listeners = {};
+    this.className = "";
+    this.textContent = "";
+    this._id = "";
+    this.classList = { contains: value => this.className.split(/\s+/).includes(value) };
+  }
+  get id() { return this._id; }
+  set id(value) { this._id = String(value); if (this._id) this.ownerDocument.byID[this._id] = this; }
+  get firstChild() { return this.children.length ? this.children[0] : null; }
+  appendChild(child) { child.parentNode = this; this.children.push(child); return child; }
+  removeChild(child) { const index = this.children.indexOf(child); if (index >= 0) this.children.splice(index, 1); return child; }
+  setAttribute(name, value) { this.attributes[name] = String(value); if (name == "id") this.id = value; }
+  getAttribute(name) { return this.attributes[name] === undefined ? null : this.attributes[name]; }
+  addEventListener(name, listener) { this.listeners[name] = listener; }
+}
+
+const document = {
+  byID: {},
+  body: null,
+  createElement(tagName) { return new Element(tagName, this); },
+  getElementById(id) { return this.byID[id] || null; },
+  execCommand() { return false; },
+};
+document.body = new Element("body", document);
+const host = document.createElement("section");
+host.id = "connections-content";
+document.body.appendChild(host);
+
+function walk(root, predicate, matches = []) {
+  if (predicate(root)) matches.push(root);
+  for (const child of root.children) walk(child, predicate, matches);
+  return matches;
+}
+
+const fixture = JSON.parse(fs.readFileSync(process.argv[5], "utf8"));
+const context = {
+  document,
+  navigator: { clipboard: { writeText() { return Promise.resolve(); } } },
+  ClipboardJS: undefined,
+};
+vm.createContext(context);
+for (let index = 2; index <= 4; index++) vm.runInContext(fs.readFileSync(process.argv[index], "utf8"), context);
+
+const state = vm.runInContext("selectOverviewState", context)(fixture);
+vm.runInContext("renderConnections", context)(fixture);
+const endpoint = state.outputs.endpoints.find(endpoint => endpoint.key == "dvr");
+const card = walk(host, element => element.getAttribute("data-endpoint") == "dvr")[0];
+const value = walk(card, element => element.tagName == "CODE")[0];
+const copy = walk(card, element => element.tagName == "BUTTON")[0];
+const unavailable = walk(card, element => element.classList.contains("tf-endpoint-unavailable"))[0];
+process.stdout.write(JSON.stringify({
+  selectorAvailable: endpoint.available,
+  cardAvailable: card.getAttribute("data-available") == "true",
+  renderedValue: value ? value.textContent : "",
+  copyAction: Boolean(copy),
+  unavailableText: unavailable ? unavailable.textContent : "",
+}));
+`
 
 const operationsNodeScript = `
 const fs = require("fs");
