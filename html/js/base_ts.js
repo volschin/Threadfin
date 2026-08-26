@@ -1,3 +1,4 @@
+"use strict";
 var SERVER = new Object();
 var BULK_EDIT = false;
 var COLUMN_TO_SORT;

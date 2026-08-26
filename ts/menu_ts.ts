@@ -819,7 +819,7 @@ class ShowContent extends Content {
 
     // Überschrift
     var popup_header = document.getElementById(this.HeaderID)
-    var headline: string[] = menuItems[this.menuID].headline
+    var headline: string = menuItems[this.menuID].headline
 
     var menuKey = menuItems[this.menuID].menuKey
     var h = this.createHeadline(headline)

@@ -1,3 +1,4 @@
+"use strict";
 class Server {
     constructor(cmd) {
         this.cmd = cmd;

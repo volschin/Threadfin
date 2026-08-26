@@ -1,3 +1,4 @@
+"use strict";
 class SettingsCategory {
     constructor() {
         this.DocumentID = "content_settings";

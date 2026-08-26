@@ -1,3 +1,4 @@
+"use strict";
 class MainMenu {
     constructor() {
         this.DocumentID = "main-menu";
