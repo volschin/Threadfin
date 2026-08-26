@@ -135,8 +135,7 @@ class Server {
       }
 
       if (response.hasOwnProperty("openMenu")) {
-        var menu = document.getElementById(response["openMenu"])
-        menu.click()
+        openLegacyMenu(response["openMenu"])
         showElement("popup", false)
       }
 

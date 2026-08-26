@@ -46,6 +46,10 @@ class MainMenuItem extends MainMenu {
     var doc = document.getElementById(this.DocumentID)
     doc.appendChild(item)
 
+    this.initializeTableHeader()
+  }
+
+  initializeTableHeader(): void {
     switch (this.menuKey) {
       case "playlist":
         this.tableHeader = ["{{.playlist.table.playlist}}", "{{.playlist.table.tuner}}", "{{.playlist.table.lastUpdate}}", "{{.playlist.table.availability}} %", "{{.playlist.table.type}}", "{{.playlist.table.streams}}", "{{.playlist.table.groupTitle}} %", "{{.playlist.table.tvgID}} %", "{{.playlist.table.uniqueID}} %"]
@@ -68,9 +72,6 @@ class MainMenuItem extends MainMenu {
         break
 
     }
-
-    //console.log(this.menuKey, this.tableHeader);
-
   }
 }
 
@@ -1146,41 +1147,14 @@ function createLayout() {
 
 
 
-  // Create menu
-  document.getElementById("main-menu").innerHTML = ""
-  for (let i = 0; i < menuItems.length; i++) {
-
-    menuItems[i].id = i
-
-    switch (menuItems[i]["menuKey"]) {
-
-      case "users":
-      case "logout":
-        if (SERVER["settings"]["authentication.web"] == true) {
-          menuItems[i].createItem()
-        }
-        break
-
-      case "mapping":
-      case "xmltv":
-          menuItems[i].createItem()
-        break
-
-      default:
-        menuItems[i].createItem()
-        break
-    }
-
-  }
+  renderNavigation()
+  restoreDestinationFromHistory()
 
   return
 }
 
 function openThisMenu(element) {
-  var id = element.id
-  var content: ShowContent = new ShowContent(id)
-  content.show()
-  enableGroupSelection(".bulk")
+  openLegacyMenu(Number(element.id))
   return
 }
 

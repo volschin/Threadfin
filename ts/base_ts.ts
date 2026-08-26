@@ -33,7 +33,7 @@ var loadingModal = new bootstrap.Modal(document.getElementById("loading"), {
 })
 
 // Menü
-var menuItems = new Array()
+var menuItems: MainMenuItem[] = new Array()
 menuItems.push(new MainMenuItem("playlist", "{{.mainMenu.item.playlist}}", "m3u.png", "{{.mainMenu.headline.playlist}}"))
 menuItems.push(new MainMenuItem("xmltv", "{{.mainMenu.item.xmltv}}", "xmltv.png", "{{.mainMenu.headline.xmltv}}"))
 menuItems.push(new MainMenuItem("filter", "{{.mainMenu.item.filter}}", "filter.png", "{{.mainMenu.headline.filter}}"))

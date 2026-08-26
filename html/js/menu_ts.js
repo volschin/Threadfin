@@ -34,6 +34,9 @@ class MainMenuItem extends MainMenu {
         item.appendChild(value);
         var doc = document.getElementById(this.DocumentID);
         doc.appendChild(item);
+        this.initializeTableHeader();
+    }
+    initializeTableHeader() {
         switch (this.menuKey) {
             case "playlist":
                 this.tableHeader = ["{{.playlist.table.playlist}}", "{{.playlist.table.tuner}}", "{{.playlist.table.lastUpdate}}", "{{.playlist.table.availability}} %", "{{.playlist.table.type}}", "{{.playlist.table.streams}}", "{{.playlist.table.groupTitle}} %", "{{.playlist.table.tvgID}} %", "{{.playlist.table.uniqueID}} %"];
@@ -51,7 +54,6 @@ class MainMenuItem extends MainMenu {
                 this.tableHeader = ["BULK", "{{.mapping.table.chNo}}", "{{.mapping.table.logo}}", "{{.mapping.table.channelName}}", "{{.mapping.table.playlist}}", "{{.mapping.table.groupTitle}}", "{{.mapping.table.xmltvFile}}", "{{.mapping.table.xmltvID}}"];
                 break;
         }
-        //console.log(this.menuKey, this.tableHeader);
     }
 }
 class Content {
@@ -913,33 +915,12 @@ function createLayout() {
     if (!document.getElementById("main-menu")) {
         return;
     }
-    // Create menu
-    document.getElementById("main-menu").innerHTML = "";
-    for (let i = 0; i < menuItems.length; i++) {
-        menuItems[i].id = i;
-        switch (menuItems[i]["menuKey"]) {
-            case "users":
-            case "logout":
-                if (SERVER["settings"]["authentication.web"] == true) {
-                    menuItems[i].createItem();
-                }
-                break;
-            case "mapping":
-            case "xmltv":
-                menuItems[i].createItem();
-                break;
-            default:
-                menuItems[i].createItem();
-                break;
-        }
-    }
+    renderNavigation();
+    restoreDestinationFromHistory();
     return;
 }
 function openThisMenu(element) {
-    var id = element.id;
-    var content = new ShowContent(id);
-    content.show();
-    enableGroupSelection(".bulk");
+    openLegacyMenu(Number(element.id));
     return;
 }
 class PopupWindow {

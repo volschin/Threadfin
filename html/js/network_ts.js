@@ -101,8 +101,7 @@ class Server {
                     break;
             }
             if (response.hasOwnProperty("openMenu")) {
-                var menu = document.getElementById(response["openMenu"]);
-                menu.click();
+                openLegacyMenu(response["openMenu"]);
                 showElement("popup", false);
             }
             if (response.hasOwnProperty("openLink")) {
