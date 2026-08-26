@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"net/http"
 	"os"
 	"os/exec"
@@ -692,23 +693,17 @@ func clientConnection(stream ThisStream) (status bool) {
 
 func switchBandwidth(stream *ThisStream) (err error) {
 
-	var bandwidth []int
+	bandwidth := slices.Sorted(maps.Keys(stream.DynamicStream))
 	var dynamicStream DynamicStream
 	var segment Segment
 
-	for key := range stream.DynamicStream {
-		bandwidth = append(bandwidth, key)
-	}
-
-	sort.Ints(bandwidth)
-
 	if len(bandwidth) > 0 {
+
+		dynamicStream = stream.DynamicStream[bandwidth[0]]
 
 		for i := range bandwidth {
 
 			segment.StreamInf.Bandwidth = stream.DynamicStream[bandwidth[i]].Bandwidth
-
-			dynamicStream = stream.DynamicStream[bandwidth[0]]
 
 			if stream.NetworkBandwidth == 0 {
 

@@ -152,3 +152,54 @@ func TestTransferSegmentPreservesNilErrorOnShortWrite(t *testing.T) {
 		t.Fatalf("transferSegment() = (%v, %v), want (nil, nil)", inputErr, writeErr)
 	}
 }
+
+func TestSwitchBandwidthUsesAscendingVariantKeys(t *testing.T) {
+	stream := &ThisStream{
+		NetworkBandwidth: 2500,
+		DynamicStream: map[int]DynamicStream{
+			3000: {Bandwidth: 3000, URL: "high"},
+			1000: {Bandwidth: 1000, URL: "low"},
+			2000: {Bandwidth: 2000, URL: "middle"},
+		},
+	}
+
+	if err := switchBandwidth(stream); err != nil {
+		t.Fatalf("switchBandwidth() error = %v", err)
+	}
+	if len(stream.Segment) != 1 {
+		t.Fatalf("switchBandwidth() appended %d segments, want 1", len(stream.Segment))
+	}
+	if got := stream.Segment[0].URL; got != "middle" {
+		t.Fatalf("selected URL = %q, want %q", got, "middle")
+	}
+	if got := stream.Segment[0].StreamInf.Bandwidth; got != 3000 {
+		t.Fatalf("segment bandwidth = %d, want %d", got, 3000)
+	}
+}
+
+func TestSwitchBandwidthUsesLowestVariantWhenBandwidthUnknown(t *testing.T) {
+	stream := &ThisStream{
+		DynamicStream: map[int]DynamicStream{
+			3000: {Bandwidth: 3000, URL: "high"},
+			1000: {Bandwidth: 1000, URL: "low"},
+		},
+	}
+
+	if err := switchBandwidth(stream); err != nil {
+		t.Fatalf("switchBandwidth() error = %v", err)
+	}
+	if len(stream.Segment) != 1 {
+		t.Fatalf("switchBandwidth() appended %d segments, want 1", len(stream.Segment))
+	}
+	if got := stream.Segment[0].URL; got != "low" {
+		t.Fatalf("selected URL = %q, want %q", got, "low")
+	}
+}
+
+func TestSwitchBandwidthRejectsEmptyVariantMap(t *testing.T) {
+	stream := &ThisStream{DynamicStream: map[int]DynamicStream{}}
+
+	if err := switchBandwidth(stream); err == nil {
+		t.Fatal("switchBandwidth() succeeded with no streaming variants")
+	}
+}
