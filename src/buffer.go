@@ -14,6 +14,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -502,7 +503,7 @@ func bufferingStream(playlistID string, streamingURL string, backupStream1 *Back
 						}
 						streaming = true
 
-						var n = indexOfString(f, oldSegments)
+						var n = slices.Index(oldSegments, f)
 
 						if n > 20 {
 
@@ -571,7 +572,7 @@ func getBufTmpFiles(stream *ThisStream) (tmpFiles []string) {
 
 				var fileName = fmt.Sprintf("%d.ts", int64(file))
 
-				if indexOfString(fileName, stream.OldSegments) == -1 {
+				if slices.Index(stream.OldSegments, fileName) == -1 {
 					tmpFiles = append(tmpFiles, fileName)
 					stream.OldSegments = append(stream.OldSegments, fileName)
 				}

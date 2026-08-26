@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 )
@@ -114,8 +115,8 @@ func New(path, cacheURL string, caching bool) (c *Cache, err error) {
 			return cacheURL
 		}
 
-		if indexOfString(filename, c.Cache) == -1 {
-			if indexOfString(src, c.Queue) == -1 {
+		if slices.Index(c.Cache, filename) == -1 {
+			if slices.Index(c.Queue, src) == -1 {
 				c.Queue = append(c.Queue, src)
 			}
 

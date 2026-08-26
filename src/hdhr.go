@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"encoding/xml"
 	"fmt"
+	"slices"
 )
 
 func makeInteraceFromHDHR(content []byte, playlistName, id string) (channels []interface{}, err error) {
@@ -215,7 +216,7 @@ func getGuideNumberPMS(channelName string) (pmsID string, err error) {
 			ids = append(ids, v)
 		}
 
-		if indexOfString(id, ids) != -1 {
+		if slices.Index(ids, id) != -1 {
 			i++
 			goto newID
 		}

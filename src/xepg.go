@@ -9,6 +9,7 @@ import (
 	"path"
 	"regexp"
 	"runtime"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -490,7 +491,7 @@ func createXEPGDatabase() (err error) {
 
 		for {
 
-			if indexOfFloat64(startingNumber, allChannelNumbers) == -1 {
+			if slices.Index(allChannelNumbers, startingNumber) == -1 {
 				xChannelID = fmt.Sprintf("%g", startingNumber)
 				allChannelNumbers = append(allChannelNumbers, startingNumber)
 				return
@@ -1007,7 +1008,7 @@ func createXMLTVFile() (err error) {
 
 		for _, file := range files {
 
-			if indexOfString(file.Name(), Data.Cache.ImagesCache) == -1 {
+			if slices.Index(Data.Cache.ImagesCache, file.Name()) == -1 {
 				Data.Cache.ImagesCache = append(Data.Cache.ImagesCache, file.Name())
 			}
 
@@ -1828,7 +1829,7 @@ func cleanupXEPG() {
 			}
 			m3uChannelHash := getMD5(hashInput)
 
-			if indexOfString(m3uChannelHash, Data.Cache.Streams.Active) == -1 {
+			if slices.Index(Data.Cache.Streams.Active, m3uChannelHash) == -1 {
 				delete(Data.XEPG.Channels, id)
 			} else {
 				if xepgChannel.XActive && !xepgChannel.XHideChannel {
@@ -1836,7 +1837,7 @@ func cleanupXEPG() {
 				}
 			}
 
-			if indexOfString(xepgChannel.FileM3UID, sourceIDs) == -1 {
+			if slices.Index(sourceIDs, xepgChannel.FileM3UID) == -1 {
 				delete(Data.XEPG.Channels, id)
 			}
 

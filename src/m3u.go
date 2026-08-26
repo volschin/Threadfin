@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"path"
 	"regexp"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -240,7 +241,7 @@ func buildM3U(groups []string) (m3u string, err error) {
 			if xepgChannel.XActive && !xepgChannel.XHideChannel {
 				if len(groups) > 0 {
 
-					if indexOfString(xepgChannel.XGroupTitle, groups) == -1 {
+					if slices.Index(groups, xepgChannel.XGroupTitle) == -1 {
 						goto Done
 					}
 
