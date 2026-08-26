@@ -56,6 +56,15 @@ func GetVersion() (err error) {
 	return
 }
 
+func decodeServerResponse(reader io.Reader) (response ServerResponse, err error) {
+	body, err := io.ReadAll(reader)
+	if err != nil {
+		return response, err
+	}
+	err = json.Unmarshal(body, &response)
+	return response, err
+}
+
 func serverRequest() (err error) {
 
 	var serverResponse ServerResponse
@@ -117,12 +126,8 @@ func serverRequest() (err error) {
 	}
 
 	Updater.CMD = ""
-	body, err := io.ReadAll(resp.Body)
+	serverResponse, err = decodeServerResponse(resp.Body)
 	if err != nil {
-		return err
-	}
-
-	if err := json.Unmarshal(body, &serverResponse); err != nil {
 		return err
 	}
 
