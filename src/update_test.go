@@ -129,7 +129,7 @@ func TestDecodeGitHubReleasesClosesAndJoinsErrors(t *testing.T) {
 }
 
 func TestDecodeGitHubReleasesRejectsTrailingValue(t *testing.T) {
-	if _, err := decodeGitHubReleases(githubBody{Reader: strings.NewReader(`[] [])`)}); err == nil {
+	if _, err := decodeGitHubReleases(githubBody{Reader: strings.NewReader(`[] []`)}); err == nil {
 		t.Fatal("expected trailing-value error")
 	}
 }
