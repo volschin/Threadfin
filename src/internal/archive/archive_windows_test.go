@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -31,7 +32,7 @@ func TestExtractZIPClassifiesWindowsPaths(t *testing.T) {
 			if err == nil {
 				t.Fatalf("ExtractZIP accepted %q", testCase.entry)
 			}
-			if !strings.Contains(err.Error(), testCase.entry) || !strings.Contains(err.Error(), testCase.wantReason) {
+			if !strings.Contains(err.Error(), strconv.Quote(testCase.entry)) || !strings.Contains(err.Error(), testCase.wantReason) {
 				t.Fatalf("error %q does not identify %q and reason %q", err, testCase.entry, testCase.wantReason)
 			}
 			entries, readErr := os.ReadDir(target)
