@@ -1049,17 +1049,8 @@ func createXMLTVFile() (err error) {
 
 	var tmpProgram = &XMLTV{}
 
-	if _, err = writer.WriteString(xml.Header); err != nil {
-		return err
-	}
-	if _, err = writer.WriteString("<tv>\n"); err != nil {
-		return err
-	}
-
-	if _, err = writer.WriteString(fmt.Sprintf("  <generator>%s</generator>\n", xepgXML.Generator)); err != nil {
-		return err
-	}
-	if _, err = writer.WriteString(fmt.Sprintf("  <source>%s</source>\n", xepgXML.Source)); err != nil {
+	document, err := newXMLTVDocumentWriter(writer, xepgXML.Generator, xepgXML.Source)
+	if err != nil {
 		return err
 	}
 
@@ -1093,11 +1084,7 @@ func createXMLTVFile() (err error) {
 		if xepgChannel.XActive && !xepgChannel.XHideChannel {
 			if (Settings.XepgReplaceChannelTitle && xepgChannel.XMapping == "PPV") || xepgChannel.XName != "" {
 				channel := Channel{ID: xepgChannel.XChannelID, Icon: Icon{Src: imgc.Image.GetURL(xepgChannel.TvgLogo, Settings.HttpThreadfinDomain, Settings.Port, Settings.ForceHttps, Settings.HttpsPort, Settings.HttpsThreadfinDomain)}, DisplayName: []DisplayName{{Value: xepgChannel.XName}}, Active: xepgChannel.XActive, Live: xepgChannel.Live}
-				bytes, _ := xml.MarshalIndent(channel, "  ", "    ")
-				if _, err = writer.Write(bytes); err != nil {
-					return err
-				}
-				if _, err = writer.WriteString("\n"); err != nil {
+				if err = document.WriteChannel(channel); err != nil {
 					return err
 				}
 			}
@@ -1110,11 +1097,7 @@ func createXMLTVFile() (err error) {
 			*tmpProgram, err = getProgramData(xepgChannel)
 			if err == nil {
 				for _, p := range tmpProgram.Program {
-					bytes, _ := xml.MarshalIndent(p, "  ", "    ")
-					if _, err = writer.Write(bytes); err != nil {
-						return err
-					}
-					if _, err = writer.WriteString("\n"); err != nil {
+					if err = document.WriteProgram(p); err != nil {
 						return err
 					}
 				}
@@ -1124,8 +1107,7 @@ func createXMLTVFile() (err error) {
 		}
 	}
 
-	// Close tv root
-	if _, err = writer.WriteString("</tv>\n"); err != nil {
+	if err = document.Close(); err != nil {
 		return err
 	}
 
