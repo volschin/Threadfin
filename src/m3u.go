@@ -187,6 +187,25 @@ func checkConditions(streamValues, conditions, coType string) (status bool) {
 	return
 }
 
+func parseGroupCountLabel(label string) (name string, count int, ok bool) {
+	name, remainder, found := strings.CutLast(label, " (")
+	if !found || name == "" {
+		return "", 0, false
+	}
+
+	countText, _, found := strings.CutLast(remainder, ")")
+	if !found || countText == "" {
+		return "", 0, false
+	}
+
+	count, err := strconv.Atoi(countText)
+	if err != nil {
+		return "", 0, false
+	}
+
+	return name, count, true
+}
+
 // Threadfin M3U Datei erstellen
 func buildM3U(groups []string) (m3u string, err error) {
 
@@ -201,15 +220,9 @@ func buildM3U(groups []string) (m3u string, err error) {
 	// Build a map of group -> expectedCount from Data.Playlist.M3U.Groups.Text (format: "Group (N)")
 	expectedGroupCount := make(map[string]int)
 	for _, label := range Data.Playlist.M3U.Groups.Text {
-		// label example: "nfl (42)"
-		open := strings.LastIndex(label, " (")
-		close := strings.LastIndex(label, ")")
-		if open > 0 && close > open+2 {
-			name := label[:open]
-			countStr := label[open+2 : close]
-			if n, e := strconv.Atoi(countStr); e == nil {
-				expectedGroupCount[name] = n
-			}
+		name, count, ok := parseGroupCountLabel(label)
+		if ok {
+			expectedGroupCount[name] = count
 		}
 	}
 
