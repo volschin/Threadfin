@@ -584,7 +584,7 @@ func bufferingStream(playlistID string, streamingURL string, backupStream1 *Back
 func getBufTmpFiles(stream *ThisStream) (tmpFiles []string) {
 
 	var tmpFolder = stream.Folder
-	var fileIDs []float64
+	var fileIDs []int
 
 	if _, err := bufferVFS.Stat(tmpFolder); !fsIsNotExistErr(err) {
 
@@ -594,33 +594,27 @@ func getBufTmpFiles(stream *ThisStream) (tmpFiles []string) {
 			return
 		}
 
-		if len(files) > 2 {
-
-			for _, file := range files {
-
-				var fileID = strings.Replace(file.Name(), ".ts", "", -1)
-				var f, err = strconv.ParseFloat(fileID, 64)
-
-				if err == nil {
-					fileIDs = append(fileIDs, f)
-				}
-
+		for _, file := range files {
+			if !file.Type().IsRegular() {
+				continue
 			}
+			fileID, ok := parseSegmentFilename(file.Name())
+			if ok {
+				fileIDs = append(fileIDs, fileID)
+			}
+		}
 
-			sort.Float64s(fileIDs)
+		if len(fileIDs) > 1 {
+			sort.Ints(fileIDs)
 			fileIDs = fileIDs[:len(fileIDs)-1]
 
-			for _, file := range fileIDs {
-
-				var fileName = fmt.Sprintf("%d.ts", int64(file))
-
+			for _, fileID := range fileIDs {
+				fileName := strconv.Itoa(fileID) + ".ts"
 				if slices.Index(stream.OldSegments, fileName) == -1 {
 					tmpFiles = append(tmpFiles, fileName)
 					stream.OldSegments = append(stream.OldSegments, fileName)
 				}
-
 			}
-
 		}
 
 	}
@@ -776,6 +770,72 @@ func switchBandwidth(stream *ThisStream) (err error) {
 	return
 }
 
+var errSegmentNumberOverflow = errors.New("segment number overflow")
+
+func incrementSegmentNumber(segment int) (int, error) {
+	maxInt := int(^uint(0) >> 1)
+	if segment == maxInt {
+		return segment, errSegmentNumberOverflow
+	}
+	return segment + 1, nil
+}
+
+func isFirstSegment(segment, startSegment int) bool {
+	return segment == startSegment
+}
+
+func parseSegmentFilename(name string) (int, bool) {
+	numberText, ok := strings.CutSuffix(name, ".ts")
+	if !ok || numberText == "" {
+		return 0, false
+	}
+	number, err := strconv.Atoi(numberText)
+	if err != nil || number < 1 || strconv.Itoa(number) != numberText {
+		return 0, false
+	}
+	return number, true
+}
+
+func nextBackupSegment(folder string) (int, error) {
+	entries, err := bufferVFS.ReadDir(getPlatformPath(folder))
+	if err != nil {
+		return 0, err
+	}
+
+	highest := 0
+	for _, entry := range entries {
+		if !entry.Type().IsRegular() {
+			continue
+		}
+		number, ok := parseSegmentFilename(entry.Name())
+		if !ok {
+			continue
+		}
+		if number > highest {
+			highest = number
+		}
+	}
+	if highest == 0 {
+		return 1, nil
+	}
+	return incrementSegmentNumber(highest)
+}
+
+func prepareSegmentDirectory(folder string, useBackup bool) (int, error) {
+	if !useBackup {
+		if err := bufferVFS.RemoveAll(getPlatformPath(folder)); err != nil {
+			ShowError(err, 4005)
+		}
+	}
+	if err := checkVFSFolder(folder, bufferVFS); err != nil {
+		return 0, err
+	}
+	if !useBackup {
+		return 1, nil
+	}
+	return nextBackupSegment(folder)
+}
+
 // Buffer with FFMPEG
 func thirdPartyBuffer(streamID int, playlistID string, useBackup bool, backupNumber int) {
 
@@ -783,7 +843,6 @@ func thirdPartyBuffer(streamID int, playlistID string, useBackup bool, backupNum
 
 		var playlist = p.(Playlist)
 		var debug, path, options, bufferType string
-		var tmpSegment = 1
 		var bufferSize = Settings.BufferSize * 1024
 		var stream = playlist.Streams[streamID]
 		var buf bytes.Buffer
@@ -862,18 +921,14 @@ func thirdPartyBuffer(streamID int, playlistID string, useBackup bool, backupNum
 
 		}
 
-		if err := bufferVFS.RemoveAll(getPlatformPath(tmpFolder)); err != nil {
-			ShowError(err, 4005)
-		}
-
-		err := checkVFSFolder(tmpFolder, bufferVFS)
+		tmpSegment, err := prepareSegmentDirectory(tmpFolder, useBackup)
 		if err != nil {
 			ShowError(err, 0)
 			killClientConnection(streamID, playlistID, false)
 			addErrorToStream(err)
 			return
 		}
-
+		startSegment := tmpSegment
 		err = checkFile(path)
 		if err != nil {
 			ShowError(err, 0)
@@ -1067,7 +1122,7 @@ func thirdPartyBuffer(streamID int, playlistID string, useBackup bool, backupNum
 
 			select {
 			case timeout := <-t:
-				if timeout >= 20 && tmpSegment == 1 {
+				if timeout >= 20 && isFirstSegment(tmpSegment, startSegment) {
 					if processErr := terminateProcess(cmd); processErr != nil {
 						ShowError(processErr, 0)
 					}
@@ -1121,7 +1176,7 @@ func thirdPartyBuffer(streamID int, playlistID string, useBackup bool, backupNum
 
 			if fileSize >= bufferSize/2 {
 
-				if tmpSegment == 1 && !stream.Status {
+				if isFirstSegment(tmpSegment, startSegment) && !stream.Status {
 					close(t)
 					close(streamStatus)
 					showInfo(fmt.Sprintf("Streaming Status:Buffering data from %s", bufferType))
@@ -1133,7 +1188,16 @@ func thirdPartyBuffer(streamID int, playlistID string, useBackup bool, backupNum
 					addErrorToStream(err)
 					return
 				}
-				tmpSegment++
+				tmpSegment, err = incrementSegmentNumber(tmpSegment)
+				if err != nil {
+					if processErr := terminateProcess(cmd); processErr != nil {
+						ShowError(processErr, 0)
+					}
+					ShowError(err, 0)
+					killClientConnection(streamID, playlistID, false)
+					addErrorToStream(err)
+					return
+				}
 
 				if !stream.Status {
 					Lock.Lock()
