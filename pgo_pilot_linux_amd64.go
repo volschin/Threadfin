@@ -50,11 +50,15 @@ func init() {
 	}
 	stop := make(chan string, 1)
 	signals := make(chan os.Signal, 1)
+	finished := make(chan struct{})
 	signal.Notify(signals, syscall.SIGUSR1)
 	go func() {
-		<-signals
-		signal.Stop(signals)
-		stop <- "signal"
+		defer signal.Stop(signals)
+		select {
+		case <-signals:
+			stop <- "signal"
+		case <-finished:
+		}
 	}()
 	done, err := startPGOPilot(pgoPilotConfig{
 		ProfilePath: os.Getenv("THREADFIN_PGO_PROFILE"),
@@ -62,11 +66,15 @@ func init() {
 		MaxDuration: maxDuration,
 	}, stop)
 	if err != nil {
+		signal.Stop(signals)
+		close(finished)
 		fmt.Fprintln(os.Stderr, "PGO pilot:", err)
 		os.Exit(2)
 	}
 	go func() {
-		if err := <-done; err != nil {
+		err := <-done
+		close(finished)
+		if err != nil {
 			fmt.Fprintln(os.Stderr, "PGO pilot:", err)
 		}
 	}()
