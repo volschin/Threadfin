@@ -227,7 +227,7 @@ func removeChildItems(dir string) error {
 // JSON
 func mapToJSON(tmpMap interface{}) string {
 
-	jsonString, err := json.MarshalIndent(tmpMap, "", "  ")
+	jsonString, err := json.Marshal(tmpMap)
 	if err != nil {
 		return "{}"
 	}

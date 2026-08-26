@@ -1,9 +1,14 @@
 package up2date
 
 import (
+	"bytes"
 	"errors"
+	"io"
 	"net"
+	"net/http"
+	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 )
 
@@ -67,5 +72,33 @@ func TestDecodeServerResponsePreservesCurrentJSONSemantics(t *testing.T) {
 	readErr := errors.New("updater response read failed")
 	if _, err := decodeServerResponse(failingServerResponseReader{err: readErr}); !errors.Is(err, readErr) {
 		t.Fatalf("decodeServerResponse() error = %v, want %v", err, readErr)
+	}
+}
+
+func TestServerRequestUsesCompactRequestJSON(t *testing.T) {
+	var calls atomic.Int32
+	var requestBody []byte
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if calls.Add(1) == 1 {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+		var err error
+		requestBody, err = io.ReadAll(r.Body)
+		if err != nil {
+			t.Errorf("read request: %v", err)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"status":false}`))
+	}))
+	defer server.Close()
+	previous := Updater
+	Updater = ClientInfo{URL: server.URL, Name: "Threadfin", Branch: "main"}
+	t.Cleanup(func() { Updater = previous })
+	if err := serverRequest(); err != nil {
+		t.Fatal(err)
+	}
+	if bytes.ContainsAny(requestBody, "\n\t") {
+		t.Fatalf("indented request: %q", requestBody)
 	}
 }

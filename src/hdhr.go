@@ -84,7 +84,7 @@ func getDiscover() (jsonContent []byte, err error) {
 	discover.ModelNumber = System.Version
 	discover.TunerCount = Settings.Tuner
 
-	jsonContent, err = json.MarshalIndent(discover, "", "  ")
+	jsonContent, err = json.Marshal(discover)
 
 	return
 }
@@ -98,7 +98,7 @@ func getLineupStatus() (jsonContent []byte, err error) {
 	lineupStatus.Source = "Cable"
 	lineupStatus.SourceList = []string{"Cable"}
 
-	jsonContent, err = json.MarshalIndent(lineupStatus, "", "  ")
+	jsonContent, err = json.Marshal(lineupStatus)
 
 	return
 }
@@ -173,7 +173,7 @@ func getLineup() (jsonContent []byte, err error) {
 
 	}
 
-	jsonContent, err = json.MarshalIndent(lineup, "", "  ")
+	jsonContent, err = json.Marshal(lineup)
 	if err != nil {
 		return
 	}

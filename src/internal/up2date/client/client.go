@@ -68,7 +68,7 @@ func decodeServerResponse(reader io.Reader) (response ServerResponse, err error)
 func serverRequest() (err error) {
 
 	var serverResponse ServerResponse
-	jsonByte, err := json.MarshalIndent(Updater, "", "  ")
+	jsonByte, err := json.Marshal(Updater)
 	if err != nil {
 		return err
 	}
