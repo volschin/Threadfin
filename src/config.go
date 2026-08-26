@@ -1,6 +1,7 @@
 package src
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"runtime"
@@ -148,6 +149,11 @@ func Init() (err error) {
 	showInfo("Hostname:" + System.Hostname)
 	showInfo(fmt.Sprintf("System Folder:%s", getPlatformPath(System.Folder.Config)))
 
+	System.ConfigurationWizard, err = configurationWizardRequired(getPlatformFile(System.Folder.Config + "settings.json"))
+	if err != nil {
+		return
+	}
+
 	// Systemdateien erstellen (Falls nicht vorhanden)
 	err = createSystemFiles()
 	if err != nil {
@@ -238,6 +244,17 @@ func Init() (err error) {
 	loadHTMLMap()
 
 	return
+}
+
+func configurationWizardRequired(settingsFile string) (bool, error) {
+	_, err := os.Stat(settingsFile)
+	if err == nil {
+		return false, nil
+	}
+	if errors.Is(err, os.ErrNotExist) {
+		return true, nil
+	}
+	return false, err
 }
 
 // StartSystem : System wird gestartet

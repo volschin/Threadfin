@@ -45,6 +45,12 @@ class Server {
             console.log("RESPONSE:");
             var response = JSON.parse(e.data);
             console.log(response);
+            if (typeof completeSourceRequest == "function") {
+                completeSourceRequest(data["cmd"], data, response);
+            }
+            if (data["cmd"] == "saveWizard" && typeof completeConfigurationWizardRequest == "function") {
+                completeConfigurationWizardRequest(response);
+            }
             if (response.hasOwnProperty("token")) {
                 document.cookie = "Token=" + response["token"];
             }
@@ -94,11 +100,15 @@ class Server {
                 alert(response["alert"]);
             }
             if (response.hasOwnProperty("reload")) {
+                if (data["cmd"] == "saveWizard" && typeof completeConfigurationWizard == "function") {
+                    completeConfigurationWizard();
+                    return;
+                }
                 location.reload();
             }
             if (response.hasOwnProperty("wizard")) {
                 createLayout();
-                configurationWizard[response["wizard"]].createWizard();
+                showConfigurationWizard(response["wizard"]);
                 return;
             }
             createLayout();

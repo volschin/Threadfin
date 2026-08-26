@@ -822,6 +822,11 @@ class ShowContent extends Content {
     var headline: string = menuItems[this.menuID].headline
 
     var menuKey = menuItems[this.menuID].menuKey
+    if (menuKey == "playlist" || menuKey == "xmltv") {
+      renderSourceManagementPage(menuKey, doc)
+      showElement("loading", false)
+      return
+    }
     var h = this.createHeadline(headline)
     var existingHeader = popup_header.querySelector('h3')
     if(existingHeader) {
@@ -2059,6 +2064,7 @@ function openPopUp(dataType, element) {
       break;
   }
 
+  enhanceSourcePopup(dataType)
   showPopUpElement('popup-custom');
 }
 
@@ -2445,6 +2451,10 @@ function changeChannelLogo(epgMapId: string) {
 
 function savePopupData(dataType: string, id: string, remove: Boolean, option: number) {
 
+  if (remove != true && option == 0 && !validateSourcePopup(dataType)) {
+    return
+  }
+
   showElement("loading", true)
 
   if (dataType == "mapping") {
@@ -2645,6 +2655,7 @@ function savePopupData(dataType: string, id: string, remove: Boolean, option: nu
 
   console.log(data);
 
+  beginSourceRequest(dataType, id, remove, option)
   var server: Server = new Server(cmd)
   server.request(data)
 

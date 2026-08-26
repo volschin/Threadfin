@@ -660,6 +660,11 @@ class ShowContent extends Content {
         var popup_header = document.getElementById(this.HeaderID);
         var headline = menuItems[this.menuID].headline;
         var menuKey = menuItems[this.menuID].menuKey;
+        if (menuKey == "playlist" || menuKey == "xmltv") {
+            renderSourceManagementPage(menuKey, doc);
+            showElement("loading", false);
+            return;
+        }
         var h = this.createHeadline(headline);
         var existingHeader = popup_header.querySelector('h3');
         if (existingHeader) {
@@ -1680,6 +1685,7 @@ function openPopUp(dataType, element) {
         default:
             break;
     }
+    enhanceSourcePopup(dataType);
     showPopUpElement('popup-custom');
 }
 class XMLTVFile {
@@ -1983,6 +1989,9 @@ function changeChannelLogo(epgMapId) {
     }
 }
 function savePopupData(dataType, id, remove, option) {
+    if (remove != true && option == 0 && !validateSourcePopup(dataType)) {
+        return;
+    }
     showElement("loading", true);
     if (dataType == "mapping") {
         var data = new Object();
@@ -2122,6 +2131,7 @@ function savePopupData(dataType, id, remove, option) {
     }
     console.log("SEND TO SERVER");
     console.log(data);
+    beginSourceRequest(dataType, id, remove, option);
     var server = new Server(cmd);
     server.request(data);
     showElement("loading", false);

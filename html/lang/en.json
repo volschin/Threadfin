@@ -228,6 +228,49 @@
       "placeholder": "HTTP Referer"
     }
   },
+  "sources": {
+    "playlist": {
+      "purpose": "Playlist sources import the streams that continue to Filter and Mapping.",
+      "add": "Add playlist",
+      "emptyTitle": "No playlist sources yet",
+      "emptyDescription": "Add an M3U playlist or HDHomeRun tuner. After it loads, create a Filter to select streams for Mapping."
+    },
+    "xmltv": {
+      "purpose": "XMLTV sources provide guide channels and programmes for XEPG Mapping.",
+      "add": "Add XMLTV",
+      "emptyTitle": "No XMLTV sources yet",
+      "emptyDescription": "Add an XMLTV URL or local file. After it loads, review guide assignments in Mapping.",
+      "pmsNote": "XMLTV and Mapping are used in XEPG mode. PMS mode currently leaves guide management to the connected client.",
+      "reviewEpgSource": "Review EPG source"
+    },
+    "actions": {
+      "edit": "Edit",
+      "update": "Update now",
+      "delete": "Delete"
+    },
+    "counts": {
+      "streams": "Streams",
+      "tuners": "Tuners",
+      "groupCoverage": "Group-title coverage",
+      "tvgIDCoverage": "tvg-id coverage",
+      "uniqueIDCoverage": "Unique ID coverage",
+      "channels": "Channels",
+      "programs": "Programmes"
+    },
+    "available": "Available",
+    "unavailable": "Unavailable",
+    "availabilityUnknown": "Availability not reported",
+    "lastUpdate": "Last update",
+    "neverUpdated": "No successful update recorded",
+    "locationUnavailable": "Source location not reported",
+    "forms": {
+      "locationHelp": "Enter an HTTP(S) URL or a local file path, for example https://provider.example/file or /srv/threadfin/file.",
+      "hdhrHelp": "Enter the HDHomeRun address and port, for example 192.168.1.10:5004.",
+      "nameRequired": "Enter a source name.",
+      "locationRequired": "Enter a source URL or local file path.",
+      "locationInvalid": "Enter an HTTP(S) URL or local file path."
+    }
+  },
   "xmltv": {
     "table": {
       "guide": "Guide",
@@ -616,23 +659,34 @@
     }
   },
   "wizard": {
+    "headline": "Set up Threadfin",
+    "introduction": "Configure the source pipeline: choose capacity and guide mode, add a playlist, then add XMLTV when using XEPG. After setup, Overview shows the next required stage.",
+    "stepsLabel": "Setup progress",
+    "progress": "Step {current} of {total}",
+    "saving": "Saving and checking this step…",
+    "saved": "Step saved.",
+    "finish": "Finish setup",
     "epgSource": {
       "title": "EPG Source",
-      "description": "PMS:<br>- Use EPG data from Plex, Emby or Jellyfin <br><br>XEPG:<br>- Use of one or more XMLTV files<br>- Channel management<br>- M3U / XMLTV export (HTTP link for IPTV apps)"
+      "shortTitle": "Guide mode",
+      "description": "PMS keeps guide management in the connected client. XEPG uses XMLTV in Threadfin and enables Mapping plus generated M3U/XMLTV outputs."
     },
     "tuner": {
       "title": "Number of tuners",
+      "shortTitle": "Capacity",
       "description": "Number of parallel connections that can be established to the provider.<br>Available for: Plex, Emby, Jellyfin, M3U (with active buffer).<br>After a change, Threadfin must be delete in the Plex / Emby / Jellyfin DVR settings and set up again."
     },
     "m3u": {
       "title": "M3U Playlist",
+      "shortTitle": "Playlist",
       "placeholder": "File path or URL of the M3U",
-      "description": "Local or remote playlists"
+      "description": "Add the channel source that Threadfin will import. Enter an HTTP(S) URL or local file path."
     },
     "xmltv": {
       "title": "XMLTV File",
+      "shortTitle": "XMLTV",
       "placeholder": "File path or URL of the XMLTV",
-      "description": "Local or remote XMLTV file"
+      "description": "In XEPG mode, add guide data for Mapping. Enter an HTTP(S) URL or local file path. Successful completion opens Overview."
     }
   },
   "login": {
