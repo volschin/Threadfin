@@ -376,6 +376,29 @@ func Threadfin(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func copyAndCloseImage(destination io.Writer, source io.ReadCloser) error {
+	_, copyErr := io.Copy(destination, source)
+	return errors.Join(copyErr, source.Close())
+}
+
+func serveImageFile(w http.ResponseWriter, r *http.Request, filePath string) error {
+	file, err := os.Open(getPlatformFile(filePath))
+	if err != nil {
+		return err
+	}
+	info, statErr := file.Stat()
+	if statErr != nil {
+		return errors.Join(statErr, file.Close())
+	}
+	w.Header().Set("Content-Type", getContentType(filePath))
+	w.Header().Set("Content-Length", strconv.FormatInt(info.Size(), 10))
+	w.WriteHeader(http.StatusOK)
+	if err := copyAndCloseImage(w, file); err != nil {
+		ShowError(err, 0)
+	}
+	return nil
+}
+
 // Images : Image Cache /images/
 func Images(w http.ResponseWriter, r *http.Request) {
 
@@ -384,18 +407,10 @@ func Images(w http.ResponseWriter, r *http.Request) {
 	filePath := System.Folder.ImagesCache + getFilenameFromPath(path)
 	systemMutex.Unlock()
 
-	content, err := readByteFromFile(filePath)
-	if err != nil {
-		httpStatusError(w, r, 404)
+	if err := serveImageFile(w, r, filePath); err != nil {
+		httpStatusError(w, r, http.StatusNotFound)
 		return
 	}
-
-	w.Header().Add("Content-Type", getContentType(filePath))
-	w.Header().Add("Content-Length", fmt.Sprintf("%d", len(content)))
-	w.WriteHeader(200)
-	w.Write(content)
-
-	return
 }
 
 // DataImages : Image Pfad für Logos / Bilder die hochgeladen wurden /data_images/
@@ -406,18 +421,10 @@ func DataImages(w http.ResponseWriter, r *http.Request) {
 	filePath := System.Folder.ImagesUpload + getFilenameFromPath(path)
 	systemMutex.Unlock()
 
-	content, err := readByteFromFile(filePath)
-	if err != nil {
-		httpStatusError(w, r, 404)
+	if err := serveImageFile(w, r, filePath); err != nil {
+		httpStatusError(w, r, http.StatusNotFound)
 		return
 	}
-
-	w.Header().Add("Content-Type", getContentType(filePath))
-	w.Header().Add("Content-Length", fmt.Sprintf("%d", len(content)))
-	w.WriteHeader(200)
-	w.Write(content)
-
-	return
 }
 
 // WS : Web Sockets /ws/
