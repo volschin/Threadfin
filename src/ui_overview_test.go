@@ -607,9 +607,16 @@ appendHost(document, "nav", "main-menu");
 
 let lastSocket = null;
 class TestWebSocket {
-  constructor(url) { this.url = url; lastSocket = this; }
-  send(value) { this.sent = value; }
+  constructor(url) { this.url = url; this.readyState = TestWebSocket.CONNECTING; this.OPEN = TestWebSocket.OPEN; this.sent = []; lastSocket = this; }
+  send(value) { this.sent.push(value); }
+  open() { this.readyState = TestWebSocket.OPEN; this.onopen.call(this, {}); }
+  close(code = 1000) { if (this.readyState === TestWebSocket.CLOSED) return; this.readyState = TestWebSocket.CLOSED; if (this.onclose) this.onclose.call(this, {code}); }
+  respond(response) { response.requestId = JSON.parse(this.sent[this.sent.length - 1]).requestId; this.onmessage.call(this, {data: JSON.stringify(response)}); }
 }
+TestWebSocket.CONNECTING = 0;
+TestWebSocket.OPEN = 1;
+TestWebSocket.CLOSING = 2;
+TestWebSocket.CLOSED = 3;
 class TestClipboard {
   constructor(button, options) { this.button = button; this.options = options; }
   on() {}
@@ -631,7 +638,7 @@ const context = {
   enableGroupSelection() {},
 	  alert() {},
 	  addEventListener() {},
-	  setTimeout(callback) { callback(); return 0; },
+	  setTimeout(callback, delay) { return {callback, delay}; },
   clearTimeout() {},
 };
 context.window = context;
@@ -656,12 +663,12 @@ endpointReference.focus();
 const activityLabel = findElement(overviewHost, element => element.tagName == "DT").textContent;
 
 vm.runInContext('new Server("updateLog").request({})', context);
-lastSocket.onopen.call(lastSocket);
-lastSocket.onmessage.call(lastSocket, { data: JSON.stringify({
+lastSocket.open();
+lastSocket.respond({
   status: true,
   clientInfo: { activeClients: 2 },
   log: { warnings: 3 },
-}) });
+});
 
 const result = {
   activityLabel,

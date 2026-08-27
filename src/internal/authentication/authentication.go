@@ -149,6 +149,7 @@ func Init(databasePath string, validity int) (err error) {
 
 	// Loading the database
 	err = loadDatabase()
+	browserSessions = make(map[string]browserSession)
 
 	// Set Token Validity
 	tokenValidity = validity
@@ -241,42 +242,39 @@ func UserAuthentication(username, password string) (token string, err error) {
 		return
 	}
 
-	var login = func(password string, loginData map[string]interface{}) (err error) {
-		var loginPassword = loginData["_password"].(string)
+	userID, err := authenticateUserLocked(username, password)
+	if err != nil {
+		return "", err
+	}
+	return setToken(userID, "-"), nil
+}
 
+func authenticateUserLocked(username, password string) (userID string, err error) {
+	users := data["users"].(map[string]interface{})
+	for id, loginData := range users {
+		user := loginData.(map[string]interface{})
+		if SHA256(username, user["_salt"].(string)) != user["_username"].(string) {
+			continue
+		}
+		loginPassword := user["_password"].(string)
 		matched, legacy := verifyPassword(password, loginPassword)
 		if !matched {
-			return createError(010)
+			return "", createError(010)
 		}
 		if legacy {
 			migrated, hashErr := hashPassword(password)
 			if hashErr != nil {
-				return hashErr
+				return "", hashErr
 			}
-			loginData["_password"] = migrated
+			user["_password"] = migrated
 			if saveErr := saveDatabase(data); saveErr != nil {
-				loginData["_password"] = loginPassword
-				return saveErr
+				user["_password"] = loginPassword
+				return "", saveErr
 			}
 		}
-		return nil
+		return id, nil
 	}
-
-	var users = data["users"].(map[string]interface{})
-	for id, loginData := range users {
-		user := loginData.(map[string]interface{})
-		if SHA256(username, user["_salt"].(string)) == user["_username"].(string) {
-			err = login(password, user)
-			if err != nil {
-				return
-			}
-			token = setToken(id, "-")
-			return
-		}
-	}
-
-	err = createError(010)
-	return
+	return "", createError(010)
 }
 
 // CheckTheValidityOfTheToken : check token
@@ -458,7 +456,9 @@ func RemoveUser(userID string) (err error) {
 		err = saveDatabase(data)
 		if err != nil {
 			data["users"].(map[string]interface{})[userID] = user
+			return
 		}
+		invalidateUserBrowserSessionsLocked(userID)
 
 		return
 	}
@@ -514,6 +514,9 @@ func ChangeCredentials(userID, username, password string) (err error) {
 		}
 
 		err = saveDatabase(data)
+		if err == nil && len(password) > 0 {
+			invalidateUserBrowserSessionsLocked(userID)
+		}
 	}
 
 	return

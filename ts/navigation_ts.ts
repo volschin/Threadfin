@@ -52,7 +52,6 @@ function renderNavigation(): void {
   }
   var navigationElement = navigation
 
-  initializeLegacyMenuItems()
   navigationElement.innerHTML = ""
   navigationGroups.forEach(group => {
     var items = group.items.filter(destination => navigationDestinationIsVisible(destination))
@@ -90,23 +89,7 @@ function renderNavigation(): void {
   })
 
   renderLegacyMenuAdapters(navigationElement)
-  bindServerInformationCompatibilityLink()
   updateNavigationCurrentPage()
-}
-
-function bindServerInformationCompatibilityLink(): void {
-  var link = document.getElementById("server-information-link")
-  if (!link || link.getAttribute("data-navigation-bound") == "true") {
-    return
-  }
-  link.setAttribute("data-navigation-bound", "true")
-  link.addEventListener("click", function () {
-    openDestination("connections", true, link)
-  })
-}
-
-function initializeLegacyMenuItems(): void {
-  menuItems.forEach(item => item.initializeTableHeader())
 }
 
 function renderLegacyMenuAdapters(navigation: HTMLElement): void {
@@ -195,7 +178,6 @@ function openLegacyMenu(index: number, replaceHistory: boolean = true, invoker?:
   showDestinationHost("content")
   var content: ShowContent = new ShowContent(index)
   content.show()
-  enableGroupSelection(".bulk")
   setCurrentDestination(destination)
   dismissMobileNavigation()
   focusMainContent()

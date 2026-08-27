@@ -38,7 +38,6 @@ function renderNavigation() {
         return;
     }
     var navigationElement = navigation;
-    initializeLegacyMenuItems();
     navigationElement.innerHTML = "";
     navigationGroups.forEach(group => {
         var items = group.items.filter(destination => navigationDestinationIsVisible(destination));
@@ -72,21 +71,7 @@ function renderNavigation() {
         navigationElement.appendChild(groupElement);
     });
     renderLegacyMenuAdapters(navigationElement);
-    bindServerInformationCompatibilityLink();
     updateNavigationCurrentPage();
-}
-function bindServerInformationCompatibilityLink() {
-    var link = document.getElementById("server-information-link");
-    if (!link || link.getAttribute("data-navigation-bound") == "true") {
-        return;
-    }
-    link.setAttribute("data-navigation-bound", "true");
-    link.addEventListener("click", function () {
-        openDestination("connections", true, link);
-    });
-}
-function initializeLegacyMenuItems() {
-    menuItems.forEach(item => item.initializeTableHeader());
 }
 function renderLegacyMenuAdapters(navigation) {
     var adapters = document.createElement("div");
@@ -171,7 +156,6 @@ function openLegacyMenu(index, replaceHistory = true, invoker) {
     showDestinationHost("content");
     var content = new ShowContent(index);
     content.show();
-    enableGroupSelection(".bulk");
     setCurrentDestination(destination);
     dismissMobileNavigation();
     focusMainContent();

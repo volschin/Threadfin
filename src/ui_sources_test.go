@@ -615,7 +615,7 @@ func TestGeneratedSourceStateUsesExistingResponseAndConfirmedResults(t *testing.
 	}
 }
 
-func TestGeneratedTask5RequestsSettleBusyAndTransportFailures(t *testing.T) {
+func TestGeneratedTask5RequestsSettleQueuedAndTransportFailures(t *testing.T) {
 	temp := t.TempDir()
 	scriptPath := filepath.Join(temp, "source-request-failures.js")
 	if err := os.WriteFile(scriptPath, []byte(sourceRequestFailureNodeScript), 0o600); err != nil {
@@ -632,8 +632,8 @@ func TestGeneratedTask5RequestsSettleBusyAndTransportFailures(t *testing.T) {
 		t.Fatalf("execute generated Task 5 failure lifecycle: %v\n%s", err, output)
 	}
 	var got struct {
-		BusySource               map[string]any `json:"busySource"`
-		BusyWizard               map[string]any `json:"busyWizard"`
+		QueuedSource             map[string]any `json:"queuedSource"`
+		QueuedWizard             map[string]any `json:"queuedWizard"`
 		TransportSource          map[string]any `json:"transportSource"`
 		TransportWizard          map[string]any `json:"transportWizard"`
 		LogsSafe                 bool           `json:"logsSafe"`
@@ -647,7 +647,7 @@ func TestGeneratedTask5RequestsSettleBusyAndTransportFailures(t *testing.T) {
 		t.Fatalf("decode generated Task 5 failure lifecycle: %v\n%s", err, output)
 	}
 	for name, result := range map[string]map[string]any{
-		"busy source":      got.BusySource,
+		"queued source":    got.QueuedSource,
 		"transport source": got.TransportSource,
 	} {
 		if result["state"] != "error" || result["message"] == "" {
@@ -655,7 +655,7 @@ func TestGeneratedTask5RequestsSettleBusyAndTransportFailures(t *testing.T) {
 		}
 	}
 	for name, result := range map[string]map[string]any{
-		"busy wizard":      got.BusyWizard,
+		"queued wizard":    got.QueuedWizard,
 		"transport wizard": got.TransportWizard,
 	} {
 		if result["disabled"] != false || result["status"] == "" || result["routed"] != false {
@@ -793,7 +793,7 @@ func TestSourceUIIntegrationAndWizardMarkup(t *testing.T) {
 		}
 	}
 	network := readUITypeScript(t, "network_ts.ts")
-	if !strings.Contains(network, `completeSourceRequest(data["cmd"], data, response)`) {
+	if !strings.Contains(network, `completeSourceRequest(command, data, response)`) {
 		t.Fatal("source feedback is not tied to the actual WebSocket response")
 	}
 	if !strings.Contains(network, `completeConfigurationWizard()`) {
@@ -984,9 +984,18 @@ const sourceStatus = {hidden: true, textContent: "", setAttribute() {}};
 const wizardStatus = {textContent: ""};
 const next = {disabled: false};
 class FakeWebSocket {
-  constructor() { sockets.push(this); }
-  send() {}
+  constructor() { this.readyState = FakeWebSocket.CONNECTING; this.OPEN = FakeWebSocket.OPEN; this.sent = []; sockets.push(this); }
+  send(value) { this.sent.push(value); }
+  open() { this.readyState = FakeWebSocket.OPEN; this.onopen.call(this, {}); }
+  close(code = 1000) { if (this.readyState === FakeWebSocket.CLOSED) return; this.readyState = FakeWebSocket.CLOSED; if (this.onclose) this.onclose.call(this, {code}); }
+  emitClose(code) { this.readyState = FakeWebSocket.CLOSED; this.onclose.call(this, {code}); }
+  emitError() { this.onerror.call(this, {}); }
+  emitMessage(value) { this.onmessage.call(this, {data: typeof value === "string" ? value : JSON.stringify(value)}); }
 }
+FakeWebSocket.CONNECTING = 0;
+FakeWebSocket.OPEN = 1;
+FakeWebSocket.CLOSING = 2;
+FakeWebSocket.CLOSED = 3;
 const context = {
   URL,
   console: {
@@ -1012,6 +1021,8 @@ const context = {
   openDestination() { routed = true; },
   alert() {},
   SERVER: {}, UNDO: {}, SERVER_CONNECTION: false, WS_AVAILABLE: false,
+  setTimeout(callback, delay) { return {callback, delay}; },
+  clearTimeout() {},
 };
 vm.createContext(context);
 vm.runInContext(fs.readFileSync(process.argv[2], "utf8").replaceAll("{{.sources.responseInvalid}}", "Invalid response"), context);
@@ -1030,76 +1041,92 @@ vm.runInContext(network, context);
 const sourceData = {files: {m3u: {M1: {name: "Fixture", "file.source": "https://provider.example/list.m3u?token=" + marker}}}};
 context.sourceData = sourceData;
 
-context.beginSourceRequest("m3u", "M1", false, 1);
-context.SERVER_CONNECTION = true;
-vm.runInContext('new Server("updateFileM3U").request(sourceData)', context);
-const busySource = JSON.parse(JSON.stringify(context.sourceFeedbackByKey["m3u:M1"]));
+function openLatest() {
+  const socket = sockets[sockets.length - 1];
+  if (socket.readyState !== FakeWebSocket.OPEN) socket.open();
+  return socket;
+}
 
+function activeMessage(socket) {
+  return JSON.parse(socket.sent[socket.sent.length - 1]);
+}
+
+function respond(socket, response) {
+  response.requestId = activeMessage(socket).requestId;
+  socket.emitMessage(response);
+}
+
+context.beginSourceRequest("m3u", "M1", false, 1);
+vm.runInContext('new Server("updateFileM3U").request(sourceData)', context);
 next.disabled = true;
 wizardStatus.textContent = "Saving";
 routed = false;
-context.SERVER_CONNECTION = true;
 vm.runInContext('new Server("saveWizard").request({wizard: {tuner: 1}})', context);
-const busyWizard = {disabled: next.disabled, status: wizardStatus.textContent, routed};
+const queueSocket = openLatest();
+respond(queueSocket, {status: false, err: "queued source rejected"});
+const queuedSource = JSON.parse(JSON.stringify(context.sourceFeedbackByKey["m3u:M1"]));
+respond(queueSocket, {status: false, err: "queued wizard rejected"});
+const queuedWizard = {disabled: next.disabled, status: wizardStatus.textContent, routed};
 
 context.beginSourceRequest("m3u", "M1", false, 1);
-context.SERVER_CONNECTION = false;
 vm.runInContext('new Server("updateFileM3U").request(sourceData)', context);
 const completionCountBeforeTransport = sourceCompletionCount;
-const transportSocket = sockets[sockets.length - 1];
-transportSocket.onerror({});
-transportSocket.onclose({code: 1006});
+const transportSocket = openLatest();
+transportSocket.emitError();
+transportSocket.emitClose(1006);
 const transportSource = JSON.parse(JSON.stringify(context.sourceFeedbackByKey["m3u:M1"]));
 const transportOneShot = sourceCompletionCount - completionCountBeforeTransport === 1;
 
 next.disabled = true;
 wizardStatus.textContent = "Saving";
 routed = false;
-context.SERVER_CONNECTION = false;
 vm.runInContext('new Server("saveWizard").request({wizard: {tuner: 1}})', context);
-sockets[sockets.length - 1].onclose({code: 1006});
+openLatest().emitClose(1006);
 const transportWizard = {disabled: next.disabled, status: wizardStatus.textContent, routed};
 
-const malformedPayloads = ["{}", "[]", '"text"', '{"status":"true","reload":true}'];
-const malformedSourceResults = malformedPayloads.map(payload => {
+const malformedPayloads = [
+  socket => JSON.stringify({requestId: activeMessage(socket).requestId}),
+  socket => JSON.stringify({requestId: activeMessage(socket).requestId, status: "true", reload: true}),
+  () => "[]",
+  () => "{",
+];
+const malformedSourceResults = malformedPayloads.map(buildPayload => {
   context.beginSourceRequest("m3u", "M1", false, 1);
-  context.SERVER_CONNECTION = false;
   routed = false;
   vm.runInContext('new Server("updateFileM3U").request(sourceData)', context);
-  sockets[sockets.length - 1].onmessage({data: payload});
+  const socket = openLatest();
+  socket.emitMessage(buildPayload(socket));
   const feedback = context.sourceFeedbackByKey["m3u:M1"];
   return feedback && feedback.state === "error" && feedback.message === "Invalid response" && routed === false;
 });
 const malformedSourcesRejected = malformedSourceResults.every(Boolean);
 
-const malformedWizardResults = malformedPayloads.map(payload => {
+const malformedWizardResults = malformedPayloads.map(buildPayload => {
   next.disabled = true;
   wizardStatus.textContent = "Saving";
-  context.SERVER_CONNECTION = false;
   routed = false;
   vm.runInContext('new Server("saveWizard").request({wizard: {tuner: 1}})', context);
-  sockets[sockets.length - 1].onmessage({data: payload});
+  const socket = openLatest();
+  socket.emitMessage(buildPayload(socket));
   return next.disabled === false && wizardStatus.textContent === "Invalid response" && routed === false;
 });
 const malformedWizardsRejected = malformedWizardResults.every(Boolean);
 
 context.beginSourceRequest("m3u", "M1", false, 1);
-context.SERVER_CONNECTION = false;
 routed = false;
 vm.runInContext('new Server("updateFileM3U").request(sourceData)', context);
-sockets[sockets.length - 1].onmessage({data: '{"status":false,"err":"server rejected fixture"}'});
+respond(openLatest(), {status: false, err: "server rejected fixture"});
 const statusFalseFeedback = context.sourceFeedbackByKey["m3u:M1"];
 const statusFalsePreserved = statusFalseFeedback.state === "error" && statusFalseFeedback.message === "server rejected fixture" && routed === false;
 
 next.disabled = true;
 wizardStatus.textContent = "Saving";
-context.SERVER_CONNECTION = false;
 routed = false;
 vm.runInContext('new Server("saveWizard").request({wizard: {tuner: 1}})', context);
-sockets[sockets.length - 1].onmessage({data: '{"status":true,"reload":true}'});
+respond(openLatest(), {status: true, reload: true});
 const normalWizardRouted = routed === true && next.disabled === false;
 
-process.stdout.write(JSON.stringify({busySource, busyWizard, transportSource, transportWizard, logsSafe, malformedSourcesRejected, malformedWizardsRejected, transportOneShot, statusFalsePreserved, normalWizardRouted}));
+process.stdout.write(JSON.stringify({queuedSource, queuedWizard, transportSource, transportWizard, logsSafe, malformedSourcesRejected, malformedWizardsRejected, transportOneShot, statusFalsePreserved, normalWizardRouted}));
 `
 
 const sourcePopupAccessibilityNodeScript = `

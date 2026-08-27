@@ -20,8 +20,6 @@ type operationsInteractionResult struct {
 	ClientGuideSummaries      []string `json:"clientGuideSummaries"`
 	ClientGuidesCollapsed     bool     `json:"clientGuidesCollapsed"`
 	ConnectionsText           string   `json:"connectionsText"`
-	CompatibilityOpened       bool     `json:"compatibilityOpened"`
-	CompatibilityHistory      string   `json:"compatibilityHistory"`
 	PlaylistCapacityLabel     string   `json:"playlistCapacityLabel"`
 	ClientCapacityLabel       string   `json:"clientCapacityLabel"`
 	PlaylistCapacityAfter     string   `json:"playlistCapacityAfter"`
@@ -101,9 +99,6 @@ func TestConnectionsAndActivityExecuteCurrentOperationsBehavior(t *testing.T) {
 			t.Errorf("Connections makes an unobservable downstream claim %q", claim)
 		}
 	}
-	if !result.CompatibilityOpened || result.CompatibilityHistory != "#connections" {
-		t.Fatalf("Server Information compatibility route = opened %t history %q", result.CompatibilityOpened, result.CompatibilityHistory)
-	}
 	if result.PlaylistCapacityLabel != "Playlist source connections: 1 / 2" || result.ClientCapacityLabel != "Client connections: 1 / 4" {
 		t.Fatalf("Activity capacity labels = playlist %q client %q", result.PlaylistCapacityLabel, result.ClientCapacityLabel)
 	}
@@ -143,16 +138,6 @@ func TestOperationsMarkupKeepsLegacyIDsAndResponsiveOverflow(t *testing.T) {
 	if strings.Contains(strings.ToLower(index), "gzip") {
 		t.Fatal("operations markup invents an XMLTV GZIP response field")
 	}
-	serverButtonStart := strings.Index(index, `id="server-information-link"`)
-	if serverButtonStart < 0 {
-		t.Fatal("Server Information compatibility button is missing")
-	}
-	serverButtonEnd := strings.Index(index[serverButtonStart:], `</button>`)
-	serverButton := index[serverButtonStart : serverButtonStart+serverButtonEnd]
-	if strings.Contains(serverButton, `data-bs-target="#server_information"`) {
-		t.Fatal("Server Information compatibility button still opens the modal instead of Connections")
-	}
-
 	styles, err := os.ReadFile(filepath.Join("..", "html", "css", "app-shell.css"))
 	if err != nil {
 		t.Fatal(err)
@@ -167,6 +152,19 @@ func TestOperationsMarkupKeepsLegacyIDsAndResponsiveOverflow(t *testing.T) {
 	} {
 		if !strings.Contains(css, contract) {
 			t.Errorf("responsive operations CSS is missing %q", contract)
+		}
+	}
+}
+
+func TestOperationsMarkupUsesConnectionsAsTheOnlyServerInformationEntry(t *testing.T) {
+	indexBytes, err := os.ReadFile(filepath.Join("..", "html", "index.html"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	index := string(indexBytes)
+	for _, obsolete := range []string{`id="server_information"`, `id="server-information-link"`} {
+		if strings.Contains(index, obsolete) {
+			t.Errorf("obsolete Server Information entry remains in the application shell: %s", obsolete)
 		}
 	}
 }
@@ -487,15 +485,21 @@ append(document, activityHost, "p", "client-connection-information");
 const streamsBox = append(document, activityHost, "div", "myStreamsBox");
 const activeTable = append(document, streamsBox, "table", "activeStreams");
 const inactiveTable = append(document, streamsBox, "table", "inactiveStreams");
-const serverInformation = append(document, document.body, "button", "server-information-link");
 append(document, document.body, "nav", "main-menu");
 
 let copiedValue = "";
 let lastSocket = null;
 class TestWebSocket {
-  constructor(url) { this.url = url; lastSocket = this; }
-  send(value) { this.sent = value; }
+  constructor(url) { this.url = url; this.readyState = TestWebSocket.CONNECTING; this.OPEN = TestWebSocket.OPEN; this.sent = []; lastSocket = this; }
+  send(value) { this.sent.push(value); }
+  open() { this.readyState = TestWebSocket.OPEN; this.onopen.call(this, {}); }
+  close(code = 1000) { if (this.readyState === TestWebSocket.CLOSED) return; this.readyState = TestWebSocket.CLOSED; if (this.onclose) this.onclose.call(this, {code}); }
+  respond(response) { response.requestId = JSON.parse(this.sent[this.sent.length - 1]).requestId; this.onmessage.call(this, {data: JSON.stringify(response)}); }
 }
+TestWebSocket.CONNECTING = 0;
+TestWebSocket.OPEN = 1;
+TestWebSocket.CLOSING = 2;
+TestWebSocket.CLOSED = 3;
 
 const context = {
   console: { log() {}, warn() {} },
@@ -514,7 +518,7 @@ const context = {
   getObjKeys(value) { return Object.keys(value || {}); },
   alert() {},
   setInterval() { return 0; },
-  setTimeout(callback) { callback(); return 0; },
+  setTimeout(callback, delay) { return {callback, delay}; },
   clearTimeout() {},
 };
 context.window = context;
@@ -556,11 +560,6 @@ for (let index = 2; index <= 8; index++) {
   const clientGuidesCollapsed = details.every(detail => !detail.open);
   const connectionsText = visibleText(connectionsHost);
 
-  vm.runInContext("bindServerInformationCompatibilityLink()", context);
-  serverInformation.click();
-  const compatibilityOpened = context.currentDestination == "connections" && connectionsHost.hidden == false && contentHost.hidden == true;
-  const compatibilityHistory = context.window.location.hash;
-
   context.SERVER.settings.epgSource = "XEPG";
   context.SERVER.clientInfo.epgSource = "XEPG";
   vm.runInContext('openDestination("activity", false)', context);
@@ -571,12 +570,12 @@ for (let index = 2; index <= 8; index++) {
   activeReference.focus();
 
   vm.runInContext('new Server("updateLog").request({})', context);
-  lastSocket.onopen.call(lastSocket);
-  lastSocket.onmessage.call(lastSocket, { data: JSON.stringify({
+  lastSocket.open();
+  lastSocket.respond({
     status: true,
     clientInfo: { activeClients: 2, activePlaylist: 2, totalPlaylist: 3 },
     log: { warnings: 1 },
-  }) });
+  });
 
   const result = {
     readyEndpointKeys,
@@ -588,8 +587,6 @@ for (let index = 2; index <= 8; index++) {
     clientGuideSummaries,
     clientGuidesCollapsed,
     connectionsText,
-    compatibilityOpened,
-    compatibilityHistory,
     playlistCapacityLabel,
     clientCapacityLabel,
     playlistCapacityAfter: document.getElementById("playlist-connection-information").textContent,

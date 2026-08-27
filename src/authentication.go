@@ -27,13 +27,16 @@ func activatedSystemAuthentication() (err error) {
 	return
 }
 
-func createFirstUserForAuthentication(username, password string) (token string, err error) {
+func createFirstUserForAuthentication(username, password string) (sessionID string, err error) {
+	if err = authentication.CreateDefaultUser(username, password); err != nil {
+		return "", err
+	}
 
-	err = authentication.CreateDefaultUser(username, password)
-
-	token, err = authentication.UserAuthentication(username, password)
-
-	token, err = authentication.CheckTheValidityOfTheToken(token)
+	var userID string
+	sessionID, userID, err = authentication.AuthenticateBrowser(username, password)
+	if err != nil {
+		return "", err
+	}
 
 	var userData = make(map[string]interface{})
 	userData["username"] = username
@@ -45,11 +48,33 @@ func createFirstUserForAuthentication(username, password string) (token string, 
 	userData["authentication.config"] = false
 	userData["defaultUser"] = true
 
-	userID, err := authentication.GetUserID(token)
+	if err = authentication.WriteUserData(userID, userData); err != nil {
+		authentication.InvalidateBrowserSession(sessionID)
+		return "", err
+	}
+	if _, err = authentication.AuthorizeBrowserSession(sessionID, "authentication.web"); err != nil {
+		authentication.InvalidateBrowserSession(sessionID)
+		return "", err
+	}
 
-	err = authentication.WriteUserData(userID, userData)
+	return sessionID, nil
+}
 
-	return
+func authorizeBrowserRequest(r *http.Request, permissions ...string) (string, error) {
+	cookie, err := r.Cookie(authentication.BrowserSessionCookieName)
+	if err != nil {
+		return "", err
+	}
+	return authentication.AuthorizeBrowserSession(cookie.Value, permissions...)
+}
+
+func browserCookieSecure(r *http.Request) bool {
+	if r.TLS != nil {
+		return true
+	}
+	systemMutex.Lock()
+	defer systemMutex.Unlock()
+	return Settings.ForceHttps && Settings.HttpsThreadfinDomain != ""
 }
 
 func tokenAuthentication(token string) (newToken string, err error) {
