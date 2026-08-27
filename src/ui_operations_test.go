@@ -490,9 +490,16 @@ append(document, document.body, "nav", "main-menu");
 let copiedValue = "";
 let lastSocket = null;
 class TestWebSocket {
-  constructor(url) { this.url = url; lastSocket = this; }
-  send(value) { this.sent = value; }
+  constructor(url) { this.url = url; this.readyState = TestWebSocket.CONNECTING; this.OPEN = TestWebSocket.OPEN; this.sent = []; lastSocket = this; }
+  send(value) { this.sent.push(value); }
+  open() { this.readyState = TestWebSocket.OPEN; this.onopen.call(this, {}); }
+  close(code = 1000) { if (this.readyState === TestWebSocket.CLOSED) return; this.readyState = TestWebSocket.CLOSED; if (this.onclose) this.onclose.call(this, {code}); }
+  respond(response) { response.requestId = JSON.parse(this.sent[this.sent.length - 1]).requestId; this.onmessage.call(this, {data: JSON.stringify(response)}); }
 }
+TestWebSocket.CONNECTING = 0;
+TestWebSocket.OPEN = 1;
+TestWebSocket.CLOSING = 2;
+TestWebSocket.CLOSED = 3;
 
 const context = {
   console: { log() {}, warn() {} },
@@ -511,7 +518,7 @@ const context = {
   getObjKeys(value) { return Object.keys(value || {}); },
   alert() {},
   setInterval() { return 0; },
-  setTimeout(callback) { callback(); return 0; },
+  setTimeout(callback, delay) { return {callback, delay}; },
   clearTimeout() {},
 };
 context.window = context;
@@ -563,12 +570,12 @@ for (let index = 2; index <= 8; index++) {
   activeReference.focus();
 
   vm.runInContext('new Server("updateLog").request({})', context);
-  lastSocket.onopen.call(lastSocket);
-  lastSocket.onmessage.call(lastSocket, { data: JSON.stringify({
+  lastSocket.open();
+  lastSocket.respond({
     status: true,
     clientInfo: { activeClients: 2, activePlaylist: 2, totalPlaylist: 3 },
     log: { warnings: 1 },
-  }) });
+  });
 
   const result = {
     readyEndpointKeys,

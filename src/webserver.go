@@ -50,6 +50,7 @@ func StartWebserver() (err error) {
 	http.HandleFunc("/xmltv/", Threadfin)
 	http.HandleFunc("/m3u/", Threadfin)
 	http.HandleFunc("/data/", WS)
+	http.HandleFunc("/web/logout", WebLogout)
 	http.HandleFunc("/web/", Web)
 	http.HandleFunc("/download/", Download)
 	http.HandleFunc("/api/", API)
@@ -499,20 +500,21 @@ func DataImages(w http.ResponseWriter, r *http.Request) {
 
 // WS : Web Sockets /ws/
 func WS(w http.ResponseWriter, r *http.Request) {
+	if !webSocketOriginAllowed(r) {
+		http.Error(w, http.StatusText(http.StatusForbidden), http.StatusForbidden)
+		return
+	}
 
-	var request RequestStruct
-	var response ResponseStruct
-	response.Status = true
-
-	var newToken string
+	webSocketAuth, err := authenticateWebSocketRequest(r)
+	if err != nil {
+		http.Error(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
+		return
+	}
 
 	upgrader := websocket.Upgrader{
 		ReadBufferSize:  1024,
 		WriteBufferSize: 1024,
-		CheckOrigin: func(r *http.Request) bool {
-			// Implement any custom origin validation logic here, if needed.
-			return true
-		},
+		CheckOrigin:     webSocketOriginAllowed,
 	}
 
 	conn, err := upgrader.Upgrade(w, r, nil)
@@ -521,6 +523,7 @@ func WS(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Could not open websocket connection", http.StatusBadRequest)
 		return
 	}
+	defer conn.Close()
 
 	systemMutex.Lock()
 	if Settings.HttpThreadfinDomain != "" {
@@ -531,52 +534,30 @@ func WS(w http.ResponseWriter, r *http.Request) {
 	systemMutex.Unlock()
 
 	for {
-
-		err = conn.ReadJSON(&request)
-
-		if err != nil {
+		var request RequestStruct
+		if err := conn.ReadJSON(&request); err != nil {
 			return
 		}
-
-		systemMutex.Lock()
-		if System.ConfigurationWizard == false {
-
-			switch Settings.AuthenticationWEB {
-
-			// Token Authentication
-			case true:
-
-				var token string
-				tokens, ok := r.URL.Query()["Token"]
-
-				if !ok || len(tokens[0]) < 1 {
-					token = "-"
-				} else {
-					token = tokens[0]
-				}
-
-				newToken, err = tokenAuthentication(token)
-				if err != nil {
-					response.Status = false
-					response.Reload = true
-					response.Error = err.Error()
-					request.Cmd = "-"
-
-					if err = conn.WriteJSON(response); err != nil {
-						ShowError(err, 1102)
-					}
-
-					systemMutex.Unlock()
-					return
-				}
-
-				response.Token = newToken
-				response.Users, _ = browserUserData()
-
+		response := ResponseStruct{Status: true, RequestID: request.RequestID}
+		if webSocketAuth.persistent && webSocketAuth.browserSessionID == "" {
+			systemMutex.Lock()
+			authenticationRequired := Settings.AuthenticationWEB
+			configurationWizard := System.ConfigurationWizard
+			systemMutex.Unlock()
+			if authenticationRequired && !configurationWizard {
+				_ = conn.WriteControl(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.ClosePolicyViolation, ""), time.Now().Add(time.Second))
+				return
 			}
-
 		}
-		systemMutex.Unlock()
+		if webSocketAuth.browserSessionID != "" {
+			if _, err := authentication.AuthorizeBrowserSession(webSocketAuth.browserSessionID, "authentication.web"); err != nil {
+				_ = conn.WriteControl(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.ClosePolicyViolation, ""), time.Now().Add(time.Second))
+				return
+			}
+		}
+		response.Token = webSocketAuth.legacyToken
+		err = nil
+		includeData := true
 
 		unlockConfigMutation := lockConfigMutationForCommand(request.Cmd)
 		switch request.Cmd {
@@ -585,13 +566,7 @@ func WS(w http.ResponseWriter, r *http.Request) {
 			// response.Config = Settings
 
 		case "updateLog":
-			response = setDefaultResponseData(response, false)
-			if err = conn.WriteJSON(response); err != nil {
-				ShowError(err, 1022)
-			} else {
-				return
-			}
-			return
+			includeData = false
 
 		case "loadFiles":
 			// response.Response = Settings.Files
@@ -725,13 +700,6 @@ func WS(w http.ResponseWriter, r *http.Request) {
 		case "uploadLogo":
 			if len(request.Base64) > 0 {
 				response.LogoURL, err = uploadLogo(request.Base64, request.Filename)
-				if err == nil {
-					if err = conn.WriteJSON(response); err != nil {
-						ShowError(err, 1022)
-					} else {
-						return
-					}
-				}
 			}
 
 		case "saveWizard":
@@ -763,14 +731,16 @@ func WS(w http.ResponseWriter, r *http.Request) {
 			response.Settings = Settings
 		}
 
-		response = setDefaultResponseData(response, true)
+		response = setDefaultResponseData(response, includeData)
 		if System.ConfigurationWizard == true {
 			response.ConfigurationWizard = System.ConfigurationWizard
 		}
 
 		if err = conn.WriteJSON(response); err != nil {
 			ShowError(err, 1022)
-		} else {
+			return
+		}
+		if !webSocketAuth.persistent {
 			break
 		}
 
@@ -857,13 +827,17 @@ func Web(w http.ResponseWriter, r *http.Request) {
 				// Erster Benutzer wird angelegt (Passwortbestätigung ist vorhanden)
 				if len(confirm) > 0 {
 
-					var token, err = createFirstUserForAuthentication(username, password)
+					var sessionID, err = createFirstUserForAuthentication(username, password)
 					if err != nil {
 						httpStatusError(w, r, 429)
 						return
 					}
-					// Redirect, damit die Daten aus dem Browser gelöscht werden.
-					w = authentication.SetCookieToken(w, token)
+					cookie, err := authentication.BrowserSessionCookie(sessionID, browserCookieSecure(r))
+					if err != nil {
+						httpStatusError(w, r, 429)
+						return
+					}
+					http.SetCookie(w, cookie)
 					http.Redirect(w, r, "/web", 301)
 					return
 
@@ -872,18 +846,22 @@ func Web(w http.ResponseWriter, r *http.Request) {
 				// Benutzername und Passwort vorhanden, wird jetzt überprüft
 				if len(username) > 0 && len(password) > 0 {
 
-					var token, err = authentication.UserAuthentication(username, password)
+					var sessionID, _, err = authentication.AuthenticateBrowser(username, password, "authentication.web")
 					if err != nil {
 						file = requestFile + "login.html"
 						lang["authenticationErr"] = language.Login.Failed
 						break
 					}
-
-					w = authentication.SetCookieToken(w, token)
+					cookie, err := authentication.BrowserSessionCookie(sessionID, browserCookieSecure(r))
+					if err != nil {
+						httpStatusError(w, r, 429)
+						return
+					}
+					http.SetCookie(w, cookie)
 					http.Redirect(w, r, "/web", 301) // Redirect, damit die Daten aus dem Browser gelöscht werden.
 
 				} else {
-					w = authentication.SetCookieToken(w, "-")
+					http.SetCookie(w, authentication.ExpiredBrowserSessionCookie(browserCookieSecure(r)))
 					http.Redirect(w, r, "/web", 301) // Redirect, damit die Daten aus dem Browser gelöscht werden.
 				}
 
@@ -891,14 +869,7 @@ func Web(w http.ResponseWriter, r *http.Request) {
 
 			case "GET":
 				lang["authenticationErr"] = ""
-				_, token, err := authentication.CheckTheValidityOfTheTokenFromHTTPHeader(w, r)
-
-				if err != nil {
-					file = requestFile + "login.html"
-					break
-				}
-
-				err = checkAuthorizationLevel(token, "authentication.web")
+				_, err = authorizeBrowserRequest(r, "authentication.web")
 				if err != nil {
 					file = requestFile + "login.html"
 					break
@@ -958,6 +929,9 @@ func Web(w http.ResponseWriter, r *http.Request) {
 	systemMutex.Unlock()
 
 	w.Header().Add("Content-Type", contentType)
+	if contentType == "text/html" {
+		setBrowserSecurityHeaders(w.Header())
+	}
 	w.WriteHeader(200)
 
 	if contentType == "text/html" || contentType == "application/javascript" {
@@ -965,6 +939,19 @@ func Web(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Write([]byte(content))
+}
+
+func WebLogout(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		w.Header().Set("Allow", http.MethodPost)
+		httpStatusError(w, r, http.StatusMethodNotAllowed)
+		return
+	}
+	if cookie, err := r.Cookie(authentication.BrowserSessionCookieName); err == nil {
+		authentication.InvalidateBrowserSession(cookie.Value)
+	}
+	http.SetCookie(w, authentication.ExpiredBrowserSessionCookie(browserCookieSecure(r)))
+	http.Redirect(w, r, "/web/", http.StatusSeeOther)
 }
 
 // API : API request /api/
