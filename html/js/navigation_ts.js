@@ -32,6 +32,20 @@ var legacyDestinationByMenuIndex = {
 var currentDestination;
 var initialDestinationRestored = false;
 var navigationGuardBypass = false;
+var sidebarNavigationStorageKey = "threadfin.navigation.collapsed";
+var navigationIconByDestination = {
+    overview: "fa-tachometer-alt",
+    playlist: "fa-list",
+    xmltv: "fa-calendar-alt",
+    filter: "fa-filter",
+    mapping: "fa-random",
+    connections: "fa-plug",
+    users: "fa-users",
+    activity: "fa-broadcast-tower",
+    settings: "fa-cog",
+    log: "fa-file-alt",
+    logout: "fa-sign-out-alt",
+};
 function renderNavigation() {
     var navigation = document.getElementById("main-menu");
     if (!navigation) {
@@ -60,18 +74,84 @@ function renderNavigation() {
             button.type = "button";
             button.className = "tf-navigation-item";
             button.setAttribute("data-destination", destination);
-            button.textContent = navigationDestinationLabel(destination);
+            appendNavigationItemContent(button, navigationIconByDestination[destination], navigationDestinationLabel(destination));
             button.addEventListener("click", function () {
                 openDestination(destination, true, button);
             });
             listItem.appendChild(button);
             list.appendChild(listItem);
         });
+        if (group.key == "system") {
+            var documentationItem = document.createElement("li");
+            var documentationLink = document.createElement("a");
+            documentationLink.className = "tf-navigation-item";
+            documentationLink.setAttribute("href", "https://github.com/volschin/Threadfin/blob/main/docs/user-guide.md");
+            documentationLink.setAttribute("target", "_blank");
+            documentationLink.setAttribute("rel", "noopener noreferrer");
+            appendNavigationItemContent(documentationLink, "fa-book-open", "User guide", true);
+            documentationItem.appendChild(documentationLink);
+            list.appendChild(documentationItem);
+        }
         groupElement.appendChild(list);
         navigationElement.appendChild(groupElement);
     });
     renderLegacyMenuAdapters(navigationElement);
     updateNavigationCurrentPage();
+    initializeSidebarNavigation();
+}
+function appendNavigationItemContent(element, iconName, label, external = false) {
+    element.setAttribute("aria-label", label);
+    element.setAttribute("title", label);
+    var icon = document.createElement("i");
+    icon.className = "fas " + iconName + " tf-navigation-icon";
+    icon.setAttribute("aria-hidden", "true");
+    element.appendChild(icon);
+    var text = document.createElement("span");
+    text.className = "tf-navigation-label";
+    text.textContent = label;
+    element.appendChild(text);
+    if (external) {
+        var externalIcon = document.createElement("i");
+        externalIcon.className = "fas fa-external-link-alt tf-navigation-external";
+        externalIcon.setAttribute("aria-hidden", "true");
+        element.appendChild(externalIcon);
+    }
+}
+function initializeSidebarNavigation() {
+    var app = document.querySelector(".tf-app");
+    var toggle = document.querySelector(".tf-sidebar-toggle");
+    if (!app || !toggle) {
+        return;
+    }
+    var collapsed = false;
+    try {
+        collapsed = localStorage.getItem(sidebarNavigationStorageKey) == "true";
+    }
+    catch (error) {
+        console.warn("Navigation preference is unavailable", error);
+    }
+    applySidebarNavigationState(app, toggle, collapsed);
+    if (toggle.getAttribute("data-sidebar-toggle-bound") == "true") {
+        return;
+    }
+    toggle.setAttribute("data-sidebar-toggle-bound", "true");
+    toggle.addEventListener("click", function () {
+        var nextCollapsed = !app.classList.contains("tf-sidebar-collapsed");
+        applySidebarNavigationState(app, toggle, nextCollapsed);
+        try {
+            localStorage.setItem(sidebarNavigationStorageKey, String(nextCollapsed));
+        }
+        catch (error) {
+            console.warn("Navigation preference could not be saved", error);
+        }
+    });
+}
+function applySidebarNavigationState(app, toggle, collapsed) {
+    app.classList.toggle("tf-sidebar-collapsed", collapsed);
+    toggle.setAttribute("aria-expanded", String(!collapsed));
+    var label = collapsed ? "Expand navigation" : "Collapse navigation";
+    toggle.setAttribute("aria-label", label);
+    toggle.setAttribute("title", label);
 }
 function renderLegacyMenuAdapters(navigation) {
     var adapters = document.createElement("div");
