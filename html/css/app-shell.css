@@ -130,22 +130,6 @@
   letter-spacing: normal;
 }
 
-.tf-app .tf-server-information {
-  display: inline-flex;
-  align-items: center;
-  justify-content: flex-start;
-  gap: 0.625rem;
-  padding: 0.625rem 0.75rem;
-  color: var(--tf-text);
-  background: var(--tf-panel-steel);
-  border: 1px solid transparent;
-  border-radius: 0.375rem;
-}
-
-.tf-app .tf-server-information:hover {
-  border-color: var(--tf-cyan);
-}
-
 .tf-app #main-content {
   min-width: 0;
   padding: clamp(1rem, 3vw, 2rem);
@@ -1828,10 +1812,6 @@
   }
 
   .tf-app .tf-sidebar-status,
-  .tf-app .tf-server-information {
-    display: none;
-  }
-
   .tf-app :is(button, a, input, select, [role="button"]) {
     min-height: 44px;
     min-inline-size: 44px;
