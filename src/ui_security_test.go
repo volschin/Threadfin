@@ -11,21 +11,39 @@ import (
 )
 
 const runtimeHTMLInjectionPayload = `</span><img src=x onerror="globalThis.threadfinInjected=true"><script>globalThis.threadfinInjected=true</script>`
+const runtimeDoubleQuoteHandlerPayload = `");globalThis.threadfinInjected=true;//`
+const runtimeSingleQuoteHandlerPayload = `');globalThis.threadfinInjected=true;//`
+const runtimeHandlerFixtureID = "handler-channel"
 
 type runtimeValueSecurityResult struct {
-	ProviderText  string   `json:"providerText"`
-	MappingText   string   `json:"mappingText"`
-	GroupText     string   `json:"groupText"`
-	ProbeRows     []string `json:"probeRows"`
-	PlaylistText  string   `json:"playlistText"`
-	ClientText    string   `json:"clientText"`
-	HeadlineText  string   `json:"headlineText"`
-	TitleText     string   `json:"titleText"`
-	Description   string   `json:"description"`
-	DescriptionBR string   `json:"descriptionBR"`
-	DangerousTags []string `json:"dangerousTags"`
-	EventHandlers int      `json:"eventHandlers"`
-	Injected      bool     `json:"injected"`
+	ProviderText  string     `json:"providerText"`
+	MappingText   string     `json:"mappingText"`
+	GroupText     string     `json:"groupText"`
+	ProbeRows     []string   `json:"probeRows"`
+	PlaylistText  string     `json:"playlistText"`
+	ClientText    string     `json:"clientText"`
+	HeadlineText  string     `json:"headlineText"`
+	TitleText     string     `json:"titleText"`
+	Description   string     `json:"description"`
+	DescriptionBR string     `json:"descriptionBR"`
+	ChannelStart  string     `json:"channelStart"`
+	MappingValue  string     `json:"mappingValue"`
+	BackupValue   string     `json:"backupValue"`
+	HideValue     string     `json:"hideValue"`
+	MappingDetail string     `json:"mappingDetail"`
+	PPVTitle      string     `json:"ppvTitle"`
+	PreviewTitles []string   `json:"previewTitles"`
+	PreviewValues []string   `json:"previewValues"`
+	HandlerAttrs  []string   `json:"handlerAttrs"`
+	ProbeValues   []string   `json:"probeValues"`
+	XMLTVCalls    [][]string `json:"xmltvCalls"`
+	ToggleIDs     []string   `json:"toggleIds"`
+	LogoIDs       []string   `json:"logoIds"`
+	DoneCalls     [][]string `json:"doneCalls"`
+	ChangedStates []bool     `json:"changedStates"`
+	DangerousTags []string   `json:"dangerousTags"`
+	EventHandlers int        `json:"eventHandlers"`
+	Injected      bool       `json:"injected"`
 }
 
 func TestGeneratedRuntimeValuesRemainText(t *testing.T) {
@@ -79,19 +97,84 @@ func TestGeneratedRuntimeValuesRemainText(t *testing.T) {
 		if want := payload + "<br>tail"; result.DescriptionBR != want {
 			t.Errorf("runtime description with markup-like text = %q, want %q", result.DescriptionBR, want)
 		}
+		for name, got := range map[string]string{
+			"channel-start display": result.ChannelStart,
+			"mapping-value display": result.MappingValue,
+			"backup display":        result.BackupValue,
+			"hide display":          result.HideValue,
+			"PPV title":             result.PPVTitle,
+		} {
+			want := payload
+			if name == "PPV title" {
+				want += ":"
+			}
+			if got != want {
+				t.Errorf("%s = %q, want exact runtime value %q", name, got, want)
+			}
+		}
+		if want := payload + " (" + payload + ")"; result.MappingDetail != want {
+			t.Errorf("mapping TVG/EPG detail = %q, want %q", result.MappingDetail, want)
+		}
+		if strings.Join(result.PreviewTitles, ",") != "Active Streams,Inactive Streams" {
+			t.Errorf("preview captions = %v, want exact repository captions", result.PreviewTitles)
+		}
+		if strings.Join(result.PreviewValues, "\n") != payload+"\n"+payload {
+			t.Errorf("preview values = %v, want exact runtime text", result.PreviewValues)
+		}
+		if len(result.HandlerAttrs) != 0 {
+			t.Errorf("mapping controls retain executable inline handlers: %v", result.HandlerAttrs)
+		}
+		if strings.Join(result.ProbeValues, "\n") != runtimeDoubleQuoteHandlerPayload {
+			t.Errorf("probe listener values = %q, want inert exact provider URL", result.ProbeValues)
+		}
+		if len(result.XMLTVCalls) < 6 {
+			t.Fatalf("XMLTV/mapping listener calls = %v, want initial mapping, three backups, file change, and replacement mapping", result.XMLTVCalls)
+		}
+		for _, call := range result.XMLTVCalls {
+			if len(call) != 3 || call[0] != runtimeHandlerFixtureID || call[2] != runtimeSingleQuoteHandlerPayload {
+				t.Errorf("XMLTV/mapping listener call = %v, want inert id/file payloads", call)
+			}
+		}
+		if strings.Join(result.ToggleIDs, "\n") != runtimeHandlerFixtureID || strings.Join(result.LogoIDs, "\n") != runtimeHandlerFixtureID {
+			t.Errorf("mapping ID listeners = toggle %v logo %v, want inert exact IDs", result.ToggleIDs, result.LogoIDs)
+		}
+		if len(result.DoneCalls) != 1 || len(result.DoneCalls[0]) != 2 || result.DoneCalls[0][0] != "mapping" || result.DoneCalls[0][1] != runtimeHandlerFixtureID {
+			t.Errorf("Done listener calls = %v, want mapping and inert exact ID", result.DoneCalls)
+		}
+		for index, changed := range result.ChangedStates {
+			if !changed {
+				t.Errorf("mapping listener %d did not preserve its changed-state side effect", index)
+			}
+		}
 	})
 
 	t.Run("TypeScript source contract", func(t *testing.T) {
 		assignment := regexp.MustCompile(`\.innerHTML\s*=\s*(.+?)\s*;?\s*$`)
 		emptyLiteral := regexp.MustCompile(`^(?:""|'')$`)
+		interpolatedInlineHandler := regexp.MustCompile(`setAttribute\(\s*["']on[A-Za-z]+["']\s*,.*(?:\+|\$\{)`)
+		stringEventProperty := regexp.MustCompile("\\.on[A-Za-z]+\\s*=\\s*(?:\\\"|'|`)")
+		forbiddenHTMLSink := regexp.MustCompile(`(?:\.outerHTML\s*=|\.insertAdjacentHTML\s*\(|document\.(?:write|writeln)\s*\()`)
 		for _, name := range []string{"network_ts.ts", "menu_ts.ts"} {
 			content, err := os.ReadFile(filepath.Join("..", "ts", name))
 			if err != nil {
 				t.Fatal(err)
 			}
 			for index, line := range strings.Split(string(content), "\n") {
-				match := assignment.FindStringSubmatch(strings.TrimSpace(line))
+				trimmed := strings.TrimSpace(line)
+				if forbiddenHTMLSink.MatchString(trimmed) {
+					t.Errorf("%s:%d uses an executable HTML parsing sink: %s", name, index+1, trimmed)
+				}
+				if interpolatedInlineHandler.MatchString(trimmed) {
+					t.Errorf("%s:%d interpolates runtime data into an executable inline handler: %s", name, index+1, trimmed)
+				}
+				if stringEventProperty.MatchString(trimmed) {
+					t.Errorf("%s:%d assigns executable source text to an event property: %s", name, index+1, trimmed)
+				}
+				match := assignment.FindStringSubmatch(trimmed)
 				if len(match) == 0 {
+					if strings.Contains(trimmed, ".innerHTML") && strings.Contains(trimmed, "=") {
+						t.Errorf("%s:%d has an unrecognized innerHTML assignment; keep the emptying assignment line-local: %s", name, index+1, trimmed)
+					}
 					continue
 				}
 				if !emptyLiteral.MatchString(strings.TrimSpace(match[1])) {
@@ -114,6 +197,8 @@ func evaluateRuntimeValueSecurity(t *testing.T) runtimeValueSecurityResult {
 		filepath.Join("..", "html", "js", "menu_ts.js"),
 		filepath.Join("..", "html", "js", "network_ts.js"),
 		runtimeHTMLInjectionPayload,
+		runtimeDoubleQuoteHandlerPayload,
+		runtimeSingleQuoteHandlerPayload,
 	)
 	output, err := command.CombinedOutput()
 	if err != nil {
@@ -158,10 +243,11 @@ class Element {
     this.style = {};
     this._id = "";
     this._text = "";
-    this.value = "";
+    this._value = "";
     this.name = "";
     this.type = "";
     this.checked = false;
+    this.selectedIndex = 0;
     this.classList = {
       add: value => { if (!this.className.split(/\s+/).includes(value)) this.className = (this.className + " " + value).trim(); },
       contains: value => this.className.split(/\s+/).includes(value),
@@ -175,6 +261,15 @@ class Element {
   get childNodes() { return this.children; }
   get firstChild() { return this.children.length ? this.children[0] : null; }
   get parentElement() { return this.parentNode; }
+  get options() { return this.children.filter(child => child.tagName == "OPTION"); }
+  get value() { return this._value; }
+  set value(value) {
+    this._value = String(value);
+    if (this.tagName == "SELECT") {
+      const index = this.options.findIndex(option => option.value == this._value);
+      if (index >= 0) this.selectedIndex = index;
+    }
+  }
   get textContent() { return this._text + this.children.map(child => child.textContent || "").join(""); }
   set textContent(value) { this.children = []; this._text = String(value); }
   get innerText() { return this.textContent; }
@@ -201,7 +296,27 @@ class Element {
   }
   getAttribute(name) { const value = this.attributes[String(name).toLowerCase()]; return value === undefined ? null : value; }
   hasAttribute(name) { return this.getAttribute(name) !== null; }
-  addEventListener(name, listener) { this.listeners[name] = listener; }
+  addEventListener(name, listener) {
+    if (!this.listeners[name]) this.listeners[name] = [];
+    this.listeners[name].push(listener);
+  }
+  dispatchEvent(event) {
+    const current = event || {type: ""};
+    current.target = this;
+    current.currentTarget = this;
+    for (const listener of this.listeners[current.type] || []) listener.call(this, current);
+    const inline = this.getAttribute("on" + current.type);
+    if (inline && runtimeContext) {
+      runtimeContext.__eventTarget = this;
+      const source = inline.replace(/^\s*javascript:\s*/i, "");
+      try {
+        vm.runInContext("(function(){" + source + "\n}).call(__eventTarget)", runtimeContext);
+      } catch (_error) {
+        runtimeContext.inlineHandlerErrors += 1;
+      }
+    }
+    return true;
+  }
   getElementsByClassName(name) { return walk(this).filter(item => item !== this && item.className.split(/\s+/).includes(name)); }
   querySelectorAll(selector) {
     const names = selector.split(",").map(value => value.trim().toUpperCase());
@@ -258,10 +373,11 @@ function walk(root, found = []) {
 
 const document = {
   byID: {},
+  created: [],
   body: null,
   activeElement: null,
   cookie: "",
-  createElement(tagName) { return new Element(tagName, this); },
+  createElement(tagName) { const element = new Element(tagName, this); this.created.push(element); return element; },
   createTextNode(value) { return new TextNode(value, this); },
   getElementById(id) { return this.byID[id] || null; },
   addEventListener() {},
@@ -303,8 +419,36 @@ append(document.body, "p", "client-connection-information");
 append(document.body, "div", "probeDetails");
 
 const payload = process.argv[4];
+const handlerPayload = process.argv[5];
+const singleQuoteHandlerPayload = process.argv[6];
+const mappingID = "handler-channel";
+const probeValues = [];
+const xmltvCalls = [];
+const toggleIDs = [];
+const logoIDs = [];
+const doneCalls = [];
 changedName.value = payload;
 changedGroup.value = payload;
+
+const mappingData = {
+  "x-active": true,
+  "x-name": payload,
+  "tvg-id": payload,
+  "x-epg": payload,
+  "x-description": payload,
+  "_uuid.key": "",
+  "tvg-logo": "https://example.invalid/logo.png",
+  "x-update-channel-icon": false,
+  "x-category": "",
+  "x-group-title": payload,
+  "group-title": payload,
+  "x-xmltv-file": singleQuoteHandlerPayload,
+  "x-mapping": singleQuoteHandlerPayload,
+  "x-backup-channel-1": singleQuoteHandlerPayload,
+  "x-backup-channel-2": singleQuoteHandlerPayload,
+  "x-backup-channel-3": singleQuoteHandlerPayload,
+  "url": handlerPayload,
+};
 
 runtimeContext = {
   console: {log() {}, warn() {}},
@@ -314,22 +458,39 @@ runtimeContext = {
   WebSocket: class {},
   SERVER: {
     clientInfo: {activePlaylist: payload, totalPlaylist: payload, activeClients: payload, totalClients: payload},
-    settings: {files: {xmltv: {X1: {name: payload}}}, epgCategoriesColors: ""},
-    xepg: {epgMapping: {channel: {"x-active": true, "tvg-logo": "https://example.invalid/logo.png"}}},
+    settings: {files: {xmltv: {X1: {name: payload}}}, epgCategories: "", epgCategoriesColors: ""},
+    xepg: {
+      epgMapping: {
+        channel: {"x-active": true, "tvg-logo": "https://example.invalid/logo.png"},
+        [mappingID]: mappingData,
+      },
+      xmltvMap: {
+        [singleQuoteHandlerPayload]: {[singleQuoteHandlerPayload]: {"display-name": payload, icon: "https://example.invalid/guide.png"}},
+      },
+    },
+    data: {StreamPreviewUI: {activeStreams: [payload], inactiveStreams: [payload]}},
   },
   UNDO: {},
   WS_AVAILABLE: false,
   BULK_EDIT: false,
   threadfinInjected: false,
+  inlineHandlerErrors: 0,
   createSearchObj() {},
   searchInMapping() {},
   getObjKeys(value) { return Object.keys(value || {}); },
+  getOwnObjProps(value) { return Object.keys(value || {}); },
+  getAllSelectedChannels() { return []; },
+  getLocalData(type, id) { return type == "mapping" && id == mappingID ? mappingData : {}; },
+  enhanceSourcePopup() {},
   showElement() {},
   showPreview() {},
   showPopUpElement() {},
   renderNavigation() {},
   restoreInitialDestinationFromHistory() {},
   alert() {},
+  probeChannel(value) { probeValues.push(String(value)); },
+  toggleChannelStatus(value) { toggleIDs.push(String(value)); },
+  changeChannelNumbers() {},
   setInterval() {},
   setTimeout() { return 1; },
   clearTimeout() {},
@@ -338,14 +499,30 @@ runtimeContext.WebSocket.OPEN = 1;
 vm.createContext(runtimeContext);
 vm.runInContext(fs.readFileSync(process.argv[2], "utf8"), runtimeContext);
 vm.runInContext(fs.readFileSync(process.argv[3], "utf8"), runtimeContext);
+const mappingServer = runtimeContext.SERVER;
 
-vm.runInContext('donePopupData("mapping", "channel")', runtimeContext);
-const providerText = displays[6].textContent;
-const mappingText = displays[3].textContent;
-const groupText = displays[5].textContent;
+const realDonePopupData = runtimeContext.donePopupData;
+function updateLegacyDisplay(name, value, displayIndex) {
+  popup.innerHTML = "";
+  const input = append(popup, "input");
+  input.className = "changed";
+  input.type = "text";
+  input.name = name;
+  input.value = value;
+  realDonePopupData("mapping", "channel");
+  return displays[displayIndex].textContent;
+}
+const providerText = updateLegacyDisplay("x-xmltv-file", "X1.xml", 6);
+const mappingText = updateLegacyDisplay("x-name", payload, 3);
+const groupText = updateLegacyDisplay("x-group-title", payload, 5);
+const channelStart = updateLegacyDisplay("x-channel-start", payload, 3);
+const mappingValue = updateLegacyDisplay("x-mapping", payload, 7);
+const backupValue = updateLegacyDisplay("x-backup-channel", payload, 7);
+const hideValue = updateLegacyDisplay("x-hide-channel", payload, 7);
 
 runtimeContext.SERVER.clientInfo = {activePlaylist: payload, totalPlaylist: payload, activeClients: payload, totalClients: payload};
 vm.runInContext('applyThreadfinResponse("probeChannel", {}, {status: true, probeInfo: {resolution: globalThis.payload, frameRate: globalThis.payload, audioChannel: globalThis.payload}, clientInfo: SERVER.clientInfo})', Object.assign(runtimeContext, {payload}));
+const renderedProbeRows = document.getElementById("probeDetails").children.filter(child => child.tagName == "P").map(child => child.textContent);
 
 vm.runInContext('globalThis.popupFixture = new PopupContent(); popupFixture.createHeadline(globalThis.payload); popupFixture.description(globalThis.payload); popupFixture.description(globalThis.payload + "<br>tail"); globalThis.titleFixture = popupFixture.createTitle(globalThis.payload)', runtimeContext);
 const headline = popup.children.find(child => child.tagName == "H3");
@@ -353,23 +530,101 @@ const descriptions = walk(popup).filter(child => child.tagName == "PRE");
 const description = descriptions[0];
 const descriptionBR = descriptions[1];
 const title = runtimeContext.titleFixture;
+
+runtimeContext.SERVER = mappingServer;
+const mappingInvoker = append(document.body, "button", mappingID);
+runtimeContext.mappingInvoker = mappingInvoker;
+runtimeContext.payload = payload;
+vm.runInContext('openPopUp("mapping", mappingInvoker)', runtimeContext);
+const mappingDetailElement = walk(popup).find(child => child.tagName == "PRE" && walk(child, []).some(item => item.className == "text-danger"));
+const mappingDetail = mappingDetailElement ? mappingDetailElement.textContent : "";
+const activeControl = document.getElementById("active");
+const logoControl = document.getElementById("update-icon");
+const xmltvFileControl = document.getElementById("popup-xmltv");
+const initialMappingControl = document.getElementById("xmltv-id-picker-input");
+const backupControls = [document.getElementById("backup-channel-1"), document.getElementById("backup-channel-2"), document.getElementById("backup-channel-3")];
+const popupInputs = walk(popup).filter(item => item.tagName == "INPUT");
+const probeControl = popupInputs.find(item => item.value == "{{.button.probeChannel}}");
+const doneControl = popupInputs.find(item => item.value == "{{.button.done}}");
+const handlerAttrs = [
+  [activeControl, "onchange"],
+  [logoControl, "onchange"],
+  [xmltvFileControl, "onchange"],
+  [initialMappingControl, "onchange"],
+  ...backupControls.map(control => [control, "onchange"]),
+  [probeControl, "onclick"],
+  [doneControl, "onclick"],
+].map(([control, attribute]) => control && control.getAttribute(attribute)).filter(value => value !== null && value !== undefined);
+
+runtimeContext.checkXmltvChannel = function(id, element, file) {
+  const value = element && typeof element == "object" && "value" in element ? element.value : element;
+  xmltvCalls.push([String(id), String(value), String(file)]);
+};
+runtimeContext.changeChannelLogo = function(id) { logoIDs.push(String(id)); };
+runtimeContext.donePopupData = function(type, ids) { doneCalls.push([String(type), String(ids)]); };
+
+initialMappingControl.dispatchEvent({type: "change"});
+for (const control of backupControls) control.dispatchEvent({type: "change"});
+activeControl.dispatchEvent({type: "change"});
+logoControl.dispatchEvent({type: "change"});
+probeControl.dispatchEvent({type: "click"});
+doneControl.dispatchEvent({type: "click"});
+xmltvFileControl.value = singleQuoteHandlerPayload;
+xmltvFileControl.dispatchEvent({type: "change"});
+const replacementMappingControl = document.getElementById("xmltv-id-picker-input");
+replacementMappingControl.value = singleQuoteHandlerPayload;
+replacementMappingControl.dispatchEvent({type: "change"});
+
+const ppvHostCell = append(document.body, "td");
+append(ppvHostCell, "input", "x-ppv-extra");
+const ppvChoice = document.createElement("select");
+ppvChoice.value = "PPV";
+runtimeContext.ppvChoice = ppvChoice;
+runtimeContext.ppvOwner = {table: document.createElement("table")};
+const createdBeforePPV = document.created.length;
+vm.runInContext('checkPPV.call(ppvOwner, globalThis.payload, ppvChoice)', runtimeContext);
+const ppvTitleElement = document.created.slice(createdBeforePPV).find(item => item.tagName == "TD" && item.textContent.startsWith(payload + ":"));
+
+const previewBox = append(document.body, "div", "myStreamsBox");
+const activeStreams = append(previewBox, "table", "activeStreams");
+const inactiveStreams = append(previewBox, "table", "inactiveStreams");
+runtimeContext.SERVER.data = {StreamPreviewUI: {activeStreams: [payload], inactiveStreams: [payload]}};
+vm.runInContext('showPreview(true)', runtimeContext);
+const previewTables = [activeStreams, inactiveStreams];
+const previewTitles = previewTables.map(table => table.children.find(child => child.tagName == "CAPTION").textContent);
+const previewValues = previewTables.map(table => walk(table).find(child => child.className == "tdVal").textContent);
+
 const roots = [document.body, title];
 const nodes = roots.flatMap(root => walk(root, []));
 const dangerousTags = nodes.filter(node => node.tagName == "SCRIPT" || (node.tagName == "IMG" && (node.getAttribute("src") == "x" || node.hasAttribute("onerror")))).map(node => node.tagName);
-const eventHandlers = nodes.reduce((count, node) => count + Object.keys(node.attributes || {}).filter(name => name.startsWith("on")).length, 0);
-const probeRows = document.getElementById("probeDetails").children.filter(child => child.tagName == "P").map(child => child.textContent);
+const eventHandlers = nodes.reduce((count, node) => count + Object.keys(node.attributes || {}).filter(name => name == "onerror").length, 0);
 
 process.stdout.write(JSON.stringify({
   providerText,
   mappingText,
   groupText,
-  probeRows,
+  probeRows: renderedProbeRows,
   playlistText: document.getElementById("playlist-connection-information").textContent,
   clientText: document.getElementById("client-connection-information").textContent,
   headlineText: headline ? headline.textContent : "",
   titleText: title ? title.textContent : "",
   description: description ? description.textContent : "",
   descriptionBR: descriptionBR ? descriptionBR.textContent : "",
+  channelStart,
+  mappingValue,
+  backupValue,
+  hideValue,
+  mappingDetail,
+  ppvTitle: ppvTitleElement ? ppvTitleElement.textContent : "",
+  previewTitles,
+  previewValues,
+  handlerAttrs,
+  probeValues,
+  xmltvCalls,
+  toggleIds: toggleIDs,
+  logoIds: logoIDs,
+  doneCalls,
+  changedStates: [logoControl, xmltvFileControl, initialMappingControl, ...backupControls, replacementMappingControl].map(control => control.className.split(/\s+/).includes("changed")),
   dangerousTags,
   eventHandlers,
   injected: parsedInjection || runtimeContext.threadfinInjected,

@@ -305,6 +305,12 @@ function appendDescriptionText(element: HTMLElement, value: string): void {
   })
 }
 
+function addRuntimeEventListener(element: any, eventName: string, listener: EventListener): void {
+  if (element && typeof element.addEventListener == "function") {
+    element.addEventListener(eventName, listener)
+  }
+}
+
 function openPopUp(dataType, element) {
 
   var data: object = new Object();
@@ -446,7 +452,7 @@ function openPopUp(dataType, element) {
       if (data["id.provider"] != "-") {
         var input = content.createInput("button", "delete", "{{.button.delete}}")
         input.className = "delete"
-        input.setAttribute('onclick', 'javascript: savePopupData("m3u", "' + id + '", true, 0)')
+        addRuntimeEventListener(input, "click", () => savePopupData("m3u", id, true, 0))
         content.addInteraction(input)
       } else {
         var input = content.createInput("button", "back", "{{.button.back}}")
@@ -462,13 +468,13 @@ function openPopUp(dataType, element) {
       // Aktualisieren
       if (data["id.provider"] != "-") {
         var input = content.createInput("button", "update", "{{.button.update}}")
-        input.setAttribute('onclick', 'javascript: savePopupData("m3u", "' + id + '", false, 1)')
+        addRuntimeEventListener(input, "click", () => savePopupData("m3u", id, false, 1))
         content.addInteraction(input)
       }
 
       // Speichern
       var input = content.createInput("button", "save", "{{.button.save}}")
-      input.setAttribute('onclick', 'javascript: savePopupData("m3u", "' + id + '", false, 0)')
+      addRuntimeEventListener(input, "click", () => savePopupData("m3u", id, false, 0))
       content.addInteraction(input)
       break
 
@@ -534,7 +540,7 @@ function openPopUp(dataType, element) {
       // Löschen
       if (data["id.provider"] != "-") {
         var input = content.createInput("button", "delete", "{{.button.delete}}")
-        input.setAttribute('onclick', 'javascript: savePopupData("hdhr", "' + id + '", true, 0)')
+        addRuntimeEventListener(input, "click", () => savePopupData("hdhr", id, true, 0))
         input.className = "delete"
         content.addInteraction(input)
       } else {
@@ -551,13 +557,13 @@ function openPopUp(dataType, element) {
       // Aktualisieren
       if (data["id.provider"] != "-") {
         var input = content.createInput("button", "update", "{{.button.update}}")
-        input.setAttribute('onclick', 'javascript: savePopupData("hdhr", "' + id + '", false, 1)')
+        addRuntimeEventListener(input, "click", () => savePopupData("hdhr", id, false, 1))
         content.addInteraction(input)
       }
 
       // Speichern
       var input = content.createInput("button", "save", "{{.button.save}}")
-      input.setAttribute('onclick', 'javascript: savePopupData("hdhr", "' + id + '", false, 0)')
+      addRuntimeEventListener(input, "click", () => savePopupData("hdhr", id, false, 0))
       content.addInteraction(input)
       break
 
@@ -716,7 +722,7 @@ function openPopUp(dataType, element) {
 
       // Löschen
       var input = content.createInput("button", "delete", "{{.button.delete}}")
-      input.setAttribute('onclick', 'javascript: savePopupData("filter", "' + id + '", true, 0)')
+      addRuntimeEventListener(input, "click", () => savePopupData("filter", id, true, 0))
       input.className = "delete"
       content.addInteraction(input)
 
@@ -727,7 +733,7 @@ function openPopUp(dataType, element) {
 
       // Speichern
       var input = content.createInput("button", "save", "{{.button.save}}")
-      input.setAttribute('onclick', 'javascript: savePopupData("filter", "' + id + '", false, 0)')
+      addRuntimeEventListener(input, "click", () => savePopupData("filter", id, false, 0))
       content.addInteraction(input)
 
       break
@@ -769,7 +775,7 @@ function openPopUp(dataType, element) {
       // Löschen
       if (data["id.provider"] != "-") {
         var input = content.createInput("button", "delete", "{{.button.delete}}")
-        input.setAttribute('onclick', 'javascript: savePopupData("xmltv", "' + id + '", true, 0)')
+        addRuntimeEventListener(input, "click", () => savePopupData("xmltv", id, true, 0))
         input.className = "delete"
         content.addInteraction(input)
       }
@@ -782,13 +788,13 @@ function openPopUp(dataType, element) {
       // Aktualisieren
       if (data["id.provider"] != "-") {
         var input = content.createInput("button", "update", "{{.button.update}}")
-        input.setAttribute('onclick', 'javascript: savePopupData("xmltv", "' + id + '", false, 1)')
+        addRuntimeEventListener(input, "click", () => savePopupData("xmltv", id, false, 1))
         content.addInteraction(input)
       }
 
       // Speichern
       var input = content.createInput("button", "save", "{{.button.save}}")
-      input.setAttribute('onclick', 'javascript: savePopupData("xmltv", "' + id + '", false, 0)')
+      addRuntimeEventListener(input, "click", () => savePopupData("xmltv", id, false, 0))
       content.addInteraction(input)
       break
 
@@ -858,7 +864,7 @@ function openPopUp(dataType, element) {
       if (data["defaultUser"] != true && id != "-") {
         var input = content.createInput("button", "delete", "{{.button.delete}}")
         input.className = "delete"
-        input.setAttribute('onclick', 'javascript: savePopupData("' + dataType + '", "' + id + '", true, 0)')
+        addRuntimeEventListener(input, "click", () => savePopupData(dataType, id, true, 0))
         content.addInteraction(input)
       }
 
@@ -869,7 +875,7 @@ function openPopUp(dataType, element) {
 
       // Speichern
       var input = content.createInput("button", "save", "{{.button.save}}")
-      input.setAttribute("onclick", 'javascript: savePopupData("' + dataType + '", "' + id + '", "false");')
+      addRuntimeEventListener(input, "click", () => savePopupData(dataType, id, false, undefined))
       content.addInteraction(input)
 
       break
@@ -887,7 +893,7 @@ function openPopUp(dataType, element) {
           input.setAttribute("value", channel["x-channelID"])
         }
 
-        input.setAttribute("onchange", 'javascript: changeChannelNumbers("' + channels + '");')
+        addRuntimeEventListener(input, "change", () => changeChannelNumbers(channels.toString()))
         content.appendRow("{{.mapping.channelGroupStart.title}}", input)
       }
 
@@ -897,7 +903,7 @@ function openPopUp(dataType, element) {
       input.checked = data[dbKey]
       input.id = "active"
       //input.setAttribute("onchange", "javascript: this.className = 'changed'")
-      input.setAttribute("onchange", "javascript: toggleChannelStatus('" + id + "', this)")
+      addRuntimeEventListener(input, "change", () => toggleChannelStatus(id))
       content.appendRow("{{.mapping.active.title}}", input)
 
       // Kanalname 
@@ -951,7 +957,11 @@ function openPopUp(dataType, element) {
       var input = content.createCheckbox(dbKey)
       input.checked = data[dbKey]
       input.setAttribute("id", "update-icon")
-      input.setAttribute("onchange", "javascript: this.className = 'changed'; changeChannelLogo('" + id + "');")
+      addRuntimeEventListener(input, "change", (event: Event) => {
+        var updateIcon = event.currentTarget as HTMLInputElement
+        updateIcon.className = "changed"
+        changeChannelLogo(id)
+      })
       content.appendRow("{{.mapping.updateChannelLogo.title}}", input)
 
       // Erweitern der EPG Kategorie
@@ -991,7 +1001,11 @@ function openPopUp(dataType, element) {
       var select = xmltv.getFiles(data[dbKey])
       select.setAttribute("name", dbKey)
       select.setAttribute("id", "popup-xmltv")
-      select.setAttribute("onchange", "javascript: this.className = 'changed'; setXmltvChannel('" + id + "',this, '" + data["x-mapping"] + "');")
+      addRuntimeEventListener(select, "change", (event: Event) => {
+        var xmltvFile = event.currentTarget as HTMLSelectElement
+        xmltvFile.className = "changed"
+        setXmltvChannel(id, xmltvFile)
+      })
       content.appendRow("{{.mapping.xmltvFile.title}}", select)
       var file = data[dbKey]
 
@@ -1004,7 +1018,10 @@ function openPopUp(dataType, element) {
       xmlTvIdInput.setAttribute('list', 'xmltv-id-picker-datalist');
       xmlTvIdInput.setAttribute('name', 'x-mapping'); // Should stay x-mapping as it will be used in donePopupData to make a server request
       xmlTvIdInput.setAttribute('id', 'xmltv-id-picker-input');
-      xmlTvIdInput.setAttribute('onchange', `javascript: this.className = 'changed'; checkXmltvChannel('${id}', this, '${xmlFile}');`);
+      addRuntimeEventListener(xmlTvIdInput, "change", () => {
+        xmlTvIdInput.className = "changed"
+        checkXmltvChannel(id, xmlTvIdInput, xmlFile)
+      })
       xmlTvIdDatalist.setAttribute('id', 'xmltv-id-picker-datalist');
       // sortSelect(xmlTvIdDatalist); // TODO: Better sort before adding
       content.appendRow('{{.mapping.xmltvChannel.title}}', xmlTvIdContainer);
@@ -1026,7 +1043,10 @@ function openPopUp(dataType, element) {
       xmlTvBackup1IdInput.setAttribute('list', 'm3u-id-picker-datalist');
       xmlTvBackup1IdInput.setAttribute('name', dbKey); // Should stay x-mapping as it will be used in donePopupData to make a server request
       xmlTvBackup1IdInput.setAttribute("id", "backup-channel-1");
-      xmlTvBackup1IdInput.setAttribute('onchange', `javascript: this.className = 'changed'; checkXmltvChannel('${id}', this, '${xmlFile}');`);
+      addRuntimeEventListener(xmlTvBackup1IdInput, "change", () => {
+        xmlTvBackup1IdInput.className = "changed"
+        checkXmltvChannel(id, xmlTvBackup1IdInput, xmlFile)
+      })
       xmlTvBackup1IdDatalist.setAttribute('id', 'm3u-id-picker-datalist');
       // sortSelect(xmlTvIdDatalist); // TODO: Better sort before adding
       content.appendRow('{{.mapping.backupChannel1.title}}', xmlTvBackup1IdContainer);
@@ -1039,7 +1059,10 @@ function openPopUp(dataType, element) {
       xmlTvBackup2IdInput.setAttribute('list', 'm3u-id-picker-datalist');
       xmlTvBackup2IdInput.setAttribute('name', dbKey); // Should stay x-mapping as it will be used in donePopupData to make a server request
       xmlTvBackup2IdInput.setAttribute("id", "backup-channel-2");
-      xmlTvBackup2IdInput.setAttribute('onchange', `javascript: this.className = 'changed'; checkXmltvChannel('${id}', this, '${xmlFile}');`);
+      addRuntimeEventListener(xmlTvBackup2IdInput, "change", () => {
+        xmlTvBackup2IdInput.className = "changed"
+        checkXmltvChannel(id, xmlTvBackup2IdInput, xmlFile)
+      })
       xmlTvBackup2IdDatalist.setAttribute('id', 'm3u-id-picker-datalist');
       content.appendRow("{{.mapping.backupChannel2.title}}", xmlTvBackup2IdContainer)
 
@@ -1051,7 +1074,10 @@ function openPopUp(dataType, element) {
       xmlTvBackup3IdInput.setAttribute('list', 'm3u-id-picker-datalist');
       xmlTvBackup3IdInput.setAttribute('name', dbKey); // Should stay x-mapping as it will be used in donePopupData to make a server request
       xmlTvBackup3IdInput.setAttribute("id", "backup-channel-3");
-      xmlTvBackup3IdInput.setAttribute('onchange', `javascript: this.className = 'changed'; checkXmltvChannel('${id}', this, '${xmlFile}');`);
+      addRuntimeEventListener(xmlTvBackup3IdInput, "change", () => {
+        xmlTvBackup3IdInput.className = "changed"
+        checkXmltvChannel(id, xmlTvBackup3IdInput, xmlFile)
+      })
       xmlTvBackup3IdDatalist.setAttribute('id', 'm3u-id-picker-datalist');
       content.appendRow("{{.mapping.backupChannel3.title}}", xmlTvBackup3IdContainer)
       
@@ -1059,7 +1085,7 @@ function openPopUp(dataType, element) {
       content.createInteraction()
 
       var input = content.createInput("button", "cancel", "{{.button.probeChannel}}")
-      input.setAttribute("onclick", 'javascript: probeChannel("' + data["url"] + '");')
+      addRuntimeEventListener(input, "click", () => probeChannel(data["url"]))
       content.addInteraction(input)
 
       // Logo hochladen
@@ -1080,7 +1106,7 @@ function openPopUp(dataType, element) {
       }
 
       var input = content.createInput("button", "save", "{{.button.done}}")
-      input.setAttribute("onclick", 'javascript: donePopupData("' + dataType + '", "' + ids + '", "false");')
+      addRuntimeEventListener(input, "click", () => donePopupData(dataType, ids.toString()))
       content.addInteraction(input)
 
       var probeDetails = document.createElement("div")
@@ -1373,7 +1399,10 @@ function setXmltvChannel(epgMapId: string, xmlTvFileSelect: HTMLSelectElement) {
   xmlTvIdInput.setAttribute('list', 'xmltv-id-picker-datalist');
   xmlTvIdInput.setAttribute('name', 'x-mapping'); // Should stay x-mapping as it will be used in donePopupData to make a server request
   xmlTvIdInput.setAttribute('id', 'xmltv-id-picker-input');
-  xmlTvIdInput.setAttribute('onchange', `javascript: this.className = 'changed'; checkXmltvChannel('${epgMapId}', this.value, '${newXmlTvFile}');`);
+  addRuntimeEventListener(xmlTvIdInput, "change", () => {
+    xmlTvIdInput.className = "changed"
+    checkXmltvChannel(epgMapId, xmlTvIdInput, newXmlTvFile)
+  })
   xmlTvIdInput.classList.add('changed');
   xmlTvIdDatalist.setAttribute('id', 'xmltv-id-picker-datalist');
 
