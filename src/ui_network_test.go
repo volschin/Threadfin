@@ -77,6 +77,19 @@ func TestGeneratedWebSocketQueue(t *testing.T) {
 			CompletionCounts     []int    `json:"completionCounts"`
 			ReplacementUnchanged bool     `json:"replacementUnchanged"`
 		} `json:"timeout"`
+		StalePolicy struct {
+			ActiveBeforePolicy string   `json:"activeBeforePolicy"`
+			QueueBeforePolicy  []string `json:"queueBeforePolicy"`
+			FailureCounts      []int    `json:"failureCounts"`
+			FailureStatuses    []bool   `json:"failureStatuses"`
+			Reloads            int      `json:"reloads"`
+			SocketCount        int      `json:"socketCount"`
+			QueueLength        int      `json:"queueLength"`
+			ActiveCleared      bool     `json:"activeCleared"`
+			SocketCleared      bool     `json:"socketCleared"`
+			ReplacementClosed  bool     `json:"replacementClosed"`
+			NoReconnect        bool     `json:"noReconnect"`
+		} `json:"stalePolicy"`
 		CallbackFIFO struct {
 			Commands         []string `json:"commands"`
 			CompletionCounts []int    `json:"completionCounts"`
@@ -132,6 +145,9 @@ func TestGeneratedWebSocketQueue(t *testing.T) {
 	}
 	if got.Timeout.Delay != 30000 || !got.Timeout.FirstFailedOnce || !reflect.DeepEqual(got.Timeout.ReconnectCommands, []string{"second", "third"}) || !got.Timeout.LateMessageIgnored || !got.Timeout.LateErrorIgnored || !got.Timeout.LateCloseIgnored || !got.Timeout.ReplacementUnchanged || !reflect.DeepEqual(got.Timeout.CompletionCounts, []int{1, 1, 1}) {
 		t.Errorf("timeout/late-event handling = %+v, want 30s, isolated stale events, and complete FIFO tail", got.Timeout)
+	}
+	if got.StalePolicy.ActiveBeforePolicy != "second" || !reflect.DeepEqual(got.StalePolicy.QueueBeforePolicy, []string{"third", "fourth"}) || !reflect.DeepEqual(got.StalePolicy.FailureCounts, []int{1, 1, 1, 1}) || !reflect.DeepEqual(got.StalePolicy.FailureStatuses, []bool{true, true, true, true}) || got.StalePolicy.Reloads != 1 || got.StalePolicy.SocketCount != 2 || got.StalePolicy.QueueLength != 0 || !got.StalePolicy.ActiveCleared || !got.StalePolicy.SocketCleared || !got.StalePolicy.ReplacementClosed || !got.StalePolicy.NoReconnect {
+		t.Errorf("stale policy-close handling = %+v, want delayed stale 1008 to fail replacement active and full tail once, empty state, close replacement, reload once, and never reconnect", got.StalePolicy)
 	}
 	if !reflect.DeepEqual(got.CallbackFIFO.Commands, []string{"first", "tail", "callback"}) || !reflect.DeepEqual(got.CallbackFIFO.CompletionCounts, []int{1, 1, 1}) {
 		t.Errorf("callback-enqueued FIFO = %+v, want existing tail before callback work", got.CallbackFIFO)
@@ -413,6 +429,28 @@ respond(timeoutSecondSocket, {status: true});
 respond(timeoutSecondSocket, {status: true});
 const timeoutReconnect = sent(timeoutSecondSocket);
 
+const stalePolicyHarness = makeHarness();
+request(stalePolicyHarness, "first", {});
+request(stalePolicyHarness, "second", {});
+request(stalePolicyHarness, "third", {});
+request(stalePolicyHarness, "fourth", {});
+const stalePolicyOldSocket = stalePolicyHarness.sockets[0];
+openSocket(stalePolicyHarness, stalePolicyOldSocket);
+const stalePolicyTimer = pendingTimers(stalePolicyHarness).find(timer => timer.delay === 30000);
+fireTimer(stalePolicyTimer);
+const stalePolicyReplacement = stalePolicyHarness.sockets[1];
+openSocket(stalePolicyHarness, stalePolicyReplacement);
+const stalePolicyConnection = stalePolicyHarness.context.THREADFIN_CONNECTION;
+const stalePolicyActiveBefore = stalePolicyConnection.active ? stalePolicyConnection.active.command : "";
+const stalePolicyQueueBefore = stalePolicyConnection.queue.map(item => item.command);
+const stalePolicySocketCountBefore = stalePolicyHarness.sockets.length;
+stalePolicyOldSocket.emitClose(1008);
+for (const timer of pendingTimers(stalePolicyHarness)) fireTimer(timer);
+const stalePolicyFailureStatuses = ["first", "second", "third", "fourth"].map(command => {
+  const completion = stalePolicyHarness.completions.find(item => item.command === command);
+  return completion ? completion.status === false : false;
+});
+
 const callbackHarness = makeHarness({enqueueAfterSuccess: "first", callbackCommand: "callback"});
 request(callbackHarness, "first", {});
 request(callbackHarness, "tail", {});
@@ -488,6 +526,19 @@ process.stdout.write(JSON.stringify({
     lateCloseIgnored,
     completionCounts: ["first", "second", "third"].map(command => completionCount(timeoutHarness, command)),
     replacementUnchanged,
+  },
+  stalePolicy: {
+    activeBeforePolicy: stalePolicyActiveBefore,
+    queueBeforePolicy: stalePolicyQueueBefore,
+    failureCounts: ["first", "second", "third", "fourth"].map(command => completionCount(stalePolicyHarness, command)),
+    failureStatuses: stalePolicyFailureStatuses,
+    reloads: stalePolicyHarness.reloads(),
+    socketCount: stalePolicyHarness.sockets.length,
+    queueLength: stalePolicyConnection.queue.length,
+    activeCleared: stalePolicyConnection.active === null,
+    socketCleared: stalePolicyConnection.socket === null,
+    replacementClosed: stalePolicyReplacement.readyState === 3 && stalePolicyReplacement.closeCount === 1,
+    noReconnect: stalePolicyHarness.sockets.length === stalePolicySocketCountBefore,
   },
   callbackFifo: {
     commands: sent(callbackSocket).map(message => message.cmd),
