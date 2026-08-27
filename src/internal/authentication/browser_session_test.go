@@ -169,6 +169,49 @@ func TestBrowserSessionsAreIndependentFromAPITokenRotation(t *testing.T) {
 	}
 }
 
+func TestInitInvalidatesExistingBrowserSessions(t *testing.T) {
+	databasePath := initAuthenticationTest(t)
+	if _, err := CreateNewUser("browser-user", "password"); err != nil {
+		t.Fatal(err)
+	}
+	sessionID, _, err := AuthenticateBrowser("browser-user", "password")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := Init(databasePath, 60); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := AuthorizeBrowserSession(sessionID); err == nil {
+		t.Fatal("browser session survived Init")
+	}
+}
+
+func TestAuthorizeBrowserSessionRejectsRevokedPermission(t *testing.T) {
+	initAuthenticationTest(t)
+	userID, err := CreateNewUser("browser-user", "password")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := WriteUserData(userID, map[string]interface{}{"authentication.web": true}); err != nil {
+		t.Fatal(err)
+	}
+	sessionID, _, err := AuthenticateBrowser("browser-user", "password", "authentication.web")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := WriteUserData(userID, map[string]interface{}{"authentication.web": false}); err != nil {
+		t.Fatal(err)
+	}
+	if _, exists := browserSessions[sessionID]; !exists {
+		t.Fatal("permission change unexpectedly removed browser session")
+	}
+
+	if _, err := AuthorizeBrowserSession(sessionID, "authentication.web"); err == nil {
+		t.Fatal("browser session authorized after permission revocation")
+	}
+}
+
 func TestBrowserSessionCookieUsesStoredExpiryAndStrictAttributes(t *testing.T) {
 	initAuthenticationTest(t)
 	if _, err := CreateNewUser("browser-user", "password"); err != nil {
