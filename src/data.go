@@ -801,15 +801,21 @@ func saveWizard(request RequestStruct) (nextStep int, err error) {
 func createFilterRules() (err error) {
 
 	Data.Filter = nil
-	var dataFilter Filter
 
-	for _, f := range Settings.Filter {
+	filterIDs := make([]int64, 0, len(Settings.Filter))
+	for id := range Settings.Filter {
+		filterIDs = append(filterIDs, id)
+	}
+	sort.Slice(filterIDs, func(i, j int) bool {
+		return filterIDs[i] < filterIDs[j]
+	})
 
+	for _, id := range filterIDs {
+		var dataFilter Filter
 		var filter FilterStruct
-
 		var exclude, include string
 
-		err = json.Unmarshal([]byte(mapToJSON(f)), &filter)
+		err = json.Unmarshal([]byte(mapToJSON(Settings.Filter[id])), &filter)
 		if err != nil {
 			return
 		}
