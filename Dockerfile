@@ -1,6 +1,7 @@
 # First stage. Building a binary
 # -----------------------------------------------------------------------------
 ARG USE_NVIDIA
+ARG USE_PREBUILT
 
 FROM golang:1.27-trixie AS builder
 
@@ -11,6 +12,12 @@ COPY . .
 
 # Build the application with optimizations
 RUN CGO_ENABLED=0 go build -mod=vendor -ldflags="-s -w" -trimpath -o threadfin threadfin.go
+
+FROM builder AS binary
+FROM scratch AS binary-prebuilt
+ARG TARGETARCH
+COPY dist/Threadfin_linux_${TARGETARCH} /app/threadfin
+FROM binary${USE_PREBUILT:+-prebuilt} AS binary-final
 
 # Second stage. Creating a minimal image
 # -----------------------------------------------------------------------------
@@ -94,7 +101,7 @@ RUN apt-get update && \
     rm -rf /var/cache/apt/archives* /var/lib/apt/lists/*
 
 # Copy built binary from builder image
-COPY --from=builder /app/threadfin $THREADFIN_BIN/
+COPY --from=binary-final /app/threadfin $THREADFIN_BIN/
 RUN chmod +rx $THREADFIN_BIN/threadfin
 
 # Configure container volume mappings
