@@ -50,6 +50,7 @@ func StartWebserver() (err error) {
 	http.HandleFunc("/xmltv/", Threadfin)
 	http.HandleFunc("/m3u/", Threadfin)
 	http.HandleFunc("/data/", WS)
+	http.HandleFunc("/web/logout", WebLogout)
 	http.HandleFunc("/web/", Web)
 	http.HandleFunc("/download/", Download)
 	http.HandleFunc("/api/", API)
@@ -78,6 +79,10 @@ func StartWebserver() (err error) {
 	}
 
 	return
+}
+
+func browserCookieSecure(r *http.Request) bool {
+	return r.TLS != nil || System.ServerProtocol.WEB == "https"
 }
 
 func serveHTTPServer(server *http.Server, signalReady func() error) error {
@@ -857,13 +862,17 @@ func Web(w http.ResponseWriter, r *http.Request) {
 				// Erster Benutzer wird angelegt (Passwortbestätigung ist vorhanden)
 				if len(confirm) > 0 {
 
-					var token, err = createFirstUserForAuthentication(username, password)
+					var sessionID, err = createFirstUserForAuthentication(username, password)
 					if err != nil {
 						httpStatusError(w, r, 429)
 						return
 					}
-					// Redirect, damit die Daten aus dem Browser gelöscht werden.
-					w = authentication.SetCookieToken(w, token)
+					cookie, err := authentication.BrowserSessionCookie(sessionID, browserCookieSecure(r))
+					if err != nil {
+						httpStatusError(w, r, 429)
+						return
+					}
+					http.SetCookie(w, cookie)
 					http.Redirect(w, r, "/web", 301)
 					return
 
@@ -872,18 +881,22 @@ func Web(w http.ResponseWriter, r *http.Request) {
 				// Benutzername und Passwort vorhanden, wird jetzt überprüft
 				if len(username) > 0 && len(password) > 0 {
 
-					var token, err = authentication.UserAuthentication(username, password)
+					var sessionID, _, err = authentication.AuthenticateBrowser(username, password, "authentication.web")
 					if err != nil {
 						file = requestFile + "login.html"
 						lang["authenticationErr"] = language.Login.Failed
 						break
 					}
-
-					w = authentication.SetCookieToken(w, token)
+					cookie, err := authentication.BrowserSessionCookie(sessionID, browserCookieSecure(r))
+					if err != nil {
+						httpStatusError(w, r, 429)
+						return
+					}
+					http.SetCookie(w, cookie)
 					http.Redirect(w, r, "/web", 301) // Redirect, damit die Daten aus dem Browser gelöscht werden.
 
 				} else {
-					w = authentication.SetCookieToken(w, "-")
+					http.SetCookie(w, authentication.ExpiredBrowserSessionCookie(browserCookieSecure(r)))
 					http.Redirect(w, r, "/web", 301) // Redirect, damit die Daten aus dem Browser gelöscht werden.
 				}
 
@@ -891,14 +904,7 @@ func Web(w http.ResponseWriter, r *http.Request) {
 
 			case "GET":
 				lang["authenticationErr"] = ""
-				_, token, err := authentication.CheckTheValidityOfTheTokenFromHTTPHeader(w, r)
-
-				if err != nil {
-					file = requestFile + "login.html"
-					break
-				}
-
-				err = checkAuthorizationLevel(token, "authentication.web")
+				_, err = authorizeBrowserRequest(r, "authentication.web")
 				if err != nil {
 					file = requestFile + "login.html"
 					break
@@ -965,6 +971,19 @@ func Web(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Write([]byte(content))
+}
+
+func WebLogout(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		w.Header().Set("Allow", http.MethodPost)
+		httpStatusError(w, r, http.StatusMethodNotAllowed)
+		return
+	}
+	if cookie, err := r.Cookie(authentication.BrowserSessionCookieName); err == nil {
+		authentication.InvalidateBrowserSession(cookie.Value)
+	}
+	http.SetCookie(w, authentication.ExpiredBrowserSessionCookie(browserCookieSecure(r)))
+	http.Redirect(w, r, "/web/", http.StatusSeeOther)
 }
 
 // API : API request /api/

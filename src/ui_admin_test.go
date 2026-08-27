@@ -1,6 +1,7 @@
 package src
 
 import (
+	"crypto/tls"
 	"encoding/base64"
 	"encoding/json"
 	"net/http"
@@ -574,8 +575,9 @@ func TestUIAdminAuthenticationPagesExposeLabelsAutocompleteAndNativeSubmit(t *te
 	}
 }
 
-func TestUIAdminAuthenticationPOSTPreservesTokenRedirectContracts(t *testing.T) {
+func TestUIAdminAuthenticationPOSTUsesHttpOnlyBrowserSession(t *testing.T) {
 	restorePersistentState(t)
+	loadWebUIForAuthenticationTest(t)
 	System.ConfigurationWizard = false
 	System.ScanInProgress = 0
 	Settings = SettingsStruct{AuthenticationWEB: true, Language: "en", Port: "34400"}
@@ -585,8 +587,10 @@ func TestUIAdminAuthenticationPOSTPreservesTokenRedirectContracts(t *testing.T) 
 		values    url.Values
 		seedUser  bool
 		wantUsers int
+		secure    bool
 	}{
-		{name: "login", values: url.Values{"username": {"existing-user"}, "password": {"existing-password"}}, seedUser: true, wantUsers: 1},
+		{name: "login over HTTP", values: url.Values{"username": {"existing-user"}, "password": {"existing-password"}}, seedUser: true, wantUsers: 1},
+		{name: "login over direct TLS", values: url.Values{"username": {"existing-user"}, "password": {"existing-password"}}, seedUser: true, wantUsers: 1, secure: true},
 		{name: "first user", values: url.Values{"username": {"first-user"}, "password": {"first-password"}, "confirm": {"first-password"}}, wantUsers: 1},
 	}
 	for _, test := range tests {
@@ -604,15 +608,29 @@ func TestUIAdminAuthenticationPOSTPreservesTokenRedirectContracts(t *testing.T) 
 				}
 			}
 			request := httptest.NewRequest(http.MethodPost, "http://threadfin.example/web/", strings.NewReader(test.values.Encode()))
+			if test.secure {
+				request.TLS = &tls.ConnectionState{}
+			}
 			request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 			response := httptest.NewRecorder()
 			Web(response, request)
 			if response.Code != http.StatusMovedPermanently || response.Header().Get("Location") != "/web" {
 				t.Fatalf("authentication POST = status %d location %q, want 301 /web", response.Code, response.Header().Get("Location"))
 			}
-			cookie := response.Header().Get("Set-Cookie")
-			if !strings.Contains(cookie, "Token=") || strings.Contains(cookie, test.values.Get("password")) || strings.Contains(response.Body.String(), test.values.Get("password")) {
-				t.Fatalf("authentication POST token/secret contract = cookie %q body %q", cookie, response.Body.String())
+			cookies := response.Result().Cookies()
+			if len(cookies) != 1 {
+				t.Fatalf("authentication POST cookie count = %d, want one browser session", len(cookies))
+			}
+			cookie := cookies[0]
+			if cookie.Name != authentication.BrowserSessionCookieName || cookie.Value == "" || !cookie.HttpOnly || cookie.SameSite != http.SameSiteStrictMode || cookie.Path != "/" || cookie.Secure != test.secure || strings.Contains(response.Header().Get("Set-Cookie"), test.values.Get("password")) || strings.Contains(response.Body.String(), test.values.Get("password")) {
+				t.Fatalf("authentication POST session/secret contract = cookie %#v header %q body %q", cookie, response.Header().Get("Set-Cookie"), response.Body.String())
+			}
+			getRequest := httptest.NewRequest(http.MethodGet, "http://threadfin.example/web/", nil)
+			getRequest.AddCookie(cookie)
+			getResponse := httptest.NewRecorder()
+			Web(getResponse, getRequest)
+			if getResponse.Code != http.StatusOK || strings.Contains(getResponse.Body.String(), `id="authentication"`) {
+				t.Fatalf("authenticated GET = status %d body %q, want application page", getResponse.Code, getResponse.Body.String())
 			}
 			users, err := authentication.GetAllUserData()
 			if err != nil {
@@ -623,6 +641,70 @@ func TestUIAdminAuthenticationPOSTPreservesTokenRedirectContracts(t *testing.T) 
 			}
 		})
 	}
+}
+
+func TestUIAdminAuthenticationRejectsMissingWebPermissionAndExpiresEmptyLogin(t *testing.T) {
+	restorePersistentState(t)
+	loadWebUIForAuthenticationTest(t)
+	System.ConfigurationWizard = false
+	System.ScanInProgress = 0
+	Settings = SettingsStruct{AuthenticationWEB: true, Language: "en", Port: "34400"}
+	if err := authentication.Init(filepath.Join(t.TempDir(), "config"), 60); err != nil {
+		t.Fatal(err)
+	}
+	userID, err := authentication.CreateNewUser("api-only-user", "password")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := authentication.WriteUserData(userID, map[string]interface{}{"username": "api-only-user", "authentication.web": false}); err != nil {
+		t.Fatal(err)
+	}
+
+	deniedRequest := httptest.NewRequest(http.MethodPost, "http://threadfin.example/web/", strings.NewReader(url.Values{"username": {"api-only-user"}, "password": {"password"}}.Encode()))
+	deniedRequest.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	deniedResponse := httptest.NewRecorder()
+	Web(deniedResponse, deniedRequest)
+	if deniedResponse.Code != http.StatusOK || !strings.Contains(deniedResponse.Body.String(), `id="authentication"`) || deniedResponse.Header().Get("Set-Cookie") != "" {
+		t.Fatalf("missing web permission = status %d cookie %q body %q", deniedResponse.Code, deniedResponse.Header().Get("Set-Cookie"), deniedResponse.Body.String())
+	}
+
+	emptyRequest := httptest.NewRequest(http.MethodPost, "http://threadfin.example/web/", strings.NewReader(url.Values{}.Encode()))
+	emptyRequest.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	emptyResponse := httptest.NewRecorder()
+	Web(emptyResponse, emptyRequest)
+	if emptyResponse.Code != http.StatusMovedPermanently || emptyResponse.Header().Get("Location") != "/web" {
+		t.Fatalf("empty login = status %d location %q, want 301 /web", emptyResponse.Code, emptyResponse.Header().Get("Location"))
+	}
+	cookies := emptyResponse.Result().Cookies()
+	if len(cookies) != 1 || cookies[0].Name != authentication.BrowserSessionCookieName || !cookies[0].HttpOnly || cookies[0].SameSite != http.SameSiteStrictMode || cookies[0].Path != "/" || cookies[0].MaxAge >= 0 {
+		t.Fatalf("empty login expiry cookie = %#v", cookies)
+	}
+}
+
+func TestGeneratedMenuLogoutPostsBrowserSession(t *testing.T) {
+	output := runUIAdminNodeFixture(t, "menu-logout", menuLogoutNodeScript, "menu_ts.js")
+	var got struct {
+		Method       string `json:"method"`
+		Action       string `json:"action"`
+		Appended     bool   `json:"appended"`
+		Submitted    bool   `json:"submitted"`
+		CookieReads  int    `json:"cookieReads"`
+		CookieWrites int    `json:"cookieWrites"`
+	}
+	if err := json.Unmarshal(output, &got); err != nil {
+		t.Fatalf("decode generated menu logout fixture: %v\n%s", err, output)
+	}
+	if strings.ToLower(got.Method) != strings.ToLower(http.MethodPost) || got.Action != "/web/logout" || !got.Appended || !got.Submitted || got.CookieReads != 0 || got.CookieWrites != 0 {
+		t.Fatalf("generated logout behavior = %#v, want POST /web/logout without Token-cookie access", got)
+	}
+}
+
+func loadWebUIForAuthenticationTest(t *testing.T) {
+	t.Helper()
+	previousWebUI := webUI
+	webUI = make(map[string]interface{})
+	loadHTMLMap()
+	t.Cleanup(func() { webUI = previousWebUI })
 }
 
 func TestUIAdminScopedAssetsLanguageAndEmbeddingParity(t *testing.T) {
@@ -774,6 +856,42 @@ process.stdout.write(JSON.stringify({
   presentationOnly: server.settings.epgSource === "PMS",
   pmsPreview: pmsTarget.textContent,
   xepgPreview: xepgTarget.textContent
+}));
+`
+
+const menuLogoutNodeScript = `
+const fs = require("fs");
+const vm = require("vm");
+let appended = false;
+let form;
+let submitted = false;
+let cookieReads = 0;
+let cookieWrites = 0;
+const content = {innerHTML: ""};
+const body = {appendChild(element) { appended = true; form = element; }};
+const document = {
+  body,
+  addEventListener() {},
+  getElementById(id) { return id === "content" ? content : null; },
+  createElement(tag) {
+    if (tag !== "form") throw new Error("unexpected element " + tag);
+    return {method: "", action: "", submit() { submitted = true; }};
+  }
+};
+Object.defineProperty(document, "cookie", {
+  get() { cookieReads++; return ""; },
+  set() { cookieWrites++; }
+});
+const context = {
+  console: {warn() {}}, document, menuItems: [{menuKey: "logout"}], COLUMN_TO_SORT: 0,
+  showPreview() {}, showElement() {}
+};
+vm.createContext(context);
+const source = fs.readFileSync(process.argv[2], "utf8");
+vm.runInContext(source.slice(0, source.indexOf("function PageReady()")), context);
+vm.runInContext("new ShowContent(0).show()", context);
+process.stdout.write(JSON.stringify({
+  method: form ? form.method : "", action: form ? form.action : "", appended, submitted, cookieReads, cookieWrites
 }));
 `
 

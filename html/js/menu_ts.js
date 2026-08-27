@@ -39,8 +39,11 @@ class ShowContent {
                 renderLogPage(doc);
                 break;
             case "logout":
-                document.cookie = "Token= ; expires = Thu, 01 Jan 1970 00:00:00 GMT";
-                location.reload();
+                var form = document.createElement("form");
+                form.method = "post";
+                form.action = "/web/logout";
+                document.body.appendChild(form);
+                form.submit();
                 return;
             default:
                 console.warn("Ignoring unknown legacy menu destination", menuKey);
