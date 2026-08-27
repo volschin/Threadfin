@@ -6,6 +6,7 @@ class ThreadfinConnection {
         this.active = null;
         this.nextRequestId = 1;
         this.policyRejected = false;
+        this.reconnectTimeoutId = null;
     }
     enqueue(command, data) {
         var requestId = "request-" + this.nextRequestId;
@@ -28,12 +29,23 @@ class ThreadfinConnection {
         this.pump();
     }
     connect() {
-        if (this.policyRejected || this.socket !== null || (this.active === null && this.queue.length == 0)) {
+        if (this.policyRejected || this.socket !== null || this.reconnectTimeoutId !== null || (this.active === null && this.queue.length == 0)) {
             return;
         }
         var protocol = window.location.protocol == "https:" ? "wss://" : "ws://";
         var port = window.location.port ? ":" + window.location.port : "";
-        var socket = new WebSocket(protocol + window.location.hostname + port + "/data/");
+        var socket;
+        try {
+            socket = new WebSocket(protocol + window.location.hostname + port + "/data/");
+        }
+        catch (_error) {
+            console.warn("WebSocket connection failed");
+            if (WS_AVAILABLE == false) {
+                alert("No websocket connection to Threadfin could be established. Check your network configuration.");
+            }
+            this.scheduleReconnect();
+            return;
+        }
         this.socket = socket;
         socket.onopen = () => {
             if (this.socket !== socket || this.policyRejected) {
@@ -79,7 +91,7 @@ class ThreadfinConnection {
         };
     }
     pump() {
-        if (this.policyRejected || this.active !== null || this.queue.length == 0) {
+        if (this.policyRejected || this.active !== null || this.queue.length == 0 || this.reconnectTimeoutId !== null) {
             return;
         }
         if (this.socket === null) {
@@ -156,11 +168,22 @@ class ThreadfinConnection {
             socket.close();
         }
     }
+    scheduleReconnect() {
+        if (this.policyRejected || this.reconnectTimeoutId !== null || this.active !== null || this.queue.length == 0) {
+            return;
+        }
+        this.reconnectTimeoutId = setTimeout(() => {
+            this.reconnectTimeoutId = null;
+            this.pump();
+        }, 250);
+    }
     rejectPolicyClose(closedSocket) {
         if (this.policyRejected) {
             return;
         }
         this.policyRejected = true;
+        clearTimeout(this.reconnectTimeoutId);
+        this.reconnectTimeoutId = null;
         var currentSocket = this.socket;
         this.socket = null;
         this.settleActiveFailure("{{.sources.transportError}}", "transport");

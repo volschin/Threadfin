@@ -13,6 +13,7 @@ class ThreadfinConnection {
   active: QueuedThreadfinRequest = null
   nextRequestId: number = 1
   policyRejected: boolean = false
+  reconnectTimeoutId: any = null
 
   enqueue(command: string, data: any): void {
     var requestId = "request-" + this.nextRequestId
@@ -36,12 +37,22 @@ class ThreadfinConnection {
   }
 
   connect(): void {
-    if (this.policyRejected || this.socket !== null || (this.active === null && this.queue.length == 0)) {
+    if (this.policyRejected || this.socket !== null || this.reconnectTimeoutId !== null || (this.active === null && this.queue.length == 0)) {
       return
     }
     var protocol = window.location.protocol == "https:" ? "wss://" : "ws://"
     var port = window.location.port ? ":" + window.location.port : ""
-    var socket = new WebSocket(protocol + window.location.hostname + port + "/data/")
+    var socket: WebSocket
+    try {
+      socket = new WebSocket(protocol + window.location.hostname + port + "/data/")
+    } catch (_error) {
+      console.warn("WebSocket connection failed")
+      if (WS_AVAILABLE == false) {
+        alert("No websocket connection to Threadfin could be established. Check your network configuration.")
+      }
+      this.scheduleReconnect()
+      return
+    }
     this.socket = socket
 
     socket.onopen = () => {
@@ -91,7 +102,7 @@ class ThreadfinConnection {
   }
 
   pump(): void {
-    if (this.policyRejected || this.active !== null || this.queue.length == 0) {
+    if (this.policyRejected || this.active !== null || this.queue.length == 0 || this.reconnectTimeoutId !== null) {
       return
     }
     if (this.socket === null) {
@@ -175,11 +186,23 @@ class ThreadfinConnection {
     }
   }
 
+  scheduleReconnect(): void {
+    if (this.policyRejected || this.reconnectTimeoutId !== null || this.active !== null || this.queue.length == 0) {
+      return
+    }
+    this.reconnectTimeoutId = setTimeout(() => {
+      this.reconnectTimeoutId = null
+      this.pump()
+    }, 250)
+  }
+
   rejectPolicyClose(closedSocket: WebSocket): void {
     if (this.policyRejected) {
       return
     }
     this.policyRejected = true
+    clearTimeout(this.reconnectTimeoutId)
+    this.reconnectTimeoutId = null
     var currentSocket = this.socket
     this.socket = null
     this.settleActiveFailure("{{.sources.transportError}}", "transport")

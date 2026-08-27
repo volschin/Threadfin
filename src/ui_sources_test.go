@@ -1084,23 +1084,30 @@ vm.runInContext('new Server("saveWizard").request({wizard: {tuner: 1}})', contex
 openLatest().emitClose(1006);
 const transportWizard = {disabled: next.disabled, status: wizardStatus.textContent, routed};
 
-const malformedPayloads = ["{}", "[]", '"text"', '{"status":"true","reload":true}'];
-const malformedSourceResults = malformedPayloads.map(payload => {
+const malformedPayloads = [
+  socket => JSON.stringify({requestId: activeMessage(socket).requestId}),
+  socket => JSON.stringify({requestId: activeMessage(socket).requestId, status: "true", reload: true}),
+  () => "[]",
+  () => "{",
+];
+const malformedSourceResults = malformedPayloads.map(buildPayload => {
   context.beginSourceRequest("m3u", "M1", false, 1);
   routed = false;
   vm.runInContext('new Server("updateFileM3U").request(sourceData)', context);
-  openLatest().emitMessage(payload);
+  const socket = openLatest();
+  socket.emitMessage(buildPayload(socket));
   const feedback = context.sourceFeedbackByKey["m3u:M1"];
   return feedback && feedback.state === "error" && feedback.message === "Invalid response" && routed === false;
 });
 const malformedSourcesRejected = malformedSourceResults.every(Boolean);
 
-const malformedWizardResults = malformedPayloads.map(payload => {
+const malformedWizardResults = malformedPayloads.map(buildPayload => {
   next.disabled = true;
   wizardStatus.textContent = "Saving";
   routed = false;
   vm.runInContext('new Server("saveWizard").request({wizard: {tuner: 1}})', context);
-  openLatest().emitMessage(payload);
+  const socket = openLatest();
+  socket.emitMessage(buildPayload(socket));
   return next.disabled === false && wizardStatus.textContent === "Invalid response" && routed === false;
 });
 const malformedWizardsRejected = malformedWizardResults.every(Boolean);
