@@ -3,6 +3,8 @@ package main
 import (
 	"errors"
 	"os"
+	"os/exec"
+	"path/filepath"
 	"reflect"
 	"regexp"
 	"strings"
@@ -92,6 +94,76 @@ func TestReleaseDockerBuildUsesNativeRunnersWithoutQEMU(t *testing.T) {
 	} {
 		if !strings.Contains(workflow, required) {
 			t.Fatalf("release workflow is missing native multi-runner contract %q", required)
+		}
+	}
+}
+
+func TestCosignContainerImageRequiresSuccessfulVerification(t *testing.T) {
+	binDir := t.TempDir()
+	logFile := filepath.Join(t.TempDir(), "cosign.log")
+	fakeCosign := filepath.Join(binDir, "cosign")
+	if err := os.WriteFile(fakeCosign, []byte(`#!/bin/sh
+set -eu
+printf '%s\n' "$*" >> "$COSIGN_LOG"
+if [ "$1" = verify ]; then
+  exit 23
+fi
+`), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	image := "ghcr.io/volschin/threadfin@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+	workflowRef := "volschin/Threadfin/.github/workflows/release.yml@refs/tags/v3.2.0"
+	cmd := exec.Command("bash", "scripts/sign-container-image.sh", image)
+	cmd.Env = append(os.Environ(),
+		"PATH="+binDir+":"+os.Getenv("PATH"),
+		"COSIGN_LOG="+logFile,
+		"GITHUB_WORKFLOW_REF="+workflowRef,
+	)
+	output, err := cmd.CombinedOutput()
+	if err == nil {
+		t.Fatalf("signing succeeded despite failed verification; output: %s", output)
+	}
+	exitErr, ok := err.(*exec.ExitError)
+	if !ok || exitErr.ExitCode() != 23 {
+		t.Fatalf("signing returned %v, want verification exit code 23; output: %s", err, output)
+	}
+
+	log, err := os.ReadFile(logFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "sign --yes " + image + "\n" +
+		"verify --certificate-identity https://github.com/" + workflowRef +
+		" --certificate-oidc-issuer https://token.actions.githubusercontent.com " + image + "\n"
+	if string(log) != want {
+		t.Fatalf("cosign calls:\n%s\nwant:\n%s", log, want)
+	}
+}
+
+func TestReleaseDockerManifestIsSignedWithKeylessCosign(t *testing.T) {
+	releaseWorkflow, err := os.ReadFile(".github/workflows/release.yml")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	workflow := string(releaseWorkflow)
+	start := strings.Index(workflow, "\n  docker_manifest:\n")
+	end := strings.Index(workflow, "\n  release:\n")
+	if start == -1 || end == -1 || end <= start {
+		t.Fatal("release workflow has no bounded Docker manifest job")
+	}
+	manifestJob := workflow[start:end]
+	for _, required := range []string{
+		"id-token: write",
+		"uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2",
+		"id: manifest",
+		`echo "digest=$image_digest" >> "$GITHUB_OUTPUT"`,
+		"DIGEST: ${{ steps.manifest.outputs.digest }}",
+		`scripts/sign-container-image.sh "$IMAGE@$DIGEST"`,
+	} {
+		if !strings.Contains(manifestJob, required) {
+			t.Fatalf("Docker manifest job is missing keyless signing contract %q", required)
 		}
 	}
 }
