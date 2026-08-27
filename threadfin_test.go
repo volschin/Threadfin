@@ -5,6 +5,7 @@ import (
 	"os"
 	"reflect"
 	"regexp"
+	"strings"
 	"testing"
 
 	"threadfin/src"
@@ -34,6 +35,63 @@ func TestDockerfileNvidiaBaseMatchesJellyfinRepository(t *testing.T) {
 		}
 		if ubuntuVersion != wantUbuntu {
 			t.Fatalf("stage %q Ubuntu version = %q, want %q for Jellyfin codename %q", stageName, ubuntuVersion, wantUbuntu, jellyfinCodename)
+		}
+	}
+}
+
+func TestReleaseDockerBuildUsesPrebuiltLinuxBinaries(t *testing.T) {
+	dockerfile, err := os.ReadFile("Dockerfile")
+	if err != nil {
+		t.Fatal(err)
+	}
+	releaseWorkflow, err := os.ReadFile(".github/workflows/release.yml")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	prebuiltStage := regexp.MustCompile(`(?m)^FROM scratch AS binary-prebuilt\nARG TARGETARCH\nCOPY dist/Threadfin_linux_\$\{TARGETARCH\} /app/threadfin$`)
+	if !prebuiltStage.Match(dockerfile) {
+		t.Fatal("Dockerfile has no architecture-specific prebuilt release binary stage")
+	}
+	if !regexp.MustCompile(`(?m)^FROM binary\$\{USE_PREBUILT:\+-prebuilt\} AS binary-final$`).Match(dockerfile) {
+		t.Fatal("Dockerfile does not select the prebuilt binary stage for release builds")
+	}
+	if !regexp.MustCompile(`(?m)^COPY --from=binary-final /app/threadfin \$THREADFIN_BIN/$`).Match(dockerfile) {
+		t.Fatal("Dockerfile runtime image does not copy from the selected binary stage")
+	}
+	if !regexp.MustCompile(`(?ms)^  docker:\n.*?uses: actions/download-artifact@.*?\n.*?name: threadfin-binaries\n.*?path: dist\n`).Match(releaseWorkflow) {
+		t.Fatal("release Docker job does not download the prebuilt binaries")
+	}
+	if got := len(regexp.MustCompile(`(?m)^            USE_PREBUILT=1$`).FindAll(releaseWorkflow, -1)); got != 1 {
+		t.Fatalf("release workflow passes USE_PREBUILT=1 in %d Docker build definitions, want 1", got)
+	}
+}
+
+func TestReleaseDockerBuildUsesNativeRunnersWithoutQEMU(t *testing.T) {
+	releaseWorkflow, err := os.ReadFile(".github/workflows/release.yml")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	workflow := string(releaseWorkflow)
+	for _, unwanted := range []string{"setup-qemu-action", "linux/arm/v7"} {
+		if strings.Contains(workflow, unwanted) {
+			t.Fatalf("release workflow still contains %q", unwanted)
+		}
+	}
+	for _, required := range []string{
+		"runner: ubuntu-24.04",
+		"runner: ubuntu-24.04-arm",
+		"platform: linux/amd64",
+		"platform: linux/arm64",
+		"variant: standard",
+		"variant: nvidia",
+		"push-by-digest=true",
+		"docker buildx imagetools create",
+		"needs: [build, docker_manifest]",
+	} {
+		if !strings.Contains(workflow, required) {
+			t.Fatalf("release workflow is missing native multi-runner contract %q", required)
 		}
 	}
 }
