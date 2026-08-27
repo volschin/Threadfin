@@ -1,12 +1,163 @@
 package src
 
 import (
+	"encoding/json"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strings"
 	"testing"
 )
+
+type navigationShellResult struct {
+	CollapsedInitially      bool   `json:"collapsedInitially"`
+	ExpandedAfterToggle     bool   `json:"expandedAfterToggle"`
+	StoredAfterToggle       string `json:"storedAfterToggle"`
+	ToggleExpandedInitially string `json:"toggleExpandedInitially"`
+	ToggleLabelAfterToggle  string `json:"toggleLabelAfterToggle"`
+	DocumentationLabel      string `json:"documentationLabel"`
+	DocumentationHref       string `json:"documentationHref"`
+	DocumentationTarget     string `json:"documentationTarget"`
+	DocumentationRel        string `json:"documentationRel"`
+	DocumentationGroup      string `json:"documentationGroup"`
+	ItemsWithIcons          int    `json:"itemsWithIcons"`
+	NavigationItems         int    `json:"navigationItems"`
+}
+
+func TestNavigationRendersCollapsibleIconRailAndUserGuide(t *testing.T) {
+	scriptPath := filepath.Join(t.TempDir(), "navigation-shell.js")
+	script := `
+const fs = require("fs"), vm = require("vm");
+
+class ClassList {
+  constructor(element) { this.element = element; }
+  values() { return this.element.className.split(/\s+/).filter(Boolean); }
+  contains(value) { return this.values().includes(value); }
+  add(value) { if (!this.contains(value)) this.element.className = this.values().concat(value).join(" "); }
+  remove(value) { this.element.className = this.values().filter(item => item !== value).join(" "); }
+  toggle(value, force) {
+    const add = force === undefined ? !this.contains(value) : force;
+    if (add) this.add(value); else this.remove(value);
+    return add;
+  }
+}
+
+class Element {
+  constructor(tagName, document) {
+    this.tagName = tagName.toUpperCase(); this.ownerDocument = document; this.children = [];
+    this.parentElement = null; this.attributes = {}; this.listeners = {}; this.className = ""; this.textContent = "";
+    this.classList = new ClassList(this);
+  }
+  appendChild(child) { child.parentElement = this; this.children.push(child); if (child.id) this.ownerDocument.byID[child.id] = child; return child; }
+  setAttribute(name, value) { this.attributes[name] = String(value); if (name === "id") { this.id = String(value); this.ownerDocument.byID[this.id] = this; } }
+  getAttribute(name) { return this.attributes[name] === undefined ? null : this.attributes[name]; }
+  removeAttribute(name) { delete this.attributes[name]; }
+  addEventListener(name, listener) { this.listeners[name] = listener; }
+  set innerHTML(value) { this.children = []; }
+}
+
+function all(root) { return [root].concat(...root.children.map(all)); }
+class Document {
+  constructor() { this.byID = {}; this.body = new Element("body", this); }
+  createElement(tagName) { return new Element(tagName, this); }
+  getElementById(id) { return this.byID[id] || null; }
+  querySelector(selector) {
+    if (selector === ".tf-app") return all(this.body).find(item => item.classList.contains("tf-app")) || null;
+    if (selector === ".tf-sidebar-toggle") return all(this.body).find(item => item.classList.contains("tf-sidebar-toggle")) || null;
+    if (selector === ".tf-nav-toggle") return all(this.body).find(item => item.classList.contains("tf-nav-toggle")) || null;
+    return null;
+  }
+  querySelectorAll(selector) {
+    if (selector === "#main-menu [data-destination]") return all(this.getElementById("main-menu")).filter(item => item.getAttribute("data-destination"));
+    return [];
+  }
+}
+
+const document = new Document();
+function append(parent, tagName, id, className) {
+  const element = document.createElement(tagName); element.className = className || "";
+  if (id) element.setAttribute("id", id); parent.appendChild(element); return element;
+}
+const app = append(document.body, "div", "", "tf-app");
+const sidebar = append(app, "aside", "", "tf-sidebar");
+const toggle = append(sidebar, "button", "sidebar-rail-toggle", "tf-sidebar-toggle");
+append(sidebar, "nav", "main-menu", "tf-navigation");
+
+const stored = { "threadfin.navigation.collapsed": "true" };
+const localStorage = {
+  getItem(key) { return stored[key] === undefined ? null : stored[key]; },
+  setItem(key, value) { stored[key] = String(value); },
+};
+const labels = ["Playlist", "XMLTV", "Filter", "Mapping", "Users", "Settings", "Log", "Logout"];
+const context = {
+  console, document, localStorage,
+  SERVER: { settings: { "authentication.web": true } },
+  menuItems: labels.map(value => ({ value })),
+  setTimeout(callback) { callback(); },
+  addEventListener() {},
+};
+context.window = context;
+context.window.history = { state: null, pushState() {}, replaceState() {} };
+context.window.location = { hash: "" };
+vm.createContext(context);
+vm.runInContext(fs.readFileSync(process.argv[2], "utf8"), context);
+context.renderNavigation();
+
+const navigation = document.getElementById("main-menu");
+const navigationItems = all(navigation).filter(item => item.classList.contains("tf-navigation-item"));
+const documentation = navigationItems.find(item => item.getAttribute("href"));
+const documentationGroup = documentation.parentElement.parentElement.parentElement;
+const groupHeading = documentationGroup.children.find(item => item.tagName === "H2");
+const collapsedInitially = app.classList.contains("tf-sidebar-collapsed");
+const toggleExpandedInitially = toggle.getAttribute("aria-expanded");
+toggle.listeners.click();
+
+process.stdout.write(JSON.stringify({
+  collapsedInitially,
+  expandedAfterToggle: !app.classList.contains("tf-sidebar-collapsed"),
+  storedAfterToggle: stored["threadfin.navigation.collapsed"],
+  toggleExpandedInitially,
+  toggleLabelAfterToggle: toggle.getAttribute("aria-label"),
+  documentationLabel: documentation.textContent || documentation.children.map(item => item.textContent).join(""),
+  documentationHref: documentation.getAttribute("href"),
+  documentationTarget: documentation.getAttribute("target"),
+  documentationRel: documentation.getAttribute("rel"),
+  documentationGroup: groupHeading.textContent,
+  itemsWithIcons: navigationItems.filter(item => item.children.some(child => child.tagName === "I" && child.getAttribute("aria-hidden") === "true")).length,
+  navigationItems: navigationItems.length,
+}));
+`
+	if err := os.WriteFile(scriptPath, []byte(script), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	command := exec.Command("node", scriptPath, filepath.Join("..", "html", "js", "navigation_ts.js"))
+	output, err := command.CombinedOutput()
+	if err != nil {
+		t.Fatalf("execute generated navigation shell: %v\n%s", err, output)
+	}
+
+	var result navigationShellResult
+	if err := json.Unmarshal(output, &result); err != nil {
+		t.Fatalf("decode navigation shell result: %v\n%s", err, output)
+	}
+	if !result.CollapsedInitially || result.ToggleExpandedInitially != "false" {
+		t.Fatalf("stored collapsed navigation = collapsed %t, aria-expanded %q; want true and false", result.CollapsedInitially, result.ToggleExpandedInitially)
+	}
+	if !result.ExpandedAfterToggle || result.StoredAfterToggle != "false" || result.ToggleLabelAfterToggle != "Collapse navigation" {
+		t.Fatalf("expanded navigation = expanded %t, stored %q, label %q; want true, false, Collapse navigation", result.ExpandedAfterToggle, result.StoredAfterToggle, result.ToggleLabelAfterToggle)
+	}
+	if result.DocumentationLabel != "User guide" || result.DocumentationGroup != "System" {
+		t.Fatalf("documentation item = %q in %q; want User guide in System", result.DocumentationLabel, result.DocumentationGroup)
+	}
+	if result.DocumentationHref != "https://github.com/volschin/Threadfin/blob/main/docs/user-guide.md" || result.DocumentationTarget != "_blank" || result.DocumentationRel != "noopener noreferrer" {
+		t.Fatalf("documentation link = href %q, target %q, rel %q", result.DocumentationHref, result.DocumentationTarget, result.DocumentationRel)
+	}
+	if result.NavigationItems != 12 || result.ItemsWithIcons != result.NavigationItems {
+		t.Fatalf("navigation items = %d, with icons = %d; want all 12 items iconized", result.NavigationItems, result.ItemsWithIcons)
+	}
+}
 
 func TestLegacyMenuKeysKeepTheirBackendOrder(t *testing.T) {
 	base := readUITypeScript(t, "base_ts.ts")
