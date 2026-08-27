@@ -1,3 +1,4 @@
+"use strict";
 class MainMenu {
     constructor() {
         this.DocumentID = "main-menu";
@@ -34,6 +35,9 @@ class MainMenuItem extends MainMenu {
         item.appendChild(value);
         var doc = document.getElementById(this.DocumentID);
         doc.appendChild(item);
+        this.initializeTableHeader();
+    }
+    initializeTableHeader() {
         switch (this.menuKey) {
             case "playlist":
                 this.tableHeader = ["{{.playlist.table.playlist}}", "{{.playlist.table.tuner}}", "{{.playlist.table.lastUpdate}}", "{{.playlist.table.availability}} %", "{{.playlist.table.type}}", "{{.playlist.table.streams}}", "{{.playlist.table.groupTitle}} %", "{{.playlist.table.tvgID}} %", "{{.playlist.table.uniqueID}} %"];
@@ -45,13 +49,12 @@ class MainMenuItem extends MainMenu {
                 this.tableHeader = ["{{.filter.table.startingNumber}}", "{{.filter.table.name}}", "{{.filter.table.type}}", "{{.filter.table.filter}}"];
                 break;
             case "users":
-                this.tableHeader = ["{{.users.table.username}}", "{{.users.table.password}}", "{{.users.table.web}}", "{{.users.table.pms}}", "{{.users.table.m3u}}", "{{.users.table.xml}}", "{{.users.table.api}}"];
+                this.tableHeader = ["{{.users.table.username}}", "{{.users.table.password}}", "{{.users.table.web}}", "{{.users.table.pms}}", "{{.users.table.m3u}}", "{{.users.table.xml}}", "{{.users.table.api}}", "{{.users.table.config}}"];
                 break;
             case "mapping":
                 this.tableHeader = ["BULK", "{{.mapping.table.chNo}}", "{{.mapping.table.logo}}", "{{.mapping.table.channelName}}", "{{.mapping.table.playlist}}", "{{.mapping.table.groupTitle}}", "{{.mapping.table.xmltvFile}}", "{{.mapping.table.xmltvID}}"];
                 break;
         }
-        //console.log(this.menuKey, this.tableHeader);
     }
 }
 class Content {
@@ -317,6 +320,16 @@ class Content {
                         cell.child = true;
                         cell.childType = "P";
                         if (data[key]["data"]["authentication.api"] == true) {
+                            cell.value = "✓";
+                        }
+                        else {
+                            cell.value = "-";
+                        }
+                        tr.appendChild(cell.createCell());
+                        var cell = new Cell();
+                        cell.child = true;
+                        cell.childType = "P";
+                        if (data[key]["data"]["authentication.config"] == true) {
                             cell.value = "✓";
                         }
                         else {
@@ -657,6 +670,36 @@ class ShowContent extends Content {
         var popup_header = document.getElementById(this.HeaderID);
         var headline = menuItems[this.menuID].headline;
         var menuKey = menuItems[this.menuID].menuKey;
+        if (menuKey == "playlist" || menuKey == "xmltv") {
+            renderSourceManagementPage(menuKey, doc);
+            showElement("loading", false);
+            return;
+        }
+        if (menuKey == "filter") {
+            renderFilterManagementPage(doc);
+            showElement("loading", false);
+            return;
+        }
+        if (menuKey == "mapping") {
+            renderMappingPage(doc);
+            showElement("loading", false);
+            return;
+        }
+        if (menuKey == "settings") {
+            renderSettingsPage(doc);
+            showElement("loading", false);
+            return;
+        }
+        if (menuKey == "users") {
+            renderUsersPage(doc);
+            showElement("loading", false);
+            return;
+        }
+        if (menuKey == "log") {
+            renderLogPage(doc);
+            showElement("loading", false);
+            return;
+        }
         var h = this.createHeadline(headline);
         var existingHeader = popup_header.querySelector('h3');
         if (existingHeader) {
@@ -913,33 +956,12 @@ function createLayout() {
     if (!document.getElementById("main-menu")) {
         return;
     }
-    // Create menu
-    document.getElementById("main-menu").innerHTML = "";
-    for (let i = 0; i < menuItems.length; i++) {
-        menuItems[i].id = i;
-        switch (menuItems[i]["menuKey"]) {
-            case "users":
-            case "logout":
-                if (SERVER["settings"]["authentication.web"] == true) {
-                    menuItems[i].createItem();
-                }
-                break;
-            case "mapping":
-            case "xmltv":
-                menuItems[i].createItem();
-                break;
-            default:
-                menuItems[i].createItem();
-                break;
-        }
-    }
+    renderNavigation();
+    restoreInitialDestinationFromHistory();
     return;
 }
 function openThisMenu(element) {
-    var id = element.id;
-    var content = new ShowContent(id);
-    content.show();
-    enableGroupSelection(".bulk");
+    openLegacyMenu(Number(element.id));
     return;
 }
 class PopupWindow {
@@ -970,6 +992,7 @@ class PopupContent extends PopupWindow {
     constructor() {
         super(...arguments);
         this.table = document.createElement("TABLE");
+        this.rowIndex = 0;
     }
     createHeadline(headline) {
         this.doc.innerHTML = "";
@@ -982,12 +1005,42 @@ class PopupContent extends PopupWindow {
     }
     appendRow(title, element) {
         var tr = document.createElement("TR");
+        var titleCell = null;
+        var rowIndex = this.rowIndex++;
         // Bezeichnung
         if (title.length != 0) {
-            tr.appendChild(this.createTitle(title));
+            titleCell = this.createTitle(title);
+            titleCell.id = "popup-field-label-" + rowIndex;
+            tr.appendChild(titleCell);
         }
         // Content
         tr.appendChild(this.createContent(element));
+        if (titleCell) {
+            var controls = [];
+            var tagName = element && element.tagName ? String(element.tagName).toUpperCase() : "";
+            if (tagName == "INPUT" || tagName == "SELECT" || tagName == "TEXTAREA") {
+                controls.push(element);
+            }
+            if (element && typeof element.querySelectorAll == "function") {
+                var descendants = element.querySelectorAll("input, select, textarea");
+                for (var controlIndex = 0; controlIndex < descendants.length; controlIndex++) {
+                    if (controls.indexOf(descendants[controlIndex]) == -1) {
+                        controls.push(descendants[controlIndex]);
+                    }
+                }
+            }
+            controls.forEach((control, controlIndex) => {
+                if (String(control.type || "").toLowerCase() == "hidden") {
+                    return;
+                }
+                if (!control.id) {
+                    control.id = "popup-field-" + rowIndex + "-" + controlIndex;
+                }
+                if (!control.getAttribute("aria-label") && !control.getAttribute("aria-labelledby")) {
+                    control.setAttribute("aria-labelledby", titleCell.id);
+                }
+            });
+        }
         this.table.appendChild(tr);
     }
     createInput(type, name, value) {
@@ -1496,6 +1549,11 @@ function openPopUp(dataType, element) {
             var input = content.createCheckbox(dbKey);
             input.checked = data[dbKey];
             content.appendRow("{{.users.api.title}}", input);
+            // Berechtigung CONFIG
+            var dbKey = "authentication.config";
+            var input = content.createCheckbox(dbKey);
+            input.checked = data[dbKey] == true;
+            content.appendRow("{{.users.config.title}}", input);
             // Interaktion
             content.createInteraction();
             // Löschen
@@ -1697,6 +1755,13 @@ function openPopUp(dataType, element) {
             break;
         default:
             break;
+    }
+    enhanceSourcePopup(dataType);
+    if (typeof enhanceFilterPopup == "function") {
+        enhanceFilterPopup(dataType);
+    }
+    if (dataType == "users") {
+        enhanceUsersPopup(id, data);
     }
     showPopUpElement('popup-custom');
 }
@@ -2001,8 +2066,12 @@ function changeChannelLogo(epgMapId) {
     }
 }
 function savePopupData(dataType, id, remove, option) {
-    showElement("loading", true);
+    var filterPopupValid = typeof validateFilterPopup != "function" || validateFilterPopup(dataType);
+    if (remove != true && option == 0 && (!validateSourcePopup(dataType) || !filterPopupValid)) {
+        return;
+    }
     if (dataType == "mapping") {
+        showElement("loading", true);
         var data = new Object();
         console.log("Save mapping data");
         cmd = "saveEpgMapping";
@@ -2062,16 +2131,9 @@ function savePopupData(dataType, id, remove, option) {
     switch (dataType) {
         case "users":
             confirmMsg = "Delete this user?";
-            if (id == "-") {
-                cmd = "saveNewUser";
-                data["userData"] = input;
-            }
-            else {
-                cmd = "saveUserData";
-                var d = new Object();
-                d[id] = input;
-                data["userData"] = d;
-            }
+            var userRequest = buildUserRequest(id, input, remove == true);
+            cmd = userRequest.cmd;
+            data = userRequest.data;
             break;
         case "m3u":
             confirmMsg = "Delete this playlist?";
@@ -2128,7 +2190,6 @@ function savePopupData(dataType, id, remove, option) {
             data["filter"][id] = input;
             break;
         default:
-            console.log(dataType, id);
             return;
             break;
     }
@@ -2138,8 +2199,12 @@ function savePopupData(dataType, id, remove, option) {
             return;
         }
     }
+    showElement("loading", true);
     console.log("SEND TO SERVER");
-    console.log(data);
+    beginSourceRequest(dataType, id, remove, option);
+    if (typeof beginFilterRequest == "function") {
+        beginFilterRequest(dataType, id, remove);
+    }
     var server = new Server(cmd);
     server.request(data);
     showElement("loading", false);

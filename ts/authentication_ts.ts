@@ -1,47 +1,39 @@
-function login() {
-  var err:Boolean = false
-  var data = new Object()
-  var div:any = document.getElementById("content")
-  var form:any = document.getElementById("authentication")
+function login(_event?: Event): boolean {
+  var username = document.getElementById("username") as HTMLInputElement
+  var password = document.getElementById("password") as HTMLInputElement
+  var confirmPassword = document.getElementById("confirm") as HTMLInputElement
+  var message = document.getElementById("err")
+  var inputs = [username, password]
+  if (confirmPassword) {
+    inputs.push(confirmPassword)
+  }
 
-  var inputs:any = div.getElementsByTagName("INPUT")
-
-  console.log(inputs)
-
-  for (var i = inputs.length - 1; i >= 0; i--) {
-    
-    var key:string = (inputs[i] as HTMLInputElement).name
-    var value:string = (inputs[i] as HTMLInputElement).value
-
-    if (value.length == 0) {
-      inputs[i].style.borderColor = "red"
-      err = true
+  var firstInvalid: HTMLInputElement = null
+  inputs.forEach(input => {
+    input.style.borderColor = ""
+    input.setAttribute("aria-invalid", "false")
+    if (input.value.length == 0 && !firstInvalid) {
+      firstInvalid = input
     }
-
-    data[key] = value
-
+  })
+  if (firstInvalid) {
+    firstInvalid.style.borderColor = "red"
+    firstInvalid.setAttribute("aria-invalid", "true")
+    message.textContent = "{{.alert.missingInput}}"
+    firstInvalid.focus()
+    return false
   }
 
-  if (err == true) {
-    data = new Object()
-    return
+  if (confirmPassword && confirmPassword.value != password.value) {
+    password.style.borderColor = "red"
+    confirmPassword.style.borderColor = "red"
+    password.setAttribute("aria-invalid", "true")
+    confirmPassword.setAttribute("aria-invalid", "true")
+    message.textContent = "{{.account.failed}}"
+    password.focus()
+    return false
   }
 
-  if (data.hasOwnProperty("confirm")) {
-
-    if (data["confirm"] != data["password"]) {
-      alert("sdafsd")
-      document.getElementById('password').style.borderColor = "red"
-      document.getElementById('confirm').style.borderColor = "red"
-
-      document.getElementById("err").innerHTML = "{{.account.failed}}"
-      return
-    }
-
-  }
-  
-  console.log(data)
-
-  form.submit();
-
+  message.textContent = ""
+  return true
 }

@@ -50,6 +50,7 @@ type SystemStruct struct {
 	}
 
 	Flag struct {
+		Bind    string
 		Branch  string
 		Debug   int
 		Info    bool

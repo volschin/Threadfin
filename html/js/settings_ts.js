@@ -1,3 +1,4 @@
+"use strict";
 class SettingsCategory {
     constructor() {
         this.DocumentID = "content_settings";
@@ -660,50 +661,10 @@ function showSettings() {
     }
 }
 function saveSettings() {
-    console.log("Save Settings");
     var cmd = "saveSettings";
     var div = document.getElementById("content_settings");
-    var settings = div.getElementsByClassName("changed");
-    var newSettings = new Object();
-    for (let i = 0; i < settings.length; i++) {
-        var name;
-        var value;
-        switch (settings[i].tagName) {
-            case "INPUT":
-                switch (settings[i].type) {
-                    case "checkbox":
-                        name = settings[i].name;
-                        value = settings[i].checked;
-                        newSettings[name] = value;
-                        break;
-                    case "text":
-                        name = settings[i].name;
-                        value = settings[i].value;
-                        switch (name) {
-                            case "update":
-                                value = value.split(",");
-                                value = value.filter(function (e) { return e; });
-                                break;
-                            case "buffer.timeout":
-                                value = parseFloat(value);
-                        }
-                        newSettings[name] = value;
-                        break;
-                }
-                break;
-            case "SELECT":
-                name = settings[i].name;
-                value = settings[i].value;
-                // Wenn der Wert eine Zahl ist, wird dieser als Zahl gespeichert
-                if (isNaN(value)) {
-                    newSettings[name] = value;
-                }
-                else {
-                    newSettings[name] = parseInt(value);
-                }
-                break;
-        }
-    }
+    var controls = Array.prototype.slice.call(div.querySelectorAll("input, select"));
+    var newSettings = serializeSettingsChanges(controls);
     var data = new Object();
     data["settings"] = newSettings;
     var server = new Server(cmd);

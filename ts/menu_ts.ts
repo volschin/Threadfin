@@ -46,6 +46,10 @@ class MainMenuItem extends MainMenu {
     var doc = document.getElementById(this.DocumentID)
     doc.appendChild(item)
 
+    this.initializeTableHeader()
+  }
+
+  initializeTableHeader(): void {
     switch (this.menuKey) {
       case "playlist":
         this.tableHeader = ["{{.playlist.table.playlist}}", "{{.playlist.table.tuner}}", "{{.playlist.table.lastUpdate}}", "{{.playlist.table.availability}} %", "{{.playlist.table.type}}", "{{.playlist.table.streams}}", "{{.playlist.table.groupTitle}} %", "{{.playlist.table.tvgID}} %", "{{.playlist.table.uniqueID}} %"]
@@ -60,7 +64,7 @@ class MainMenuItem extends MainMenu {
         break
 
       case "users":
-        this.tableHeader = ["{{.users.table.username}}", "{{.users.table.password}}", "{{.users.table.web}}", "{{.users.table.pms}}", "{{.users.table.m3u}}", "{{.users.table.xml}}", "{{.users.table.api}}"]
+        this.tableHeader = ["{{.users.table.username}}", "{{.users.table.password}}", "{{.users.table.web}}", "{{.users.table.pms}}", "{{.users.table.m3u}}", "{{.users.table.xml}}", "{{.users.table.api}}", "{{.users.table.config}}"]
         break
 
       case "mapping":
@@ -68,9 +72,6 @@ class MainMenuItem extends MainMenu {
         break
 
     }
-
-    //console.log(this.menuKey, this.tableHeader);
-
   }
 }
 
@@ -396,6 +397,16 @@ class Content {
             cell.child = true
             cell.childType = "P"
             if (data[key]["data"]["authentication.api"] == true) {
+              cell.value = "✓"
+            } else {
+              cell.value = "-"
+            }
+            tr.appendChild(cell.createCell())
+
+            var cell: Cell = new Cell()
+            cell.child = true
+            cell.childType = "P"
+            if (data[key]["data"]["authentication.config"] == true) {
               cell.value = "✓"
             } else {
               cell.value = "-"
@@ -818,9 +829,39 @@ class ShowContent extends Content {
 
     // Überschrift
     var popup_header = document.getElementById(this.HeaderID)
-    var headline: string[] = menuItems[this.menuID].headline
+    var headline: string = menuItems[this.menuID].headline
 
     var menuKey = menuItems[this.menuID].menuKey
+    if (menuKey == "playlist" || menuKey == "xmltv") {
+      renderSourceManagementPage(menuKey, doc)
+      showElement("loading", false)
+      return
+    }
+    if (menuKey == "filter") {
+      renderFilterManagementPage(doc)
+      showElement("loading", false)
+      return
+    }
+    if (menuKey == "mapping") {
+      renderMappingPage(doc)
+      showElement("loading", false)
+      return
+    }
+    if (menuKey == "settings") {
+      renderSettingsPage(doc)
+      showElement("loading", false)
+      return
+    }
+    if (menuKey == "users") {
+      renderUsersPage(doc)
+      showElement("loading", false)
+      return
+    }
+    if (menuKey == "log") {
+      renderLogPage(doc)
+      showElement("loading", false)
+      return
+    }
     var h = this.createHeadline(headline)
     var existingHeader = popup_header.querySelector('h3')
     if(existingHeader) {
@@ -1146,41 +1187,14 @@ function createLayout() {
 
 
 
-  // Create menu
-  document.getElementById("main-menu").innerHTML = ""
-  for (let i = 0; i < menuItems.length; i++) {
-
-    menuItems[i].id = i
-
-    switch (menuItems[i]["menuKey"]) {
-
-      case "users":
-      case "logout":
-        if (SERVER["settings"]["authentication.web"] == true) {
-          menuItems[i].createItem()
-        }
-        break
-
-      case "mapping":
-      case "xmltv":
-          menuItems[i].createItem()
-        break
-
-      default:
-        menuItems[i].createItem()
-        break
-    }
-
-  }
+  renderNavigation()
+  restoreInitialDestinationFromHistory()
 
   return
 }
 
 function openThisMenu(element) {
-  var id = element.id
-  var content: ShowContent = new ShowContent(id)
-  content.show()
-  enableGroupSelection(".bulk")
+  openLegacyMenu(Number(element.id))
   return
 }
 
@@ -1213,6 +1227,7 @@ class PopupWindow {
 class PopupContent extends PopupWindow {
 
   table = document.createElement("TABLE")
+  rowIndex: number = 0
 
   createHeadline(headline): void {
     this.doc.innerHTML = ""
@@ -1227,15 +1242,44 @@ class PopupContent extends PopupWindow {
 
   appendRow(title: string, element: any): void {
     var tr = document.createElement("TR")
+    var titleCell: HTMLElement = null
+    var rowIndex = this.rowIndex++
 
     // Bezeichnung
     if (title.length != 0) {
-      tr.appendChild(this.createTitle(title))
+      titleCell = this.createTitle(title)
+      titleCell.id = "popup-field-label-" + rowIndex
+      tr.appendChild(titleCell)
     }
-
 
     // Content
     tr.appendChild(this.createContent(element))
+    if (titleCell) {
+      var controls: HTMLElement[] = []
+      var tagName = element && element.tagName ? String(element.tagName).toUpperCase() : ""
+      if (tagName == "INPUT" || tagName == "SELECT" || tagName == "TEXTAREA") {
+        controls.push(element)
+      }
+      if (element && typeof element.querySelectorAll == "function") {
+        var descendants = element.querySelectorAll("input, select, textarea")
+        for (var controlIndex = 0; controlIndex < descendants.length; controlIndex++) {
+          if (controls.indexOf(descendants[controlIndex]) == -1) {
+            controls.push(descendants[controlIndex])
+          }
+        }
+      }
+      controls.forEach((control, controlIndex) => {
+        if (String((control as HTMLInputElement).type || "").toLowerCase() == "hidden") {
+          return
+        }
+        if (!control.id) {
+          control.id = "popup-field-" + rowIndex + "-" + controlIndex
+        }
+        if (!control.getAttribute("aria-label") && !control.getAttribute("aria-labelledby")) {
+          control.setAttribute("aria-labelledby", titleCell.id)
+        }
+      })
+    }
     this.table.appendChild(tr)
   }
 
@@ -1849,6 +1893,12 @@ function openPopUp(dataType, element) {
       input.checked = data[dbKey]
       content.appendRow("{{.users.api.title}}", input)
 
+      // Berechtigung CONFIG
+      var dbKey: string = "authentication.config"
+      var input = content.createCheckbox(dbKey)
+      input.checked = data[dbKey] == true
+      content.appendRow("{{.users.config.title}}", input)
+
       // Interaktion
       content.createInteraction()
 
@@ -2085,6 +2135,13 @@ function openPopUp(dataType, element) {
       break;
   }
 
+  enhanceSourcePopup(dataType)
+  if (typeof enhanceFilterPopup == "function") {
+    enhanceFilterPopup(dataType)
+  }
+  if (dataType == "users") {
+    enhanceUsersPopup(id, data)
+  }
   showPopUpElement('popup-custom');
 }
 
@@ -2471,9 +2528,14 @@ function changeChannelLogo(epgMapId: string) {
 
 function savePopupData(dataType: string, id: string, remove: Boolean, option: number) {
 
-  showElement("loading", true)
+  var filterPopupValid = typeof validateFilterPopup != "function" || validateFilterPopup(dataType)
+  if (remove != true && option == 0 && (!validateSourcePopup(dataType) || !filterPopupValid)) {
+    return
+  }
 
   if (dataType == "mapping") {
+
+    showElement("loading", true)
 
 
     var data = new Object()
@@ -2563,17 +2625,10 @@ function savePopupData(dataType: string, id: string, remove: Boolean, option: nu
 
   switch (dataType) {
     case "users":
-
       confirmMsg = "Delete this user?"
-      if (id == "-") {
-        cmd = "saveNewUser"
-        data["userData"] = input
-      } else {
-        cmd = "saveUserData"
-        var d = new Object()
-        d[id] = input
-        data["userData"] = d
-      }
+      var userRequest = buildUserRequest(id, input, remove == true)
+      cmd = userRequest.cmd
+      data = userRequest.data
 
       break;
 
@@ -2652,7 +2707,6 @@ function savePopupData(dataType: string, id: string, remove: Boolean, option: nu
       break
 
     default:
-      console.log(dataType, id);
       return
       break;
 
@@ -2667,10 +2721,14 @@ function savePopupData(dataType: string, id: string, remove: Boolean, option: nu
 
   }
 
+  showElement("loading", true)
+
   console.log("SEND TO SERVER");
 
-  console.log(data);
-
+  beginSourceRequest(dataType, id, remove, option)
+  if (typeof beginFilterRequest == "function") {
+    beginFilterRequest(dataType, id, remove)
+  }
   var server: Server = new Server(cmd)
   server.request(data)
 

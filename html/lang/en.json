@@ -22,6 +22,44 @@
       "logout": "Logout"
     }
   },
+  "appShell": {
+    "groups": {
+      "sources": {
+        "label": "Sources",
+        "description": "Import playlists and guide data."
+      },
+      "lineup": {
+        "label": "Lineup",
+        "description": "Select and map channels for delivery."
+      },
+      "delivery": {
+        "label": "Delivery",
+        "description": "Connect clients and manage access."
+      },
+      "system": {
+        "label": "System",
+        "description": "Monitor activity and maintain Threadfin."
+      },
+      "account": {
+        "label": "Account",
+        "description": "Manage the current session."
+      }
+    },
+    "screens": {
+      "overview": {
+        "label": "Overview",
+        "description": "See where channels are in the path from sources to client-ready outputs."
+      },
+      "connections": {
+        "label": "Connections",
+        "description": "Copy the addresses and output URLs needed by your TV client."
+      },
+      "activity": {
+        "label": "Activity",
+        "description": "Review current streams and available connection capacity."
+      }
+    }
+  },
   "confirm": {
     "restore": "All data will be replaced with those from the backup. Should the files be restored?"
   },
@@ -52,6 +90,35 @@
     "sortChannelNumbers": "Sort Channels"
   },
   "filter": {
+    "unnamed": "Unnamed filter",
+    "addGroup": "Add Group Filter",
+    "counts": {
+      "imported": "Imported",
+      "selected": "Selected",
+      "excluded": "Excluded"
+    },
+    "empty": {
+      "title": "No filters yet",
+      "description": "No saved filter rules exist. Imported streams may already be selected by the current defaults; create a Group Filter to control which streams reach Mapping."
+    },
+    "advanced": {
+      "title": "Advanced filtering",
+      "description": "Use a Custom Filter when a group rule is not specific enough.",
+      "chooseType": "Choose filter type",
+      "addCustom": "Add Custom Filter"
+    },
+    "example": "Example: select the Sports group, include FHD,UHD, and exclude ES,IT.",
+    "validation": {
+      "nameRequired": "Enter a filter name.",
+      "ruleRequired": "Choose or enter a filter rule."
+    },
+    "feedback": {
+      "saving": "Saving filter…",
+      "deleting": "Deleting filter…",
+      "saved": "Filter saved.",
+      "deleted": "Filter deleted.",
+      "error": "Filter request failed."
+    },
     "table": {
       "startingNumber": "Start Ch.",
       "name": "Filter Name",
@@ -190,6 +257,53 @@
       "placeholder": "HTTP Referer"
     }
   },
+  "sources": {
+    "playlist": {
+      "purpose": "Playlist sources import the streams that continue to Filter and Mapping.",
+      "add": "Add playlist",
+      "emptyTitle": "No playlist sources yet",
+      "emptyDescription": "Add an M3U playlist or HDHomeRun tuner. After it loads, create a Filter to select streams for Mapping."
+    },
+    "xmltv": {
+      "purpose": "XMLTV sources provide guide channels and programmes for XEPG Mapping.",
+      "add": "Add XMLTV",
+      "emptyTitle": "No XMLTV sources yet",
+      "emptyDescription": "Add an XMLTV URL or local file. After it loads, review guide assignments in Mapping.",
+      "pmsNote": "XMLTV and Mapping are used in XEPG mode. PMS mode currently leaves guide management to the connected client.",
+      "reviewEpgSource": "Review EPG source"
+    },
+    "actions": {
+      "edit": "Edit",
+      "update": "Update now",
+      "delete": "Delete"
+    },
+    "counts": {
+      "streams": "Streams",
+      "tuners": "Tuners",
+      "groupCoverage": "Group-title coverage",
+      "tvgIDCoverage": "tvg-id coverage",
+      "uniqueIDCoverage": "Unique ID coverage",
+      "channels": "Channels",
+      "programs": "Programmes"
+    },
+    "available": "Available",
+    "unavailable": "Unavailable",
+    "availabilityUnknown": "Availability not reported",
+    "lastUpdate": "Last update",
+    "neverUpdated": "No successful update recorded",
+    "locationUnavailable": "Source location not reported",
+    "locationInvalidDisplay": "Source location hidden because it could not be displayed safely",
+    "requestBusy": "Another request is already in progress. Try again.",
+    "transportError": "Connection lost before Threadfin confirmed the request. Try again.",
+    "responseInvalid": "Threadfin returned an invalid response. Try again.",
+    "forms": {
+      "locationHelp": "Enter an HTTP(S) URL or a local file path, for example https://provider.example/file or /srv/threadfin/file.",
+      "hdhrHelp": "Enter the HDHomeRun address and port, for example 192.168.1.10:5004.",
+      "nameRequired": "Enter a source name.",
+      "locationRequired": "Enter a source URL or local file path.",
+      "locationInvalid": "Enter an HTTP(S) URL or local file path."
+    }
+  },
   "xmltv": {
     "table": {
       "guide": "Guide",
@@ -225,6 +339,30 @@
     }
   },
   "mapping": {
+    "workspace": {
+      "views": {
+        "attention": "Needs attention",
+        "active": "Active",
+        "inactive": "Inactive"
+      },
+      "reasons": {
+        "missing": "Missing EPG assignment",
+        "invalid": "Invalid EPG assignment",
+        "hidden": "Hidden from outputs",
+        "inactive": "Inactive"
+      },
+      "actions": {
+        "apply": "Apply to draft",
+        "save": "Save mapping",
+        "discard": "Discard draft",
+        "stay": "Stay"
+      },
+      "feedback": {
+        "saving": "Saving mapping and rebuilding outputs",
+        "rebuilt": "Mapping saved; outputs rebuilt",
+        "queued": "Mapping saved; output rebuild requested"
+      }
+    },
     "table": {
       "chNo": "Ch. No.",
       "logo": "Logo",
@@ -338,7 +476,8 @@
       "pms": "PMS",
       "m3u": "M3U",
       "xml": "XML",
-      "api": "API"
+      "api": "API",
+      "config": "CONFIG"
     },
     "username": {
       "title": "Username",
@@ -379,6 +518,11 @@
       "title": "API Access",
       "placeholder": "",
       "description": ""
+    },
+    "config": {
+      "title": "CONFIG Access",
+      "placeholder": "",
+      "description": "Allows the typed configuration workflow, including source fetches from permitted private-LAN destinations."
     }
   },
   "settings": {
@@ -577,24 +721,56 @@
       "description": "Access to the API interface is only possible with authentication."
     }
   },
+  "admin": {
+    "settings": {
+      "purpose": "Configure ingestion, files, streaming, backups, and access without changing unrelated settings.",
+      "epgPMSImpact": "PMS lets the connected client manage guide data; XMLTV sources, Mapping, and M3U/XMLTV guide outputs are not used by this mode.",
+      "epgXEPGImpact": "XEPG uses XMLTV guide sources and makes Mapping plus M3U and XMLTV outputs applicable after you save.",
+      "webGate": "WEB access gates user management. Saving WEB as disabled clears PMS, M3U, XML, and API authentication on the server."
+    },
+    "users": {
+      "purpose": "Control which Threadfin interfaces and generated endpoints each account may use. Passwords are edit-only secrets.",
+      "passwords": "Passwords are available only while creating or editing an account.",
+      "configAuthority": "CONFIG grants the typed configuration workflow authority to fetch sources from permitted private-LAN destinations."
+    },
+    "log": {
+      "purpose": "Search the current diagnostic record or filter response-backed DEBUG, WARNING, and ERROR markers.",
+      "resetWarning": "Permanently remove all current in-memory log entries."
+    },
+    "authentication": {
+      "loginPurpose": "Sign in to manage Threadfin and its generated outputs.",
+      "firstUserPurpose": "Create the first administrator account. Passwords are stored as Argon2id verifiers."
+    }
+  },
   "wizard": {
+    "headline": "Set up Threadfin",
+    "introduction": "Configure the source pipeline: choose capacity and guide mode, add a playlist, then add XMLTV when using XEPG. After setup, Overview shows the next required stage.",
+    "stepsLabel": "Setup progress",
+    "progress": "Step {current} of {total}",
+    "saving": "Saving and checking this step…",
+    "saved": "Step saved.",
+    "finish": "Finish setup",
     "epgSource": {
       "title": "EPG Source",
-      "description": "PMS:<br>- Use EPG data from Plex, Emby or Jellyfin <br><br>XEPG:<br>- Use of one or more XMLTV files<br>- Channel management<br>- M3U / XMLTV export (HTTP link for IPTV apps)"
+      "shortTitle": "Guide mode",
+      "description": "PMS keeps guide management in the connected client. XEPG uses XMLTV in Threadfin and enables Mapping plus generated M3U/XMLTV outputs."
     },
     "tuner": {
       "title": "Number of tuners",
+      "shortTitle": "Capacity",
       "description": "Number of parallel connections that can be established to the provider.<br>Available for: Plex, Emby, Jellyfin, M3U (with active buffer).<br>After a change, Threadfin must be delete in the Plex / Emby / Jellyfin DVR settings and set up again."
     },
     "m3u": {
       "title": "M3U Playlist",
+      "shortTitle": "Playlist",
       "placeholder": "File path or URL of the M3U",
-      "description": "Local or remote playlists"
+      "description": "Add the channel source that Threadfin will import. Enter an HTTP(S) URL or local file path."
     },
     "xmltv": {
       "title": "XMLTV File",
+      "shortTitle": "XMLTV",
       "placeholder": "File path or URL of the XMLTV",
-      "description": "Local or remote XMLTV file"
+      "description": "In XEPG mode, add guide data for Mapping. Enter an HTTP(S) URL or local file path. Successful completion opens Overview."
     }
   },
   "login": {

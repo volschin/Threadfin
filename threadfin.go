@@ -98,7 +98,7 @@ func dispatchThreadfinStartup(
 }
 
 func performStartupUpdate(skip bool, update func() error) error {
-	if skip {
+	if skip || src.System.ConfigurationWizard {
 		return nil
 	}
 	return update()
@@ -188,7 +188,7 @@ func runThreadfinApplication(args []string, skipAutomaticUpdate bool) (exitCode 
 	}
 
 	if bindIpAddress != nil && len(*bindIpAddress) > 0 {
-		system.IPAddress = *bindIpAddress
+		system.Flag.Bind = *bindIpAddress
 	}
 
 	// Branch

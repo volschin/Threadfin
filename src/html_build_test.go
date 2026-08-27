@@ -1,6 +1,7 @@
 package src
 
 import (
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"os"
@@ -112,13 +113,76 @@ func TestNavbarsUseBootstrap53DarkTheme(t *testing.T) {
 	}
 }
 
+func TestIndexHTMLProvidesSemanticApplicationShell(t *testing.T) {
+	doc := parseHTMLFile(t, "index.html")
+
+	viewport := findElement(t, doc, "meta", "name", "viewport")
+	if got := attribute(viewport, "content"); got != "width=device-width, initial-scale=1.0" {
+		t.Errorf("viewport content = %q, want responsive device viewport", got)
+	}
+
+	findElement(t, doc, "link", "href", "css/app-shell.css")
+	findElementWithClass(t, doc, "div", "tf-app")
+	findElementWithClass(t, doc, "aside", "tf-sidebar")
+
+	navigation := findElement(t, doc, "nav", "id", "main-menu")
+	if got := attribute(navigation, "aria-label"); got != "Primary" {
+		t.Errorf("primary navigation aria-label = %q, want Primary", got)
+	}
+
+	main := findElement(t, doc, "main", "id", "main-content")
+	if got := attribute(main, "tabindex"); got != "-1" {
+		t.Errorf("main content tabindex = %q, want -1", got)
+	}
+
+	for _, id := range []string{"content", "overview-content", "connections-content", "activity-content"} {
+		findElement(t, doc, "section", "id", id)
+	}
+}
+
+func TestIndexHTMLEmbeddedAssetsMatchSource(t *testing.T) {
+	webUI = make(map[string]interface{})
+	loadHTMLMap()
+
+	for _, name := range []string{"html/index.html", "html/css/app-shell.css"} {
+		t.Run(name, func(t *testing.T) {
+			encoded, ok := webUI[name].(string)
+			if !ok {
+				t.Fatalf("embedded asset %q is missing or is not a string", name)
+			}
+
+			got, err := base64.StdEncoding.DecodeString(encoded)
+			if err != nil {
+				t.Fatalf("decode embedded asset %q: %v", name, err)
+			}
+			want, err := os.ReadFile(filepath.Join("..", name))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if string(got) != string(want) {
+				t.Errorf("embedded asset %q does not match its source file", name)
+			}
+		})
+	}
+}
+
+func TestIndexHTMLMobileTargetsHaveMinimumInlineSize(t *testing.T) {
+	content, err := os.ReadFile(filepath.Join("..", "html", "css", "app-shell.css"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(content), "min-inline-size: 44px;") {
+		t.Error("mobile interactive targets lack a 44px minimum inline size")
+	}
+}
+
 type htmlElement struct {
 	name       string
 	attributes map[string]string
 }
 
 var (
-	elementPattern   = regexp.MustCompile(`(?is)<(link|nav|script)\b([^>]*)>`)
+	elementPattern   = regexp.MustCompile(`(?is)<(aside|div|link|main|meta|nav|script|section)\b([^>]*)>`)
 	attributePattern = regexp.MustCompile(`([[:alnum:]_-]+)\s*=\s*"([^"]*)"`)
 )
 

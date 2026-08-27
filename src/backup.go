@@ -104,6 +104,13 @@ func ThreadfinBackup() (archiv string, err error) {
 }
 
 func ThreadfinRestore(archive string) (newWebURL string, err error) {
+	configMutationMutex.Lock()
+	defer configMutationMutex.Unlock()
+
+	return threadfinRestoreLocked(archive)
+}
+
+func threadfinRestoreLocked(archive string) (newWebURL string, err error) {
 
 	var newPort, oldPort, backupVersion, tmpRestore string
 
@@ -161,7 +168,7 @@ func ThreadfinRestore(archive string) (newWebURL string, err error) {
 			return "", err
 		}
 
-		err = StartSystem(true)
+		err = startSystemConfigLocked(true)
 		if err != nil {
 			ShowError(err, 0)
 			return "", err

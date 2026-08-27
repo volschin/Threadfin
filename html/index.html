@@ -3,9 +3,7 @@
 
 <head>
   <meta charset="utf-8">
-  <!---
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" /> 
-    -->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Threadfin</title>
   <!-- font-awesome -->
   <link
@@ -15,6 +13,7 @@
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-sRIl4kxILFvY47J16cr9ZwB07vP4J8+LH7qKQnuqkuIAvNWLzeN8tE5YBujZqJLB" crossorigin="anonymous">
   <link rel="stylesheet" href="css/screen.css" type="text/css">
   <link rel="stylesheet" href="css/base.css" type="text/css">
+  <link rel="stylesheet" href="css/app-shell.css" type="text/css">
   <link rel="icon" href="img/threadfin.ico">
 
 </head>
@@ -91,54 +90,78 @@
       </div>
     </div>
   </div>
-  <nav class="navbar navbar-expand-lg sticky-top bg-black" data-bs-theme="dark">
-    <div class="container-fluid">
-      <a class="navbar-brand" href="/web">
-        <span id="logo"></span>
-      </a>
-      <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarSupportedContent" aria-controls="navbarSupportedContent" aria-expanded="false" aria-label="Toggle navigation">
-        <span class="navbar-toggler-icon"></span>
+  <div class="tf-app">
+    <aside class="tf-sidebar">
+      <div class="tf-sidebar-header">
+        <a class="tf-brand" href="/web" aria-label="Threadfin home">
+          <span id="logo"></span>
+        </a>
+        <button class="tf-nav-toggle navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#main-menu" aria-controls="main-menu" aria-expanded="false" aria-label="Toggle primary navigation">
+          <span class="navbar-toggler-icon"></span>
+        </button>
+      </div>
+      <nav id="main-menu" class="navbar tf-navigation collapse" aria-label="Primary" data-bs-theme="dark"></nav>
+      <button id="server-information-link" class="tf-server-information" type="button">
+        <i class="fas fa-info-circle" aria-hidden="true"></i>
+        Server Information
       </button>
-      <div class="collapse navbar-collapse" id="navbarSupportedContent">
-        <ul class="navbar-nav mx-auto mb-2 mb-lg-0" id="main-menu">
-        </ul>
-        <div class="col-md-2 col-sm-2">
-          <p id="playlist-connection-information">
-          </p>
-          <p id="client-connection-information">
-          </p>
+    </aside>
+
+    <main id="main-content" tabindex="-1">
+      <section id="overview-content" class="tf-screen" aria-label="Overview" hidden></section>
+      <section id="connections-content" class="tf-screen" aria-label="Connections" hidden></section>
+      <section id="content" class="tf-screen table-responsive"></section>
+      <section id="activity-content" class="tf-screen tf-legacy-activity" aria-label="Activity" hidden>
+        <div class="tf-activity">
+          <header class="tf-operations-header">
+            <h1>Activity</h1>
+            <p>Current Threadfin stream and connection state. Historical analytics are not collected here.</p>
+          </header>
+          <div class="tf-activity-capacity" aria-label="Current connection capacity">
+            <div>
+              <h2>Playlist source capacity</h2>
+              <p id="playlist-connection-information"></p>
+              <p>Active source connections compared with configured playlist tuner capacity.</p>
+            </div>
+            <div>
+              <h2>Client capacity</h2>
+              <p id="client-connection-information"></p>
+              <p>Active client connections compared with Threadfin's configured tuner capacity.</p>
+            </div>
+          </div>
+          <div class="tf-activity-tables">
+            <div id="myStreamsBox">
+              <div class="tf-activity-table-scroll">
+                <table class="table table-dark table-bordered caption-top" id="activeStreams" tabindex="0"></table>
+              </div>
+              <div class="tf-activity-table-scroll">
+                <table class="table table-dark table-bordered caption-top" id="inactiveStreams" tabindex="0"></table>
+              </div>
+            </div>
+          </div>
         </div>
-        <ul class="navbar-nav mx-auto mb-2 mb-lg-0">
-          <li class="nav-link" data-bs-toggle="modal" data-bs-target="#server_information"><i class="fas fa-info-circle"></i> Server Information</li>
-        </ul>
-      </div>
-    </div>
-  </nav>
-  <div class="container-flex">
-      <div class="row">
-        <div class="col-md-12 col-sm-12">
-          <div id="content" class="table-responsive"></div>
-        </div>
-      </div>
-      <div class="row" id="myStreamsBox">
-        <div class="col-md-5 col-sm-12 table-responsive float-start">
-          <table class="table table-dark table-bordered caption-top" id="activeStreams"></table>
-        </div>
-        <div class="col-md-5 col-sm-12 table-responsive float-end">
-          <table class="table table-dark table-bordered caption-top" id="inactiveStreams"></table>
-        </div>
-      </div>
-    </div>
-      </div>
-    </div>
+      </section>
+    </main>
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/js/bootstrap.bundle.min.js" integrity="sha384-FKyoEForCGlyvwx9Hj09JcYn3nv7wiPVlz7YYwJrWVcXK/BmnVDxM+D2scQbITxI" crossorigin="anonymous"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/clipboard.js/2.0.10/clipboard.min.js"></script>
   <script language="javascript" type="text/javascript" src="js/network_ts.js"></script>
+  <script language="javascript" type="text/javascript" src="js/mapping_state_ts.js"></script>
+  <script language="javascript" type="text/javascript" src="js/filter_ts.js"></script>
   <script language="javascript" type="text/javascript" src="js/menu_ts.js"></script>
+  <script language="javascript" type="text/javascript" src="js/users_page_ts.js"></script>
+  <script language="javascript" type="text/javascript" src="js/mapping_ts.js"></script>
+  <script language="javascript" type="text/javascript" src="js/sources_ts.js"></script>
+  <script language="javascript" type="text/javascript" src="js/app_state_ts.js"></script>
+  <script language="javascript" type="text/javascript" src="js/overview_ts.js"></script>
+  <script language="javascript" type="text/javascript" src="js/connections_ts.js"></script>
+  <script language="javascript" type="text/javascript" src="js/activity_ts.js"></script>
+  <script language="javascript" type="text/javascript" src="js/navigation_ts.js"></script>
   <script language="javascript" type="text/javascript" src="js/settings_ts.js"></script>
+  <script language="javascript" type="text/javascript" src="js/settings_page_ts.js"></script>
   <script language="javascript" type="text/javascript" src="js/logs_ts.js"></script>
+  <script language="javascript" type="text/javascript" src="js/log_page_ts.js"></script>
   <script language="javascript" type="text/javascript" src="js/base_ts.js"></script>
 </body>
 

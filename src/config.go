@@ -1,6 +1,7 @@
 package src
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"runtime"
@@ -148,6 +149,11 @@ func Init() (err error) {
 	showInfo("Hostname:" + System.Hostname)
 	showInfo(fmt.Sprintf("System Folder:%s", getPlatformPath(System.Folder.Config)))
 
+	System.ConfigurationWizard, err = configurationWizardRequired(getPlatformFile(System.Folder.Config + "settings.json"))
+	if err != nil {
+		return
+	}
+
 	// Systemdateien erstellen (Falls nicht vorhanden)
 	err = createSystemFiles()
 	if err != nil {
@@ -227,7 +233,7 @@ func Init() (err error) {
 	}
 
 	// DLNA Server starten
-	if Settings.SSDP {
+	if shouldStartSSDP() {
 		err = SSDP()
 		if err != nil {
 			return
@@ -240,8 +246,41 @@ func Init() (err error) {
 	return
 }
 
+func shouldStartSSDP() bool {
+	return Settings.SSDP && !System.ConfigurationWizard
+}
+
+func completeConfigurationWizard(startSSDP func() error) error {
+	if Settings.SSDP {
+		if err := startSSDP(); err != nil {
+			return err
+		}
+	}
+	System.ConfigurationWizard = false
+	return nil
+}
+
+func configurationWizardRequired(settingsFile string) (bool, error) {
+	_, err := os.Stat(settingsFile)
+	if err == nil {
+		return false, nil
+	}
+	if errors.Is(err, os.ErrNotExist) {
+		return true, nil
+	}
+	return false, err
+}
+
 // StartSystem : System wird gestartet
 func StartSystem(updateProviderFiles bool) (err error) {
+	return startSystem(updateProviderFiles, false)
+}
+
+func startSystemConfigLocked(updateProviderFiles bool) error {
+	return startSystem(updateProviderFiles, true)
+}
+
+func startSystem(updateProviderFiles, configLockHeld bool) (err error) {
 
 	setDeviceID()
 
@@ -285,6 +324,9 @@ func StartSystem(updateProviderFiles bool) (err error) {
 		return
 	}
 
+	if configLockHeld {
+		return buildXEPGWithResult(false)
+	}
 	buildXEPG(true)
 
 	return

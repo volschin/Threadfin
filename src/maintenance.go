@@ -39,35 +39,7 @@ func maintenance() {
 						ShowError(err, 000)
 					}
 
-					// Playlist und XMLTV Dateien aktualisieren
-					if providerErr := getProviderData("m3u", ""); providerErr != nil {
-						ShowError(providerErr, 0)
-					}
-					if providerErr := getProviderData("hdhr", ""); providerErr != nil {
-						ShowError(providerErr, 0)
-					}
-
-					if Settings.EpgSource == "XEPG" {
-						if providerErr := getProviderData("xmltv", ""); providerErr != nil {
-							ShowError(providerErr, 0)
-						}
-					}
-
-					// Datenbank für DVR erstellen
-					err = buildDatabaseDVR()
-					if err != nil {
-						ShowError(err, 000)
-					}
-
-					systemMutex.Lock()
-					if !Settings.CacheImages && System.ImageCachingInProgress == 0 {
-						systemMutex.Unlock()
-						if cleanupErr := removeChildItems(System.Folder.ImagesCache); cleanupErr != nil {
-							ShowError(cleanupErr, 0)
-						}
-					} else {
-						systemMutex.Unlock()
-					}
+					runScheduledConfigMutation()
 
 					// XEPG Dateien erstellen
 					buildXEPG(true)
@@ -95,6 +67,34 @@ func maintenance() {
 
 	}
 
+}
+
+func runScheduledConfigMutation() {
+	withScheduledConfigMutation(func() {
+		if providerErr := getProviderData("m3u", ""); providerErr != nil {
+			ShowError(providerErr, 0)
+		}
+		if providerErr := getProviderData("hdhr", ""); providerErr != nil {
+			ShowError(providerErr, 0)
+		}
+		if Settings.EpgSource == "XEPG" {
+			if providerErr := getProviderData("xmltv", ""); providerErr != nil {
+				ShowError(providerErr, 0)
+			}
+		}
+		if err := buildDatabaseDVR(); err != nil {
+			ShowError(err, 000)
+		}
+		systemMutex.Lock()
+		if !Settings.CacheImages && System.ImageCachingInProgress == 0 {
+			systemMutex.Unlock()
+			if cleanupErr := removeChildItems(System.Folder.ImagesCache); cleanupErr != nil {
+				ShowError(cleanupErr, 0)
+			}
+		} else {
+			systemMutex.Unlock()
+		}
+	})
 }
 
 func runMaintenanceBinaryUpdate(update func() error, exit func(int), report func(error)) {
