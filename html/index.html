@@ -40,56 +40,6 @@
     </div>
   </div>
 
-  <div class="modal fade" id="server_information">
-    <div class="modal-dialog modal-xl">
-      <div class="modal-content">
-        <div class="modal-header">
-          <h3 class="modal-title">Server Information</h3>
-          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-        </div>
-        <div class="modal-body">
-          <div class="container-fluid">
-            <div class="row">
-              <div class="card text-bg-dark mb-3">
-                <div class="card-header">Server Information</div>
-                <div class="card-body">
-                  <label for="version" class="form-label">Threadfin Version</label>
-                  <input type="text" class="form-control" id="version" aria-describedby="basic-addon3" readonly disabled>
-                  <label for="branch" class="form-label">Threadfin Branch</label>
-                  <input type="text" class="form-control" id="branch" aria-describedby="basic-addon3" readonly disabled>
-                  <label for="errors" class="form-label">Errors</label>
-                  <input type="text" class="form-control" id="errors" aria-describedby="basic-addon3" readonly disabled>
-                  <label for="warnings" class="form-label">Warnings</label>
-                  <input type="text" class="form-control" id="warnings" aria-describedby="basic-addon3" readonly disabled>
-                </div>
-              </div>
-              <div class="card text-bg-dark mb-3">
-                <div class="card-header">Stream Information</div>
-                <div class="card-body">
-                  <label for="DVR" class="form-label">DVR IP</label>
-                  <input type="text" class="form-control" id="DVR" aria-describedby="basic-addon3" readonly disabled>
-                  <label for="m3u-url" class="form-label">M3U URL (Specific groups: [http://...?group-title=foo,bar])</label>
-                  <div class="input-group">
-                    <input type="text" class="form-control" id="m3u-url" aria-describedby="basic-addon3" readonly>
-                    <button class="input-group-text copy-btn" data-clipboard-target="#m3u-url" data-bs-title="Copy to clipboard" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="far fa-clipboard"></i></button>
-                  </div>
-                  <label for="xepg-url" class="form-label">XMLTV URL</label>
-                  <div class="input-group">
-                    <input type="text" class="form-control" id="xepg-url" aria-describedby="basic-addon3" readonly>
-                    <button class="input-group-text copy-btn" data-clipboard-target="#xepg-url" data-bs-title="Copy to clipboard" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="far fa-clipboard"></i></button>
-                  </div>
-                  <label for="streams" class="form-label">Filtered Channels</label>
-                  <input type="text" class="form-control" id="streams" aria-describedby="basic-addon3" readonly disabled>
-                  <label for="xepg" class="form-label">Mapped Channels</label>
-                  <input type="text" class="form-control" id="xepg" aria-describedby="basic-addon3" readonly disabled>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
   <div class="tf-app">
     <aside class="tf-sidebar">
       <div class="tf-sidebar-header">
@@ -101,10 +51,6 @@
         </button>
       </div>
       <nav id="main-menu" class="navbar tf-navigation collapse" aria-label="Primary" data-bs-theme="dark"></nav>
-      <button id="server-information-link" class="tf-server-information" type="button">
-        <i class="fas fa-info-circle" aria-hidden="true"></i>
-        Server Information
-      </button>
     </aside>
 
     <main id="main-content" tabindex="-1">

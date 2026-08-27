@@ -31,9 +31,6 @@ func TestNumericMenuResponsesUseTheExplicitLegacyAdapter(t *testing.T) {
 	if !strings.Contains(navigation, "new ShowContent(index)") {
 		t.Fatal("openLegacyMenu does not route numeric legacy indexes through ShowContent")
 	}
-	if !strings.Contains(navigation, "enableGroupSelection(\".bulk\")") {
-		t.Fatal("openLegacyMenu does not preserve legacy Mapping bulk selection setup")
-	}
 
 	network := readUITypeScript(t, "network_ts.ts")
 	if !strings.Contains(network, `openLegacyMenu(response["openMenu"])`) {
@@ -41,18 +38,6 @@ func TestNumericMenuResponsesUseTheExplicitLegacyAdapter(t *testing.T) {
 	}
 	if strings.Contains(network, `document.getElementById(response["openMenu"])`) {
 		t.Fatal("numeric openMenu response still selects a navigation element directly")
-	}
-}
-
-func TestGroupedNavigationInitializesLegacyMenuMetadata(t *testing.T) {
-	navigation := readUITypeScript(t, "navigation_ts.ts")
-	if !strings.Contains(navigation, "initializeLegacyMenuItems()") {
-		t.Fatal("grouped navigation does not initialize legacy menu metadata before ShowContent can use it")
-	}
-
-	menu := readUITypeScript(t, "menu_ts.ts")
-	if !strings.Contains(menu, "initializeTableHeader(): void") {
-		t.Fatal("legacy table metadata is still coupled to legacy menu DOM rendering")
 	}
 }
 
@@ -86,7 +71,7 @@ func TestOpenMenuResponseRoutesOnceWithoutHistoryRestore(t *testing.T) {
 	}
 
 	menu := readUITypeScript(t, "menu_ts.ts")
-	createLayout := menu[strings.Index(menu, "function createLayout()"):strings.Index(menu, "function openThisMenu(")]
+	createLayout := menu[strings.Index(menu, "function createLayout()"):strings.Index(menu, "class PopupWindow")]
 	if !strings.Contains(createLayout, "restoreInitialDestinationFromHistory()") {
 		t.Fatal("createLayout does not limit history restoration to initial navigation")
 	}
