@@ -3,7 +3,8 @@ package src
 // RequestStruct : Anfragen über die Websocket Schnittstelle
 type RequestStruct struct {
 	// Befehle an Threadfin
-	Cmd string `json:"cmd"`
+	Cmd       string `json:"cmd"`
+	RequestID string `json:"requestId,omitempty"`
 
 	// Benutzer
 	DeleteUser bool                   `json:"deleteUser,omitempty"`
@@ -97,6 +98,8 @@ func normalizeSettingsRequestAliases(request *RequestStruct) {
 
 // ResponseStruct : Antworten an den Client (WEB)
 type ResponseStruct struct {
+	RequestID string `json:"requestId,omitempty"`
+
 	ClientInfo struct {
 		ARCH           string `json:"arch"`
 		Branch         string `json:"branch,omitempty"`

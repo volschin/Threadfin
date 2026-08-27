@@ -500,20 +500,21 @@ func DataImages(w http.ResponseWriter, r *http.Request) {
 
 // WS : Web Sockets /ws/
 func WS(w http.ResponseWriter, r *http.Request) {
+	if !webSocketOriginAllowed(r) {
+		http.Error(w, http.StatusText(http.StatusForbidden), http.StatusForbidden)
+		return
+	}
 
-	var request RequestStruct
-	var response ResponseStruct
-	response.Status = true
-
-	var newToken string
+	webSocketAuth, err := authenticateWebSocketRequest(r)
+	if err != nil {
+		http.Error(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
+		return
+	}
 
 	upgrader := websocket.Upgrader{
 		ReadBufferSize:  1024,
 		WriteBufferSize: 1024,
-		CheckOrigin: func(r *http.Request) bool {
-			// Implement any custom origin validation logic here, if needed.
-			return true
-		},
+		CheckOrigin:     webSocketOriginAllowed,
 	}
 
 	conn, err := upgrader.Upgrade(w, r, nil)
@@ -532,52 +533,20 @@ func WS(w http.ResponseWriter, r *http.Request) {
 	systemMutex.Unlock()
 
 	for {
-
-		err = conn.ReadJSON(&request)
-
-		if err != nil {
+		var request RequestStruct
+		if err := conn.ReadJSON(&request); err != nil {
 			return
 		}
-
-		systemMutex.Lock()
-		if System.ConfigurationWizard == false {
-
-			switch Settings.AuthenticationWEB {
-
-			// Token Authentication
-			case true:
-
-				var token string
-				tokens, ok := r.URL.Query()["Token"]
-
-				if !ok || len(tokens[0]) < 1 {
-					token = "-"
-				} else {
-					token = tokens[0]
-				}
-
-				newToken, err = tokenAuthentication(token)
-				if err != nil {
-					response.Status = false
-					response.Reload = true
-					response.Error = err.Error()
-					request.Cmd = "-"
-
-					if err = conn.WriteJSON(response); err != nil {
-						ShowError(err, 1102)
-					}
-
-					systemMutex.Unlock()
-					return
-				}
-
-				response.Token = newToken
-				response.Users, _ = browserUserData()
-
+		response := ResponseStruct{Status: true, RequestID: request.RequestID}
+		if webSocketAuth.browserSessionID != "" {
+			if _, err := authentication.AuthorizeBrowserSession(webSocketAuth.browserSessionID, "authentication.web"); err != nil {
+				_ = conn.WriteControl(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.ClosePolicyViolation, ""), time.Now().Add(time.Second))
+				return
 			}
-
 		}
-		systemMutex.Unlock()
+		response.Token = webSocketAuth.legacyToken
+		err = nil
+		includeData := true
 
 		unlockConfigMutation := lockConfigMutationForCommand(request.Cmd)
 		switch request.Cmd {
@@ -586,13 +555,7 @@ func WS(w http.ResponseWriter, r *http.Request) {
 			// response.Config = Settings
 
 		case "updateLog":
-			response = setDefaultResponseData(response, false)
-			if err = conn.WriteJSON(response); err != nil {
-				ShowError(err, 1022)
-			} else {
-				return
-			}
-			return
+			includeData = false
 
 		case "loadFiles":
 			// response.Response = Settings.Files
@@ -726,13 +689,6 @@ func WS(w http.ResponseWriter, r *http.Request) {
 		case "uploadLogo":
 			if len(request.Base64) > 0 {
 				response.LogoURL, err = uploadLogo(request.Base64, request.Filename)
-				if err == nil {
-					if err = conn.WriteJSON(response); err != nil {
-						ShowError(err, 1022)
-					} else {
-						return
-					}
-				}
 			}
 
 		case "saveWizard":
@@ -764,14 +720,16 @@ func WS(w http.ResponseWriter, r *http.Request) {
 			response.Settings = Settings
 		}
 
-		response = setDefaultResponseData(response, true)
+		response = setDefaultResponseData(response, includeData)
 		if System.ConfigurationWizard == true {
 			response.ConfigurationWizard = System.ConfigurationWizard
 		}
 
 		if err = conn.WriteJSON(response); err != nil {
 			ShowError(err, 1022)
-		} else {
+			return
+		}
+		if !webSocketAuth.persistent {
 			break
 		}
 
