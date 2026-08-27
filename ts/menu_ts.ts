@@ -95,7 +95,7 @@ function createLayout() {
     } else if (SERVER["clientInfo"]["activePlaylist"] / SERVER["clientInfo"]["totalPlaylist"] >= 0.8) {
       activeClass = "text-danger"
     }
-    document.getElementById("playlist-connection-information").innerHTML = "Playlist Connections: <span class='" + activeClass + "'>" + SERVER["clientInfo"]["activePlaylist"] + " / " + SERVER["clientInfo"]["totalPlaylist"] + "</span>"
+    renderConnectionCapacity("playlist-connection-information", "Playlist Connections", SERVER["clientInfo"]["activePlaylist"], SERVER["clientInfo"]["totalPlaylist"], activeClass)
   }
 
   if (document.getElementById("client-connection-information")) {
@@ -105,7 +105,7 @@ function createLayout() {
     } else if (SERVER["clientInfo"]["activeClients"] / SERVER["clientInfo"]["totalClients"] >= 0.8) {
       activeClass = "text-danger"
     }
-    document.getElementById("client-connection-information").innerHTML = "Client Connections: <span class='" + activeClass + "'>" + SERVER["clientInfo"]["activeClients"] + " / " + SERVER["clientInfo"]["totalClients"] + "</span>"
+    renderConnectionCapacity("client-connection-information", "Client Connections", SERVER["clientInfo"]["activeClients"], SERVER["clientInfo"]["totalClients"], activeClass)
   }
 
   if (!document.getElementById("main-menu")) {
@@ -120,6 +120,19 @@ function createLayout() {
   return
 }
 
+function renderConnectionCapacity(id: string, label: string, active: any, total: any, activeClass: string): void {
+  var container = document.getElementById(id)
+  if (!container) {
+    return
+  }
+  container.innerHTML = ""
+  container.appendChild(document.createTextNode(label + ": "))
+  var capacity = document.createElement("span")
+  capacity.className = activeClass
+  capacity.textContent = String(active) + " / " + String(total)
+  container.appendChild(capacity)
+}
+
 class PopupWindow {
   DocumentID: string = "popup-custom"
   InteractionID: string = "interaction"
@@ -128,7 +141,7 @@ class PopupWindow {
   createTitle(title: string): any {
     var td = document.createElement("TD")
     td.className = "left"
-    td.innerHTML = title + ":"
+    td.textContent = title + ":"
     return td
   }
 
@@ -154,7 +167,7 @@ class PopupContent extends PopupWindow {
   createHeadline(headline): void {
     this.doc.innerHTML = ""
     var element = document.createElement("H3")
-    element.innerHTML = headline.toUpperCase()
+    element.textContent = headline.toUpperCase()
     this.doc.appendChild(element)
 
     // Tabelle erstellen
@@ -254,16 +267,23 @@ class PopupContent extends PopupWindow {
     return select
   }
 
-  description(value: string): any {
+  description(value: string, repositoryTemplate: boolean = false): any {
+    var span = document.createElement("PRE")
+    if (repositoryTemplate) {
+      appendDescriptionText(span, value)
+    } else {
+      span.textContent = value
+    }
+    this.descriptionElement(span)
+  }
+
+  descriptionElement(element: HTMLElement): any {
     var tr = document.createElement("TR")
     var td = document.createElement("TD")
-    var span = document.createElement("PRE")
-
-    span.innerHTML = value
 
     tr.appendChild(td)
 
-    tr.appendChild(this.createContent(span))
+    tr.appendChild(this.createContent(element))
 
     this.table.appendChild(tr)
   }
@@ -273,6 +293,16 @@ class PopupContent extends PopupWindow {
     var interaction = document.getElementById("popup-interaction")
     interaction.appendChild(element)
   }
+}
+
+function appendDescriptionText(element: HTMLElement, value: string): void {
+  var lines = String(value).split(/<br\s*\/?\s*>/i)
+  lines.forEach((line, index) => {
+    if (index > 0) {
+      element.appendChild(document.createElement("BR"))
+    }
+    element.appendChild(document.createTextNode(line))
+  })
 }
 
 function openPopUp(dataType, element) {
@@ -384,31 +414,31 @@ function openPopUp(dataType, element) {
       var select = content.createSelect(text, values, data[dbKey], dbKey)
       select.setAttribute("onfocus", "javascript: return;")
       content.appendRow("{{.playlist.tuner.title}}", select)
-      content.description("{{.playlist.tuner.description}}")
+      content.description("{{.playlist.tuner.description}}", true)
 
       var dbKey: string = "http_proxy.ip"
       var input = content.createInput("text", dbKey, data[dbKey])
       input.setAttribute("placeholder", "{{.playlist.http_proxy_ip.placeholder}}")
       content.appendRow("{{.playlist.http_proxy_ip.title}}", input)
-      content.description("{{.playlist.http_proxy_ip.description}}")
+      content.description("{{.playlist.http_proxy_ip.description}}", true)
 
       var dbKey: string = "http_proxy.port"
       var input = content.createInput("text", dbKey, data[dbKey])
       input.setAttribute("placeholder", "{{.playlist.http_proxy_port.placeholder}}")
       content.appendRow("{{.playlist.http_proxy_port.title}}", input)
-      content.description("{{.playlist.http_proxy_port.description}}")
+      content.description("{{.playlist.http_proxy_port.description}}", true)
 
       var dbKey: string = "http_headers.origin"
       var input = content.createInput("text", dbKey, data[dbKey])
       input.setAttribute("placeholder", "{{.playlist.http_user_origin.placeholder}}")
       content.appendRow("{{.playlist.http_user_origin.title}}", input)
-      content.description("{{.playlist.http_user_origin.description}}")
+      content.description("{{.playlist.http_user_origin.description}}", true)
 
       var dbKey: string = "http_headers.referer"
       var input = content.createInput("text", dbKey, data[dbKey])
       input.setAttribute("placeholder", "{{.playlist.http_user_referer.placeholder}}")
       content.appendRow("{{.playlist.http_user_referer.title}}", input)
-      content.description("{{.playlist.http_user_referer.description}}")
+      content.description("{{.playlist.http_user_referer.description}}", true)
 
       // Interaktion
       content.createInteraction()
@@ -485,19 +515,19 @@ function openPopUp(dataType, element) {
       var select = content.createSelect(text, values, data[dbKey], dbKey)
       select.setAttribute("onfocus", "javascript: return;")
       content.appendRow("{{.playlist.tuner.title}}", select)
-      content.description("{{.playlist.tuner.description}}")
+      content.description("{{.playlist.tuner.description}}", true)
 
       var dbKey: string = "http_proxy.ip"
       var input = content.createInput("text", dbKey, data[dbKey])
       input.setAttribute("placeholder", "{{.playlist.http_proxy_ip.placeholder}}")
       content.appendRow("{{.playlist.http_proxy_ip.title}}", input)
-      content.description("{{.playlist.http_proxy_ip.description}}")
+      content.description("{{.playlist.http_proxy_ip.description}}", true)
 
       var dbKey: string = "http_proxy.port"
       var input = content.createInput("text", dbKey, data[dbKey])
       input.setAttribute("placeholder", "{{.playlist.http_proxy_port.placeholder}}")
       content.appendRow("{{.playlist.http_proxy_port.title}}", input)
-      content.description("{{.playlist.http_proxy_port.description}}")
+      content.description("{{.playlist.http_proxy_port.description}}", true)
 
       // Interaktion
       content.createInteraction()
@@ -617,7 +647,7 @@ function openPopUp(dataType, element) {
           var select = content.createSelect(text, values, data[dbKey], dbKey)
           select.setAttribute("onchange", "javascript: this.className = 'changed'")
           content.appendRow("{{.filter.filterGroup.title}}", select)
-          content.description("{{.filter.filterGroup.description}}")
+          content.description("{{.filter.filterGroup.description}}", true)
 
           var dbKey: string = "liveEvent"
           var input = content.createCheckbox(dbKey)
@@ -636,13 +666,13 @@ function openPopUp(dataType, element) {
           input.setAttribute("placeholder", "{{.filter.include.placeholder}}")
 
           content.appendRow("{{.filter.include.title}}", input)
-          content.description("{{.filter.include.description}}")
+          content.description("{{.filter.include.description}}", true)
 
           var dbKey: string = "exclude"
           var input = content.createInput("text", dbKey, data[dbKey])
           input.setAttribute("placeholder", "{{.filter.exclude.placeholder}}")
           content.appendRow("{{.filter.exclude.title}}", input)
-          content.description("{{.filter.exclude.description}}")
+          content.description("{{.filter.exclude.description}}", true)
 
           break
 
@@ -659,7 +689,7 @@ function openPopUp(dataType, element) {
       }
       input.setAttribute("placeholder", "{{.filter.startingnumber.placeholder}}")
       content.appendRow("{{.filter.startingnumber.title}}", input)
-      content.description("{{.filter.startingnumber.description}}")
+      content.description("{{.filter.startingnumber.description}}", true)
 
       var dbKey: string = "x-category"
 
@@ -726,13 +756,13 @@ function openPopUp(dataType, element) {
       var input = content.createInput("text", dbKey, data[dbKey])
       input.setAttribute("placeholder", "{{.xmltv.http_proxy_ip.placeholder}}")
       content.appendRow("{{.xmltv.http_proxy_ip.title}}", input)
-      content.description("{{.xmltv.http_proxy_ip.description}}")
+      content.description("{{.xmltv.http_proxy_ip.description}}", true)
 
       var dbKey: string = "http_proxy.port"
       var input = content.createInput("text", dbKey, data[dbKey])
       input.setAttribute("placeholder", "{{.xmltv.http_proxy_port.placeholder}}")
       content.appendRow("{{.xmltv.http_proxy_port.title}}", input)
-      content.description("{{.xmltv.http_proxy_port.description}}")
+      content.description("{{.xmltv.http_proxy_port.description}}", true)
 
       // Interaktion
       content.createInteraction()
@@ -879,7 +909,17 @@ function openPopUp(dataType, element) {
         input.setAttribute("readonly", "true")
       }
       content.appendRow("{{.mapping.channelName.title}}", input)
-      content.description("<span class='text-danger'>" + data["tvg-id"] + "</span> <span class='text-primary'>(" + data["x-epg"] + ")</span>")
+      var mappingDescription = document.createElement("PRE")
+      var mappingTvgID = document.createElement("SPAN")
+      mappingTvgID.className = "text-danger"
+      mappingTvgID.textContent = data["tvg-id"]
+      mappingDescription.appendChild(mappingTvgID)
+      mappingDescription.appendChild(document.createTextNode(" "))
+      var mappingEPG = document.createElement("SPAN")
+      mappingEPG.className = "text-primary"
+      mappingEPG.textContent = "(" + data["x-epg"] + ")"
+      mappingDescription.appendChild(mappingEPG)
+      content.descriptionElement(mappingDescription)
 
       // Beschreibung 
       var dbKey: string = "x-description"
@@ -1364,7 +1404,7 @@ function checkPPV(title, element) {
     if (title.length != 0) {
       var td = document.createElement("TD")
       td.className = "left"
-      td.innerHTML = title + ":"
+      td.textContent = title + ":"
     }
 
 
@@ -1706,11 +1746,11 @@ function donePopupData(dataType: string, idsStr: string) {
           break
 
         case "x-channel-start":
-          (document.getElementById(id).childNodes[3].firstChild as HTMLElement).innerHTML = value
+          (document.getElementById(id).childNodes[3].firstChild as HTMLElement).textContent = value
           break
 
         case "x-name":
-          (document.getElementById(id).childNodes[3].firstChild as HTMLElement).innerHTML = value
+          (document.getElementById(id).childNodes[3].firstChild as HTMLElement).textContent = value
           break
 
         case "x-category":
@@ -1727,7 +1767,7 @@ function donePopupData(dataType: string, idsStr: string) {
           break
 
         case "x-group-title":
-          (document.getElementById(id).childNodes[5].firstChild as HTMLElement).innerHTML = value
+          (document.getElementById(id).childNodes[5].firstChild as HTMLElement).textContent = value
           break
 
         case "x-xmltv-file":
@@ -1739,7 +1779,7 @@ function donePopupData(dataType: string, idsStr: string) {
             input["x-active"] = false
           }
 
-          (document.getElementById(id).childNodes[6].firstChild as HTMLElement).innerHTML = value
+          (document.getElementById(id).childNodes[6].firstChild as HTMLElement).textContent = value
           break
 
         case "x-mapping":
@@ -1747,17 +1787,17 @@ function donePopupData(dataType: string, idsStr: string) {
             input["x-active"] = false
           }
 
-          (document.getElementById(id).childNodes[7].firstChild as HTMLElement).innerHTML = value
+          (document.getElementById(id).childNodes[7].firstChild as HTMLElement).textContent = value
 
           break
 
         case "x-backup-channel":
-          (document.getElementById(id).childNodes[7].firstChild as HTMLElement).innerHTML = value
+          (document.getElementById(id).childNodes[7].firstChild as HTMLElement).textContent = value
 
           break
 
         case "x-hide-channel":
-          (document.getElementById(id).childNodes[7].firstChild as HTMLElement).innerHTML = value
+          (document.getElementById(id).childNodes[7].firstChild as HTMLElement).textContent = value
 
           break
 
@@ -1809,7 +1849,7 @@ function showPreview(element: boolean) {
     var caption = document.createElement("CAPTION")
     var result = preview.replace( /([A-Z])/g, " $1" );
     var finalResult = result.charAt(0).toUpperCase() + result.slice(1);
-    caption.innerHTML = finalResult
+    caption.textContent = finalResult
     table.appendChild(caption)
 
     var tbody = document.createElement("TBODY")

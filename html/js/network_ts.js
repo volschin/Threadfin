@@ -274,9 +274,13 @@ function applyThreadfinResponse(command, data, response) {
         document.cookie = "Token=" + response["token"];
     }
     if (response.hasOwnProperty("probeInfo")) {
-        if (document.getElementById("probeDetails")) {
+        var probeDetails = document.getElementById("probeDetails");
+        if (probeDetails) {
             if (response["probeInfo"]["resolution"] !== undefined) {
-                document.getElementById("probeDetails").innerHTML = "<p>Resolution: <span class='text-primary'>" + response["probeInfo"]["resolution"] + "</span></p><p>Frame Rate: <span class='text-primary'>" + response["probeInfo"]["frameRate"] + " FPS</span></p><p>Audio: <span class='text-primary'>" + response["probeInfo"]["audioChannel"] + "</span></p>";
+                probeDetails.innerHTML = "";
+                appendProbeDetail(probeDetails, "Resolution", response["probeInfo"]["resolution"], "");
+                appendProbeDetail(probeDetails, "Frame Rate", response["probeInfo"]["frameRate"], " FPS");
+                appendProbeDetail(probeDetails, "Audio", response["probeInfo"]["audioChannel"], "");
             }
         }
     }
@@ -323,6 +327,15 @@ function applyThreadfinResponse(command, data, response) {
         return;
     }
     createLayout();
+}
+function appendProbeDetail(container, label, value, suffix) {
+    var row = document.createElement("p");
+    row.appendChild(document.createTextNode(label + ": "));
+    var detail = document.createElement("span");
+    detail.className = "text-primary";
+    detail.textContent = String(value) + suffix;
+    row.appendChild(detail);
+    container.appendChild(row);
 }
 function mergeUpdateLogResponse(response) {
     var server = overviewRecord(SERVER);

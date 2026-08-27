@@ -919,6 +919,9 @@ func Web(w http.ResponseWriter, r *http.Request) {
 	systemMutex.Unlock()
 
 	w.Header().Add("Content-Type", contentType)
+	if contentType == "text/html" {
+		setBrowserSecurityHeaders(w.Header())
+	}
 	w.WriteHeader(200)
 
 	if contentType == "text/html" || contentType == "application/javascript" {
