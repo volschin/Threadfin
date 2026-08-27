@@ -4,11 +4,14 @@ import (
 	"crypto/tls"
 	"encoding/json"
 	"errors"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"path/filepath"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -129,6 +132,64 @@ func TestWebSocketAuthenticationBeforeUpgrade(t *testing.T) {
 		}
 	})
 
+	t.Run("malformed session cookie does not fall back to token", func(t *testing.T) {
+		restorePersistentState(t)
+		_, token, _ := initializeWebSocketAuthentication(t, 60, true)
+		configureWebSocketAuthentication(true, false)
+		server, webSocketURL := newWebSocketTestServer(t)
+
+		headers := http.Header{"Origin": []string{server.URL}}
+		headers.Set("Cookie", authentication.BrowserSessionCookieName+`=bad\value`)
+		expectWebSocketHandshakeFailure(t, webSocketURL+"?Token="+url.QueryEscape(token), headers, http.StatusUnauthorized)
+		if _, err := authentication.GetUserID(token); err != nil {
+			t.Fatalf("malformed session cookie rotated the fallback token: %v", err)
+		}
+	})
+
+	t.Run("comma session cookie does not fall back to token", func(t *testing.T) {
+		restorePersistentState(t)
+		_, token, _ := initializeWebSocketAuthentication(t, 60, true)
+		configureWebSocketAuthentication(true, false)
+		server, webSocketURL := newWebSocketTestServer(t)
+
+		headers := http.Header{"Origin": []string{server.URL}}
+		headers.Set("Cookie", authentication.BrowserSessionCookieName+"=bad,value")
+		expectWebSocketHandshakeFailure(t, webSocketURL+"?Token="+url.QueryEscape(token), headers, http.StatusUnauthorized)
+		if _, err := authentication.GetUserID(token); err != nil {
+			t.Fatalf("comma session cookie rotated the fallback token: %v", err)
+		}
+	})
+
+	t.Run("similarly named malformed cookie permits token", func(t *testing.T) {
+		restorePersistentState(t)
+		_, token, _ := initializeWebSocketAuthentication(t, 60, true)
+		configureWebSocketAuthentication(true, false)
+		server, webSocketURL := newWebSocketTestServer(t)
+
+		headers := http.Header{"Origin": []string{server.URL}}
+		headers.Set("Cookie", "Not"+authentication.BrowserSessionCookieName+`=bad\value`)
+		conn := dialWebSocket(t, webSocketURL+"?Token="+url.QueryEscape(token), headers)
+		if err := conn.WriteJSON(RequestStruct{Cmd: "getServerConfig"}); err != nil {
+			t.Fatal(err)
+		}
+		var response ResponseStruct
+		if err := conn.ReadJSON(&response); err != nil {
+			t.Fatal(err)
+		}
+		if response.Token == "" || response.Token == token {
+			t.Fatalf("similarly named cookie blocked legacy token rotation: %q", response.Token)
+		}
+	})
+
+	t.Run("permission denied legacy token", func(t *testing.T) {
+		restorePersistentState(t)
+		_, token, _ := initializeWebSocketAuthentication(t, 60, false)
+		configureWebSocketAuthentication(true, false)
+		server, webSocketURL := newWebSocketTestServer(t)
+
+		expectWebSocketHandshakeFailure(t, webSocketURL+"?Token="+url.QueryEscape(token), http.Header{"Origin": []string{server.URL}}, http.StatusUnauthorized)
+	})
+
 	for _, credential := range []string{"session cookie", "legacy token"} {
 		t.Run("cross origin rejects "+credential, func(t *testing.T) {
 			restorePersistentState(t)
@@ -169,6 +230,15 @@ func TestWebSocketAuthenticationBeforeUpgrade(t *testing.T) {
 			if err := conn.Close(); err != nil {
 				t.Fatal(err)
 			}
+		})
+
+		t.Run(mode.name+" cross origin", func(t *testing.T) {
+			restorePersistentState(t)
+			initializeWebSocketAuthentication(t, 60, true)
+			configureWebSocketAuthentication(mode.authentication, mode.setup)
+			_, webSocketURL := newWebSocketTestServer(t)
+
+			expectWebSocketHandshakeFailure(t, webSocketURL, http.Header{"Origin": []string{"http://threadfin.example.evil:34400"}}, http.StatusForbidden)
 		})
 	}
 
@@ -291,8 +361,51 @@ func TestWebSocketPersistentRequestIDs(t *testing.T) {
 	}
 }
 
+func TestWebSocketPersistentMessagesResetRequestAndResponse(t *testing.T) {
+	restorePersistentState(t)
+	sessionID, _, _ := initializeWebSocketAuthentication(t, 60, true)
+	configureWebSocketAuthentication(true, false)
+	systemMutex.Lock()
+	System.Folder.ImagesUpload = t.TempDir() + string(filepath.Separator)
+	System.ServerProtocol.XML = "http"
+	systemMutex.Unlock()
+	server, webSocketURL := newWebSocketTestServer(t)
+	header := http.Header{"Origin": []string{server.URL}}
+	header.Add("Cookie", (&http.Cookie{Name: authentication.BrowserSessionCookieName, Value: sessionID}).String())
+	conn := dialWebSocket(t, webSocketURL, header)
+
+	if err := conn.WriteJSON(RequestStruct{
+		Cmd:       "uploadLogo",
+		RequestID: "request-with-logo",
+		Base64:    "data:application/octet-stream;base64,YQ==",
+		Filename:  "logo.png",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	var first ResponseStruct
+	if err := conn.ReadJSON(&first); err != nil {
+		t.Fatal(err)
+	}
+	if first.RequestID != "request-with-logo" || first.LogoURL == "" {
+		t.Fatalf("first response = requestId %q logoURL %q, want populated values", first.RequestID, first.LogoURL)
+	}
+
+	if err := conn.WriteJSON(RequestStruct{Cmd: "uploadLogo", RequestID: "request-without-logo"}); err != nil {
+		t.Fatal(err)
+	}
+	var second ResponseStruct
+	if err := conn.ReadJSON(&second); err != nil {
+		t.Fatal(err)
+	}
+	if second.RequestID != "request-without-logo" || second.LogoURL != "" {
+		t.Fatalf("second response = requestId %q logoURL %q, want reset optional request and response fields", second.RequestID, second.LogoURL)
+	}
+}
+
 func TestWebSocketRevokedSessionClosesWithPolicyViolation(t *testing.T) {
 	restorePersistentState(t)
+	previousWebScreenLog := WebScreenLog
+	t.Cleanup(func() { WebScreenLog = previousWebScreenLog })
 	sessionID, _, userID := initializeWebSocketAuthentication(t, 60, true)
 	configureWebSocketAuthentication(true, false)
 	server, webSocketURL := newWebSocketTestServer(t)
@@ -300,11 +413,14 @@ func TestWebSocketRevokedSessionClosesWithPolicyViolation(t *testing.T) {
 	header.Add("Cookie", (&http.Cookie{Name: authentication.BrowserSessionCookieName, Value: sessionID}).String())
 	conn := dialWebSocket(t, webSocketURL, header)
 	defer conn.Close()
+	WebScreenLog.Log = []string{"must remain"}
+	WebScreenLog.Errors = 2
+	WebScreenLog.Warnings = 3
 
 	if err := authentication.WriteUserData(userID, map[string]interface{}{"authentication.web": false}); err != nil {
 		t.Fatal(err)
 	}
-	if err := conn.WriteJSON(RequestStruct{Cmd: "getServerConfig", RequestID: "revoked-request"}); err != nil {
+	if err := conn.WriteJSON(RequestStruct{Cmd: "resetLogs", RequestID: "revoked-request"}); err != nil {
 		t.Fatal(err)
 	}
 	_, _, err := conn.ReadMessage()
@@ -315,6 +431,89 @@ func TestWebSocketRevokedSessionClosesWithPolicyViolation(t *testing.T) {
 	if closeError.Code != websocket.ClosePolicyViolation {
 		t.Fatalf("revoked session close code = %d, want %d", closeError.Code, websocket.ClosePolicyViolation)
 	}
+	if len(WebScreenLog.Log) != 1 || WebScreenLog.Log[0] != "must remain" || WebScreenLog.Errors != 2 || WebScreenLog.Warnings != 3 {
+		t.Fatalf("revoked command executed: log=%v errors=%d warnings=%d", WebScreenLog.Log, WebScreenLog.Errors, WebScreenLog.Warnings)
+	}
+}
+
+func TestWebSocketServerClosesConnections(t *testing.T) {
+	previousWebScreenLog := WebScreenLog
+	t.Cleanup(func() { WebScreenLog = previousWebScreenLog })
+
+	t.Run("legacy response exit", func(t *testing.T) {
+		restorePersistentState(t)
+		_, token, _ := initializeWebSocketAuthentication(t, 60, true)
+		configureWebSocketAuthentication(true, false)
+		server, webSocketURL, listener, handlerDone := newTrackedWebSocketTestServer(t)
+		conn := dialWebSocket(t, webSocketURL+"?Token="+url.QueryEscape(token), http.Header{"Origin": []string{server.URL}})
+		serverConn := listener.nextConnection(t)
+
+		if err := conn.WriteJSON(RequestStruct{Cmd: "getServerConfig"}); err != nil {
+			t.Fatal(err)
+		}
+		var response ResponseStruct
+		if err := conn.ReadJSON(&response); err != nil {
+			t.Fatal(err)
+		}
+		waitWebSocketHandler(t, handlerDone)
+		serverConn.requireClosed(t)
+	})
+
+	t.Run("revocation exit", func(t *testing.T) {
+		restorePersistentState(t)
+		sessionID, _, userID := initializeWebSocketAuthentication(t, 60, true)
+		configureWebSocketAuthentication(true, false)
+		server, webSocketURL, listener, handlerDone := newTrackedWebSocketTestServer(t)
+		header := http.Header{"Origin": []string{server.URL}}
+		header.Add("Cookie", (&http.Cookie{Name: authentication.BrowserSessionCookieName, Value: sessionID}).String())
+		conn := dialWebSocket(t, webSocketURL, header)
+		serverConn := listener.nextConnection(t)
+
+		if err := authentication.WriteUserData(userID, map[string]interface{}{"authentication.web": false}); err != nil {
+			t.Fatal(err)
+		}
+		if err := conn.WriteJSON(RequestStruct{Cmd: "getServerConfig"}); err != nil {
+			t.Fatal(err)
+		}
+		_, _, err := conn.ReadMessage()
+		var closeError *websocket.CloseError
+		if !errors.As(err, &closeError) || closeError.Code != websocket.ClosePolicyViolation {
+			t.Fatalf("revocation read error = %v, want close code %d", err, websocket.ClosePolicyViolation)
+		}
+		waitWebSocketHandler(t, handlerDone)
+		serverConn.requireClosed(t)
+	})
+
+	t.Run("read exit", func(t *testing.T) {
+		restorePersistentState(t)
+		initializeWebSocketAuthentication(t, 60, true)
+		configureWebSocketAuthentication(false, false)
+		server, webSocketURL, listener, handlerDone := newTrackedWebSocketTestServer(t)
+		conn := dialWebSocket(t, webSocketURL, http.Header{"Origin": []string{server.URL}})
+		serverConn := listener.nextConnection(t)
+
+		if err := conn.WriteMessage(websocket.TextMessage, []byte("{")); err != nil {
+			t.Fatal(err)
+		}
+		waitWebSocketHandler(t, handlerDone)
+		serverConn.requireClosed(t)
+	})
+
+	t.Run("write exit", func(t *testing.T) {
+		restorePersistentState(t)
+		initializeWebSocketAuthentication(t, 60, true)
+		configureWebSocketAuthentication(false, false)
+		server, webSocketURL, listener, handlerDone := newTrackedWebSocketTestServer(t)
+		conn := dialWebSocket(t, webSocketURL, http.Header{"Origin": []string{server.URL}})
+		serverConn := listener.nextConnection(t)
+		serverConn.failWrites.Store(true)
+
+		if err := conn.WriteJSON(RequestStruct{Cmd: "getServerConfig"}); err != nil {
+			t.Fatal(err)
+		}
+		waitWebSocketHandler(t, handlerDone)
+		serverConn.requireClosed(t)
+	})
 }
 
 func initializeWebSocketAuthentication(t *testing.T, validityMinutes int, webPermission bool) (sessionID, token, userID string) {
@@ -364,6 +563,88 @@ func newWebSocketTestServer(t *testing.T) (*httptest.Server, string) {
 		}
 	})
 	return server, "ws" + strings.TrimPrefix(server.URL, "http") + "/data/"
+}
+
+var errTrackedWebSocketWrite = errors.New("tracked WebSocket write failure")
+
+type trackedWebSocketConn struct {
+	net.Conn
+	closed     chan struct{}
+	closeOnce  sync.Once
+	failWrites atomic.Bool
+}
+
+func (conn *trackedWebSocketConn) Write(payload []byte) (int, error) {
+	if conn.failWrites.Load() {
+		return 0, errTrackedWebSocketWrite
+	}
+	return conn.Conn.Write(payload)
+}
+
+func (conn *trackedWebSocketConn) Close() (err error) {
+	conn.closeOnce.Do(func() {
+		close(conn.closed)
+		err = conn.Conn.Close()
+	})
+	return err
+}
+
+func (conn *trackedWebSocketConn) requireClosed(t *testing.T) {
+	t.Helper()
+	select {
+	case <-conn.closed:
+	default:
+		t.Fatal("WebSocket handler returned without closing the server connection")
+	}
+}
+
+type trackedWebSocketListener struct {
+	net.Listener
+	accepted chan *trackedWebSocketConn
+}
+
+func (listener *trackedWebSocketListener) Accept() (net.Conn, error) {
+	conn, err := listener.Listener.Accept()
+	if err != nil {
+		return nil, err
+	}
+	tracked := &trackedWebSocketConn{Conn: conn, closed: make(chan struct{})}
+	listener.accepted <- tracked
+	return tracked, nil
+}
+
+func (listener *trackedWebSocketListener) nextConnection(t *testing.T) *trackedWebSocketConn {
+	t.Helper()
+	select {
+	case conn := <-listener.accepted:
+		return conn
+	case <-time.After(5 * time.Second):
+		t.Fatal("tracked WebSocket server accepted no connection")
+		return nil
+	}
+}
+
+func newTrackedWebSocketTestServer(t *testing.T) (*httptest.Server, string, *trackedWebSocketListener, <-chan struct{}) {
+	t.Helper()
+	handlerDone := make(chan struct{})
+	server := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		defer close(handlerDone)
+		WS(w, r)
+	}))
+	listener := &trackedWebSocketListener{Listener: server.Listener, accepted: make(chan *trackedWebSocketConn, 1)}
+	server.Listener = listener
+	server.Start()
+	t.Cleanup(server.Close)
+	return server, "ws" + strings.TrimPrefix(server.URL, "http") + "/data/", listener, handlerDone
+}
+
+func waitWebSocketHandler(t *testing.T, handlerDone <-chan struct{}) {
+	t.Helper()
+	select {
+	case <-handlerDone:
+	case <-time.After(5 * time.Second):
+		t.Fatal("WebSocket handler did not return")
+	}
 }
 
 func dialWebSocket(t *testing.T, webSocketURL string, headers http.Header) *websocket.Conn {

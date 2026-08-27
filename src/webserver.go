@@ -523,6 +523,7 @@ func WS(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Could not open websocket connection", http.StatusBadRequest)
 		return
 	}
+	defer conn.Close()
 
 	systemMutex.Lock()
 	if Settings.HttpThreadfinDomain != "" {

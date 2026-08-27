@@ -58,12 +58,16 @@ func authenticateWebSocketRequest(r *http.Request) (webSocketAuthentication, err
 		return webSocketAuthentication{persistent: true}, nil
 	}
 
+	sessionCookiePresent := webSocketCookieNamePresent(r, authentication.BrowserSessionCookieName)
 	cookie, err := r.Cookie(authentication.BrowserSessionCookieName)
 	if err == nil {
 		if _, err = authorizeBrowserRequest(r, "authentication.web"); err != nil {
 			return webSocketAuthentication{}, err
 		}
 		return webSocketAuthentication{browserSessionID: cookie.Value, persistent: true}, nil
+	}
+	if sessionCookiePresent {
+		return webSocketAuthentication{}, errors.New("websocket authentication failed")
 	}
 	if !errors.Is(err, http.ErrNoCookie) {
 		return webSocketAuthentication{}, err
@@ -81,4 +85,16 @@ func authenticateWebSocketRequest(r *http.Request) (webSocketAuthentication, err
 	}
 
 	return webSocketAuthentication{legacyToken: legacyToken}, nil
+}
+
+func webSocketCookieNamePresent(r *http.Request, cookieName string) bool {
+	for _, header := range r.Header.Values("Cookie") {
+		for part := range strings.SplitSeq(header, ";") {
+			name, _, _ := strings.Cut(strings.TrimSpace(part), "=")
+			if strings.TrimSpace(name) == cookieName {
+				return true
+			}
+		}
+	}
+	return false
 }
