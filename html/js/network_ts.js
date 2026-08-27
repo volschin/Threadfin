@@ -7,6 +7,8 @@ class ThreadfinConnection {
         this.nextRequestId = 1;
         this.policyRejected = false;
         this.reconnectTimeoutId = null;
+        this.preOpenFailures = 0;
+        this.transportFailureInProgress = false;
     }
     enqueue(command, data) {
         var requestId = "request-" + this.nextRequestId;
@@ -40,17 +42,17 @@ class ThreadfinConnection {
         }
         catch (_error) {
             console.warn("WebSocket connection failed");
-            if (WS_AVAILABLE == false) {
-                alert("No websocket connection to Threadfin could be established. Check your network configuration.");
-            }
-            this.scheduleReconnect();
+            this.settlePreOpenFailure(null);
             return;
         }
         this.socket = socket;
+        var opened = false;
         socket.onopen = () => {
             if (this.socket !== socket || this.policyRejected) {
                 return;
             }
+            opened = true;
+            this.preOpenFailures = 0;
             WS_AVAILABLE = true;
             console.log("WebSocket connection opened");
             this.pump();
@@ -73,11 +75,11 @@ class ThreadfinConnection {
             if (this.socket !== socket || this.policyRejected) {
                 return;
             }
-            var unavailable = WS_AVAILABLE == false;
-            this.settleTransportFailure();
-            if (unavailable) {
-                alert("No websocket connection to Threadfin could be established. Check your network configuration.");
+            if (!opened) {
+                this.settlePreOpenFailure(socket);
+                return;
             }
+            this.settleTransportFailure();
         };
         socket.onclose = (event) => {
             if (event.code == 1008) {
@@ -87,11 +89,15 @@ class ThreadfinConnection {
             if (this.socket !== socket || this.policyRejected) {
                 return;
             }
+            if (!opened) {
+                this.settlePreOpenFailure(socket);
+                return;
+            }
             this.settleTransportFailure();
         };
     }
     pump() {
-        if (this.policyRejected || this.active !== null || this.queue.length == 0 || this.reconnectTimeoutId !== null) {
+        if (this.policyRejected || this.transportFailureInProgress || this.active !== null || this.queue.length == 0 || this.reconnectTimeoutId !== null) {
             return;
         }
         if (this.socket === null) {
@@ -139,16 +145,35 @@ class ThreadfinConnection {
     settleTransportFailure() {
         var socket = this.socket;
         this.socket = null;
+        this.transportFailureInProgress = true;
         this.settleActiveFailure("{{.sources.transportError}}", "transport");
         this.closeSocket(socket);
-        this.pump();
+        this.transportFailureInProgress = false;
+        this.scheduleReconnect();
     }
     settleProtocolFailure() {
         var socket = this.socket;
         this.socket = null;
+        this.transportFailureInProgress = true;
         this.settleActiveFailure("{{.sources.responseInvalid}}", "transport");
         this.closeSocket(socket);
-        this.pump();
+        this.transportFailureInProgress = false;
+        this.scheduleReconnect();
+    }
+    settlePreOpenFailure(socket) {
+        if (this.policyRejected || (socket !== null && this.socket !== socket)) {
+            return;
+        }
+        if (socket !== null) {
+            this.socket = null;
+            this.closeSocket(socket);
+        }
+        this.preOpenFailures += 1;
+        if (this.preOpenFailures >= 2) {
+            this.rejectTerminalFailure(socket, true);
+            return;
+        }
+        this.scheduleReconnect();
     }
     settleActiveFailure(message, failureKind) {
         var request = this.active;
@@ -178,12 +203,16 @@ class ThreadfinConnection {
         }, 250);
     }
     rejectPolicyClose(closedSocket) {
+        this.rejectTerminalFailure(closedSocket, false);
+    }
+    rejectTerminalFailure(closedSocket, showUnavailableAlert) {
         if (this.policyRejected) {
             return;
         }
         this.policyRejected = true;
         clearTimeout(this.reconnectTimeoutId);
         this.reconnectTimeoutId = null;
+        this.preOpenFailures = 0;
         var currentSocket = this.socket;
         this.socket = null;
         this.settleActiveFailure("{{.sources.transportError}}", "transport");
@@ -197,6 +226,9 @@ class ThreadfinConnection {
         });
         if (currentSocket !== closedSocket) {
             this.closeSocket(currentSocket);
+        }
+        if (showUnavailableAlert) {
+            alert("No websocket connection to Threadfin could be established. Check your network configuration.");
         }
         location.reload();
     }

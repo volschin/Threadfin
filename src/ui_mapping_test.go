@@ -322,11 +322,12 @@ func TestUIMappingGeneratedNetworkQueueAndTransport(t *testing.T) {
 		TransportState string `json:"transportState"`
 		RefetchCommand string `json:"refetchCommand"`
 		RefetchPending bool   `json:"refetchPending"`
+		DelayedRetry   bool   `json:"delayedRetry"`
 	}
 	if err := json.Unmarshal(output, &got); err != nil {
 		t.Fatalf("decode Mapping network fixture: %v\n%s", err, output)
 	}
-	if got.QueuedDirty != 1 || !strings.Contains(got.QueuedState, "retained") || got.TransportDirty != 1 || got.TransportState != "ambiguous" || got.RefetchCommand != "getServerConfig" || !got.RefetchPending {
+	if got.QueuedDirty != 1 || !strings.Contains(got.QueuedState, "retained") || got.TransportDirty != 1 || got.TransportState != "ambiguous" || got.RefetchCommand != "getServerConfig" || !got.RefetchPending || !got.DelayedRetry {
 		t.Fatalf("Mapping generated network queue/transport contract = %+v", got)
 	}
 }
@@ -596,13 +597,13 @@ const started = Date.now(); context.renderMappingPage(host); const elapsedMs = D
 `
 
 const mappingNetworkNodeScript = `
-const fs = require("fs"), vm = require("vm"); const sockets = [];
+const fs = require("fs"), vm = require("vm"); const sockets = [], timers = [];
 class FakeWebSocket { constructor(url) { this.url = url; this.readyState = FakeWebSocket.CONNECTING; this.OPEN = FakeWebSocket.OPEN; this.sent = []; sockets.push(this); } send(value) { this.sent.push(value); } open() { this.readyState = FakeWebSocket.OPEN; this.onopen.call(this, {}); } close(code = 1000) { if (this.readyState === FakeWebSocket.CLOSED) return; this.readyState = FakeWebSocket.CLOSED; if (this.onclose) this.onclose.call(this, {code}); } emitError() { this.onerror.call(this, {}); } respond(response) { response.requestId = JSON.parse(this.sent[this.sent.length - 1]).requestId; this.onmessage.call(this, {data: JSON.stringify(response)}); } }
 FakeWebSocket.CONNECTING = 0; FakeWebSocket.OPEN = 1; FakeWebSocket.CLOSING = 2; FakeWebSocket.CLOSED = 3;
-const context = {console: {log() {}, warn() {}}, document: {cookie: "", addEventListener() {}, getElementById() { return null; }}, window: {location: {protocol: "http:", hostname: "127.0.0.1", port: "34400"}, addEventListener() {}}, location: {reload() {}}, WebSocket: FakeWebSocket, alert() {}, showElement() {}, createLayout() {}, SERVER: {}, UNDO: {}, SERVER_CONNECTION: false, WS_AVAILABLE: false, setTimeout(callback, delay) { return {callback, delay}; }, clearTimeout() {}};
+const context = {console: {log() {}, warn() {}}, document: {cookie: "", addEventListener() {}, getElementById() { return null; }}, window: {location: {protocol: "http:", hostname: "127.0.0.1", port: "34400"}, addEventListener() {}}, location: {reload() {}}, WebSocket: FakeWebSocket, alert() {}, showElement() {}, createLayout() {}, SERVER: {}, UNDO: {}, SERVER_CONNECTION: false, WS_AVAILABLE: false, setTimeout(callback, delay) { const timer = {callback, delay, cleared: false}; timers.push(timer); return timer; }, clearTimeout(timer) { if (timer) timer.cleared = true; }};
 vm.createContext(context); vm.runInContext(fs.readFileSync(process.argv[2], "utf8"), context); vm.runInContext(fs.readFileSync(process.argv[3], "utf8"), context); vm.runInContext(fs.readFileSync(process.argv[4], "utf8"), context);
 function server(name) { return {xepg: {xmltvMap: {"X1.xml": {guide: {}}}, epgMapping: {a: {"x-channelID": "1", "x-active": true, "x-name": name, "x-xmltv-file": "X1.xml", "x-mapping": "guide"}}}}; }
 context.initializeMappingWorkspace(server("Before"), true); context.mappingApplyChannelPatch(context.mappingWorkspaceState, ["a"], {"x-name": "Queued"}); vm.runInContext('new Server("saveEpgMapping").request({epgMapping: mappingDeepClone(mappingWorkspaceState.draft)})', context); vm.runInContext('new Server("getServerConfig").request({})', context); sockets[0].open(); sockets[0].respond({status: false, err: "not saved"}); const queuedDirty = context.mappingDirtyIDs(context.mappingWorkspaceState).length, queuedState = context.mappingWorkspaceState.feedback; sockets[0].respond({status: true, xepg: {epgMapping: server("Before").xepg.epgMapping, xmltvMap: server("Before").xepg.xmltvMap}});
-context.initializeMappingWorkspace(server("Before"), true); context.mappingApplyChannelPatch(context.mappingWorkspaceState, ["a"], {"x-name": "Maybe"}); vm.runInContext('new Server("saveEpgMapping").request({epgMapping: mappingDeepClone(mappingWorkspaceState.draft)})', context); sockets[0].emitError(); const transportDirty = context.mappingDirtyIDs(context.mappingWorkspaceState).length, transportState = context.mappingWorkspaceState.saveState; sockets[1].open(); const refetchCommand = JSON.parse(sockets[1].sent[0]).cmd;
-process.stdout.write(JSON.stringify({queuedDirty, queuedState, transportDirty, transportState, refetchCommand, refetchPending: context.THREADFIN_CONNECTION.active && context.THREADFIN_CONNECTION.active.command === "getServerConfig"}));
+context.initializeMappingWorkspace(server("Before"), true); context.mappingApplyChannelPatch(context.mappingWorkspaceState, ["a"], {"x-name": "Maybe"}); vm.runInContext('new Server("saveEpgMapping").request({epgMapping: mappingDeepClone(mappingWorkspaceState.draft)})', context); sockets[0].emitError(); const transportDirty = context.mappingDirtyIDs(context.mappingWorkspaceState).length, transportState = context.mappingWorkspaceState.saveState, retryTimer = timers.find(timer => !timer.cleared && timer.delay === 250), delayedRetry = sockets.length === 1 && !!retryTimer; retryTimer.callback(); sockets[1].open(); const refetchCommand = JSON.parse(sockets[1].sent[0]).cmd;
+process.stdout.write(JSON.stringify({queuedDirty, queuedState, transportDirty, transportState, refetchCommand, refetchPending: context.THREADFIN_CONNECTION.active && context.THREADFIN_CONNECTION.active.command === "getServerConfig", delayedRetry}));
 `

@@ -14,6 +14,8 @@ class ThreadfinConnection {
   nextRequestId: number = 1
   policyRejected: boolean = false
   reconnectTimeoutId: any = null
+  preOpenFailures: number = 0
+  transportFailureInProgress: boolean = false
 
   enqueue(command: string, data: any): void {
     var requestId = "request-" + this.nextRequestId
@@ -47,18 +49,18 @@ class ThreadfinConnection {
       socket = new WebSocket(protocol + window.location.hostname + port + "/data/")
     } catch (_error) {
       console.warn("WebSocket connection failed")
-      if (WS_AVAILABLE == false) {
-        alert("No websocket connection to Threadfin could be established. Check your network configuration.")
-      }
-      this.scheduleReconnect()
+      this.settlePreOpenFailure(null)
       return
     }
     this.socket = socket
+    var opened = false
 
     socket.onopen = () => {
       if (this.socket !== socket || this.policyRejected) {
         return
       }
+      opened = true
+      this.preOpenFailures = 0
       WS_AVAILABLE = true
       console.log("WebSocket connection opened")
       this.pump()
@@ -82,11 +84,11 @@ class ThreadfinConnection {
       if (this.socket !== socket || this.policyRejected) {
         return
       }
-      var unavailable = WS_AVAILABLE == false
-      this.settleTransportFailure()
-      if (unavailable) {
-        alert("No websocket connection to Threadfin could be established. Check your network configuration.")
+      if (!opened) {
+        this.settlePreOpenFailure(socket)
+        return
       }
+      this.settleTransportFailure()
     }
 
     socket.onclose = (event: CloseEvent) => {
@@ -97,12 +99,16 @@ class ThreadfinConnection {
       if (this.socket !== socket || this.policyRejected) {
         return
       }
+      if (!opened) {
+        this.settlePreOpenFailure(socket)
+        return
+      }
       this.settleTransportFailure()
     }
   }
 
   pump(): void {
-    if (this.policyRejected || this.active !== null || this.queue.length == 0 || this.reconnectTimeoutId !== null) {
+    if (this.policyRejected || this.transportFailureInProgress || this.active !== null || this.queue.length == 0 || this.reconnectTimeoutId !== null) {
       return
     }
     if (this.socket === null) {
@@ -153,17 +159,37 @@ class ThreadfinConnection {
   settleTransportFailure(): void {
     var socket = this.socket
     this.socket = null
+    this.transportFailureInProgress = true
     this.settleActiveFailure("{{.sources.transportError}}", "transport")
     this.closeSocket(socket)
-    this.pump()
+    this.transportFailureInProgress = false
+    this.scheduleReconnect()
   }
 
   settleProtocolFailure(): void {
     var socket = this.socket
     this.socket = null
+    this.transportFailureInProgress = true
     this.settleActiveFailure("{{.sources.responseInvalid}}", "transport")
     this.closeSocket(socket)
-    this.pump()
+    this.transportFailureInProgress = false
+    this.scheduleReconnect()
+  }
+
+  settlePreOpenFailure(socket: WebSocket): void {
+    if (this.policyRejected || (socket !== null && this.socket !== socket)) {
+      return
+    }
+    if (socket !== null) {
+      this.socket = null
+      this.closeSocket(socket)
+    }
+    this.preOpenFailures += 1
+    if (this.preOpenFailures >= 2) {
+      this.rejectTerminalFailure(socket, true)
+      return
+    }
+    this.scheduleReconnect()
   }
 
   settleActiveFailure(message: string, failureKind: "busy" | "transport"): void {
@@ -197,12 +223,17 @@ class ThreadfinConnection {
   }
 
   rejectPolicyClose(closedSocket: WebSocket): void {
+    this.rejectTerminalFailure(closedSocket, false)
+  }
+
+  rejectTerminalFailure(closedSocket: WebSocket, showUnavailableAlert: boolean): void {
     if (this.policyRejected) {
       return
     }
     this.policyRejected = true
     clearTimeout(this.reconnectTimeoutId)
     this.reconnectTimeoutId = null
+    this.preOpenFailures = 0
     var currentSocket = this.socket
     this.socket = null
     this.settleActiveFailure("{{.sources.transportError}}", "transport")
@@ -216,6 +247,9 @@ class ThreadfinConnection {
     })
     if (currentSocket !== closedSocket) {
       this.closeSocket(currentSocket)
+    }
+    if (showUnavailableAlert) {
+      alert("No websocket connection to Threadfin could be established. Check your network configuration.")
     }
     location.reload()
   }

@@ -539,6 +539,16 @@ func WS(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		response := ResponseStruct{Status: true, RequestID: request.RequestID}
+		if webSocketAuth.persistent && webSocketAuth.browserSessionID == "" {
+			systemMutex.Lock()
+			authenticationRequired := Settings.AuthenticationWEB
+			configurationWizard := System.ConfigurationWizard
+			systemMutex.Unlock()
+			if authenticationRequired && !configurationWizard {
+				_ = conn.WriteControl(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.ClosePolicyViolation, ""), time.Now().Add(time.Second))
+				return
+			}
+		}
 		if webSocketAuth.browserSessionID != "" {
 			if _, err := authentication.AuthorizeBrowserSession(webSocketAuth.browserSessionID, "authentication.web"); err != nil {
 				_ = conn.WriteControl(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.ClosePolicyViolation, ""), time.Now().Add(time.Second))

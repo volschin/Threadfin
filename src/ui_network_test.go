@@ -9,6 +9,23 @@ import (
 	"testing"
 )
 
+type webSocketPreOpenTerminalResult struct {
+	Attempts                 int   `json:"attempts"`
+	AttemptsBeforeRetry      int   `json:"attemptsBeforeRetry"`
+	PendingTimersBeforeRetry int   `json:"pendingTimersBeforeRetry"`
+	RetryDelay               int   `json:"retryDelay"`
+	CompletionCounts         []int `json:"completionCounts"`
+	Alerts                   int   `json:"alerts"`
+	Reloads                  int   `json:"reloads"`
+	QueueLength              int   `json:"queueLength"`
+	PendingTimers            int   `json:"pendingTimers"`
+	PostFailureCount         int   `json:"postFailureCount"`
+	AttemptsAfterPost        int   `json:"attemptsAfterPost"`
+	SocketCleared            bool  `json:"socketCleared"`
+	ActiveCleared            bool  `json:"activeCleared"`
+	CurrentSocketClosed      bool  `json:"currentSocketClosed"`
+}
+
 func TestGeneratedWebSocketQueue(t *testing.T) {
 	temp := t.TempDir()
 	scriptPath := filepath.Join(temp, "websocket-queue.js")
@@ -35,6 +52,9 @@ func TestGeneratedWebSocketQueue(t *testing.T) {
 		} `json:"happy"`
 		Mismatch struct {
 			FirstFailedOnce    bool     `json:"firstFailedOnce"`
+			NoSynchronousRetry bool     `json:"noSynchronousRetry"`
+			RetryDelay         int      `json:"retryDelay"`
+			PendingRetryTimers int      `json:"pendingRetryTimers"`
 			Reconnected        bool     `json:"reconnected"`
 			ReplayCommands     []string `json:"replayCommands"`
 			SecondStillPending bool     `json:"secondStillPending"`
@@ -43,29 +63,37 @@ func TestGeneratedWebSocketQueue(t *testing.T) {
 			EscapedErrors       int      `json:"escapedErrors"`
 			AttemptsBeforeRetry int      `json:"attemptsBeforeRetry"`
 			AlertsBeforeRetry   int      `json:"alertsBeforeRetry"`
+			PendingRetryTimers  int      `json:"pendingRetryTimers"`
+			RetryDelay          int      `json:"retryDelay"`
 			QueueBeforeRetry    []string `json:"queueBeforeRetry"`
 			SocketsBeforeRetry  int      `json:"socketsBeforeRetry"`
 			SentAfterRetry      []string `json:"sentAfterRetry"`
 			CompletionCounts    []int    `json:"completionCounts"`
 		} `json:"constructorFailure"`
 		SendThrow struct {
-			EscapedErrors     int      `json:"escapedErrors"`
-			FailureCounts     []int    `json:"failureCounts"`
-			ReconnectCommands []string `json:"reconnectCommands"`
-			SocketCount       int      `json:"socketCount"`
+			EscapedErrors      int      `json:"escapedErrors"`
+			FailureCounts      []int    `json:"failureCounts"`
+			NoSynchronousRetry bool     `json:"noSynchronousRetry"`
+			RetryDelay         int      `json:"retryDelay"`
+			ReconnectCommands  []string `json:"reconnectCommands"`
+			SocketCount        int      `json:"socketCount"`
 		} `json:"sendThrow"`
 		PreOpen struct {
-			CloseCommands   []string `json:"closeCommands"`
-			CloseCompleted  []int    `json:"closeCompleted"`
-			ErrorCommands   []string `json:"errorCommands"`
-			ErrorCompleted  []int    `json:"errorCompleted"`
-			NoEarlyFailures bool     `json:"noEarlyFailures"`
+			CloseCommands     []string `json:"closeCommands"`
+			CloseCompleted    []int    `json:"closeCompleted"`
+			ErrorCommands     []string `json:"errorCommands"`
+			ErrorCompleted    []int    `json:"errorCompleted"`
+			NoEarlyFailures   bool     `json:"noEarlyFailures"`
+			DelayedRetries    bool     `json:"delayedRetries"`
+			SingleRetryTimers bool     `json:"singleRetryTimers"`
 		} `json:"preOpen"`
 		Transport struct {
-			FirstFailedOnce   bool     `json:"firstFailedOnce"`
-			Reconnected       bool     `json:"reconnected"`
-			ReconnectCommands []string `json:"reconnectCommands"`
-			CompletionCounts  []int    `json:"completionCounts"`
+			FirstFailedOnce    bool     `json:"firstFailedOnce"`
+			NoSynchronousRetry bool     `json:"noSynchronousRetry"`
+			RetryDelay         int      `json:"retryDelay"`
+			Reconnected        bool     `json:"reconnected"`
+			ReconnectCommands  []string `json:"reconnectCommands"`
+			CompletionCounts   []int    `json:"completionCounts"`
 		} `json:"transport"`
 		Timeout struct {
 			Delay                int      `json:"delay"`
@@ -102,6 +130,11 @@ func TestGeneratedWebSocketQueue(t *testing.T) {
 			QueueLength      int   `json:"queueLength"`
 			ActiveCleared    bool  `json:"activeCleared"`
 		} `json:"policy"`
+		PreOpenTerminal struct {
+			Constructor webSocketPreOpenTerminalResult `json:"constructor"`
+			AsyncError  webSocketPreOpenTerminalResult `json:"asyncError"`
+			AsyncClose  webSocketPreOpenTerminalResult `json:"asyncClose"`
+		} `json:"preOpenTerminal"`
 	}
 	if err := json.Unmarshal(output, &got); err != nil {
 		t.Fatalf("decode generated WebSocket queue contract: %v\n%s", err, output)
@@ -128,20 +161,20 @@ func TestGeneratedWebSocketQueue(t *testing.T) {
 	if !reflect.DeepEqual(got.Happy.CompletionCounts, []int{1, 1, 1}) {
 		t.Errorf("successful request completion counts = %v, want exactly once each", got.Happy.CompletionCounts)
 	}
-	if !got.Mismatch.FirstFailedOnce || !got.Mismatch.Reconnected || !reflect.DeepEqual(got.Mismatch.ReplayCommands, []string{"second"}) || !got.Mismatch.SecondStillPending {
-		t.Errorf("mismatched-ID handling = %+v, want active failed once and only unsent second command on a fresh socket", got.Mismatch)
+	if !got.Mismatch.FirstFailedOnce || !got.Mismatch.NoSynchronousRetry || got.Mismatch.RetryDelay != 250 || got.Mismatch.PendingRetryTimers != 1 || !got.Mismatch.Reconnected || !reflect.DeepEqual(got.Mismatch.ReplayCommands, []string{"second"}) || !got.Mismatch.SecondStillPending {
+		t.Errorf("mismatched-ID handling = %+v, want active failed once and only unsent second command after one delayed reconnect", got.Mismatch)
 	}
-	if got.ConstructorFailure.EscapedErrors != 0 || got.ConstructorFailure.AttemptsBeforeRetry != 1 || got.ConstructorFailure.AlertsBeforeRetry != 1 || !reflect.DeepEqual(got.ConstructorFailure.QueueBeforeRetry, []string{"first", "second"}) || got.ConstructorFailure.SocketsBeforeRetry != 0 || !reflect.DeepEqual(got.ConstructorFailure.SentAfterRetry, []string{"first", "second"}) || !reflect.DeepEqual(got.ConstructorFailure.CompletionCounts, []int{1, 1}) {
+	if got.ConstructorFailure.EscapedErrors != 0 || got.ConstructorFailure.AttemptsBeforeRetry != 1 || got.ConstructorFailure.AlertsBeforeRetry != 0 || got.ConstructorFailure.PendingRetryTimers != 1 || got.ConstructorFailure.RetryDelay != 250 || !reflect.DeepEqual(got.ConstructorFailure.QueueBeforeRetry, []string{"first", "second"}) || got.ConstructorFailure.SocketsBeforeRetry != 0 || !reflect.DeepEqual(got.ConstructorFailure.SentAfterRetry, []string{"first", "second"}) || !reflect.DeepEqual(got.ConstructorFailure.CompletionCounts, []int{1, 1}) {
 		t.Errorf("constructor failure transition = %+v, want contained error, deferred retry, and complete unsent FIFO", got.ConstructorFailure)
 	}
-	if got.SendThrow.EscapedErrors != 0 || !reflect.DeepEqual(got.SendThrow.FailureCounts, []int{1, 1}) || !reflect.DeepEqual(got.SendThrow.ReconnectCommands, []string{"second"}) || got.SendThrow.SocketCount != 2 {
-		t.Errorf("send throw handling = %+v, want active failed once, tail retained, and no exception/replay", got.SendThrow)
+	if got.SendThrow.EscapedErrors != 0 || !reflect.DeepEqual(got.SendThrow.FailureCounts, []int{1, 1}) || !got.SendThrow.NoSynchronousRetry || got.SendThrow.RetryDelay != 250 || !reflect.DeepEqual(got.SendThrow.ReconnectCommands, []string{"second"}) || got.SendThrow.SocketCount != 2 {
+		t.Errorf("send throw handling = %+v, want active failed once, tail retained, and delayed reconnect without exception/replay", got.SendThrow)
 	}
-	if !reflect.DeepEqual(got.PreOpen.CloseCommands, []string{"first", "second"}) || !reflect.DeepEqual(got.PreOpen.CloseCompleted, []int{1, 1}) || !reflect.DeepEqual(got.PreOpen.ErrorCommands, []string{"first", "second"}) || !reflect.DeepEqual(got.PreOpen.ErrorCompleted, []int{1, 1}) || !got.PreOpen.NoEarlyFailures {
-		t.Errorf("pre-open failure handling = %+v, want complete unsent FIFO after close and error", got.PreOpen)
+	if !reflect.DeepEqual(got.PreOpen.CloseCommands, []string{"first", "second"}) || !reflect.DeepEqual(got.PreOpen.CloseCompleted, []int{1, 1}) || !reflect.DeepEqual(got.PreOpen.ErrorCommands, []string{"first", "second"}) || !reflect.DeepEqual(got.PreOpen.ErrorCompleted, []int{1, 1}) || !got.PreOpen.NoEarlyFailures || !got.PreOpen.DelayedRetries || !got.PreOpen.SingleRetryTimers {
+		t.Errorf("pre-open failure handling = %+v, want one delayed retry and complete unsent FIFO after close and error", got.PreOpen)
 	}
-	if !got.Transport.FirstFailedOnce || !got.Transport.Reconnected || !reflect.DeepEqual(got.Transport.ReconnectCommands, []string{"second", "third"}) || !reflect.DeepEqual(got.Transport.CompletionCounts, []int{1, 1, 1}) {
-		t.Errorf("error-plus-close handling = %+v, want one settlement, no replay, and complete FIFO tail", got.Transport)
+	if !got.Transport.FirstFailedOnce || !got.Transport.NoSynchronousRetry || got.Transport.RetryDelay != 250 || !got.Transport.Reconnected || !reflect.DeepEqual(got.Transport.ReconnectCommands, []string{"second", "third"}) || !reflect.DeepEqual(got.Transport.CompletionCounts, []int{1, 1, 1}) {
+		t.Errorf("error-plus-close handling = %+v, want one settlement, no replay, and complete FIFO tail after a delayed reconnect", got.Transport)
 	}
 	if got.Timeout.Delay != 30000 || !got.Timeout.FirstFailedOnce || !reflect.DeepEqual(got.Timeout.ReconnectCommands, []string{"second", "third"}) || !got.Timeout.LateMessageIgnored || !got.Timeout.LateErrorIgnored || !got.Timeout.LateCloseIgnored || !got.Timeout.ReplacementUnchanged || !reflect.DeepEqual(got.Timeout.CompletionCounts, []int{1, 1, 1}) {
 		t.Errorf("timeout/late-event handling = %+v, want 30s, isolated stale events, and complete FIFO tail", got.Timeout)
@@ -155,6 +188,15 @@ func TestGeneratedWebSocketQueue(t *testing.T) {
 	if !reflect.DeepEqual(got.Policy.FailureCounts, []int{1, 1, 1}) || got.Policy.PostFailureCount != 1 || got.Policy.Reloads != 1 || got.Policy.SocketCount != 1 || got.Policy.QueueLength != 0 || !got.Policy.ActiveCleared {
 		t.Errorf("policy-close handling = %+v, want queue and post-policy work rejected once without reconnect", got.Policy)
 	}
+	assertPreOpenTerminal := func(name string, result webSocketPreOpenTerminalResult, wantSocketClosed bool) {
+		t.Helper()
+		if result.Attempts != 2 || result.AttemptsBeforeRetry != 1 || result.PendingTimersBeforeRetry != 1 || result.RetryDelay != 250 || !reflect.DeepEqual(result.CompletionCounts, []int{1, 1}) || result.Alerts != 1 || result.Reloads != 1 || result.QueueLength != 0 || result.PendingTimers != 0 || result.PostFailureCount != 1 || result.AttemptsAfterPost != 2 || !result.SocketCleared || !result.ActiveCleared || (wantSocketClosed && !result.CurrentSocketClosed) {
+			t.Errorf("%s terminal pre-open handling = %+v, want exactly two attempts, one delayed retry, one settlement/alert/reload, cleared state, and no reconnect after terminal rejection", name, result)
+		}
+	}
+	assertPreOpenTerminal("constructor", got.PreOpenTerminal.Constructor, false)
+	assertPreOpenTerminal("async error", got.PreOpenTerminal.AsyncError, true)
+	assertPreOpenTerminal("async close", got.PreOpenTerminal.AsyncClose, false)
 }
 
 const webSocketQueueNodeScript = `
@@ -342,6 +384,9 @@ const mismatchFirstSocket = mismatchHarness.sockets[0];
 if (mismatchFirstSocket) mismatchFirstSocket.open();
 const mismatchFirstSent = sent(mismatchFirstSocket)[0];
 if (mismatchFirstSent) mismatchFirstSocket.emitMessage({status: true, requestId: "wrong-request-id"});
+const mismatchRetryTimers = pendingTimers(mismatchHarness).filter(timer => timer.delay === 250);
+const mismatchNoSynchronousRetry = mismatchHarness.sockets.length === 1;
+fireTimer(mismatchRetryTimers[0]);
 const mismatchSecondSocket = mismatchHarness.sockets[1];
 openSocket(mismatchHarness, mismatchSecondSocket);
 const mismatchReplay = sent(mismatchSecondSocket);
@@ -355,7 +400,8 @@ const constructorQueueBeforeRetry = constructorHarness.context.THREADFIN_CONNECT
 const constructorAttemptsBeforeRetry = constructorHarness.constructorAttempts();
 const constructorAlertsBeforeRetry = constructorHarness.alerts.length;
 const constructorSocketsBeforeRetry = constructorHarness.sockets.length;
-fireTimer(pendingTimers(constructorHarness)[0]);
+const constructorRetryTimers = pendingTimers(constructorHarness).filter(timer => timer.delay === 250);
+fireTimer(constructorRetryTimers[0]);
 const constructorSocket = constructorHarness.sockets[0];
 openSocket(constructorHarness, constructorSocket);
 respond(constructorSocket, {status: true});
@@ -366,6 +412,9 @@ const sendThrowHarness = makeHarness({sendFailures: 1});
 request(sendThrowHarness, "first", {});
 request(sendThrowHarness, "second", {});
 openSocket(sendThrowHarness, sendThrowHarness.sockets[0]);
+const sendThrowRetryTimers = pendingTimers(sendThrowHarness).filter(timer => timer.delay === 250);
+const sendThrowNoSynchronousRetry = sendThrowHarness.sockets.length === 1;
+fireTimer(sendThrowRetryTimers[0]);
 const sendThrowSecondSocket = sendThrowHarness.sockets[1];
 openSocket(sendThrowHarness, sendThrowSecondSocket);
 const sendThrowReconnect = sent(sendThrowSecondSocket);
@@ -379,6 +428,9 @@ function runPreOpenFailure(eventName) {
   if (eventName === "close") failedSocket.emitClose(1006);
   else failedSocket.emitError();
   const noEarlyFailures = completionCount(harness, "first") === 0 && completionCount(harness, "second") === 0;
+  const retryTimers = pendingTimers(harness).filter(timer => timer.delay === 250);
+  const delayedRetry = harness.sockets.length === 1;
+  fireTimer(retryTimers[0]);
   const replacement = harness.sockets[1];
   openSocket(harness, replacement);
   respond(replacement, {status: true});
@@ -387,6 +439,8 @@ function runPreOpenFailure(eventName) {
     commands: sent(replacement).map(message => message.cmd),
     completed: ["first", "second"].map(command => completionCount(harness, command)),
     noEarlyFailures,
+    delayedRetry,
+    singleRetryTimer: retryTimers.length === 1,
   };
 }
 const preOpenClose = runPreOpenFailure("close");
@@ -400,6 +454,9 @@ const transportFirstSocket = transportHarness.sockets[0];
 openSocket(transportHarness, transportFirstSocket);
 transportFirstSocket.emitError();
 transportFirstSocket.emitClose(1006);
+const transportRetryTimers = pendingTimers(transportHarness).filter(timer => timer.delay === 250);
+const transportNoSynchronousRetry = transportHarness.sockets.length === 1;
+fireTimer(transportRetryTimers[0]);
 const transportSecondSocket = transportHarness.sockets[1];
 openSocket(transportHarness, transportSecondSocket);
 respond(transportSecondSocket, {status: true});
@@ -415,6 +472,7 @@ openSocket(timeoutHarness, timeoutFirstSocket);
 const timedOutRequest = sent(timeoutFirstSocket)[0];
 const activeTimer = pendingTimers(timeoutHarness).find(timer => timer.delay === 30000);
 fireTimer(activeTimer);
+fireTimer(pendingTimers(timeoutHarness).find(timer => timer.delay === 250));
 const timeoutSecondSocket = timeoutHarness.sockets[1];
 openSocket(timeoutHarness, timeoutSecondSocket);
 const timeoutActiveRequest = timeoutHarness.context.THREADFIN_CONNECTION.active;
@@ -438,6 +496,7 @@ const stalePolicyOldSocket = stalePolicyHarness.sockets[0];
 openSocket(stalePolicyHarness, stalePolicyOldSocket);
 const stalePolicyTimer = pendingTimers(stalePolicyHarness).find(timer => timer.delay === 30000);
 fireTimer(stalePolicyTimer);
+fireTimer(pendingTimers(stalePolicyHarness).find(timer => timer.delay === 250));
 const stalePolicyReplacement = stalePolicyHarness.sockets[1];
 openSocket(stalePolicyHarness, stalePolicyReplacement);
 const stalePolicyConnection = stalePolicyHarness.context.THREADFIN_CONNECTION;
@@ -459,6 +518,62 @@ openSocket(callbackHarness, callbackSocket);
 respond(callbackSocket, {status: true});
 respond(callbackSocket, {status: true});
 respond(callbackSocket, {status: true});
+
+function terminalPreOpenResult(harness, attemptsBeforeRetry, retryTimers, currentSocket) {
+  const connection = harness.context.THREADFIN_CONNECTION;
+  request(harness, "afterTerminal", {});
+  return {
+    attempts: harness.constructorAttempts(),
+    attemptsBeforeRetry,
+    pendingTimersBeforeRetry: retryTimers.length,
+    retryDelay: retryTimers[0] ? retryTimers[0].delay : -1,
+    completionCounts: ["first", "second"].map(command => completionCount(harness, command)),
+    alerts: harness.alerts.length,
+    reloads: harness.reloads(),
+    queueLength: connection.queue.length,
+    pendingTimers: pendingTimers(harness).length,
+    postFailureCount: completionCount(harness, "afterTerminal"),
+    attemptsAfterPost: harness.constructorAttempts(),
+    socketCleared: connection.socket === null,
+    activeCleared: connection.active === null,
+    currentSocketClosed: !currentSocket || (currentSocket.readyState === 3 && currentSocket.closeCount === 1),
+  };
+}
+
+const terminalConstructorHarness = makeHarness({constructorFailures: 2});
+request(terminalConstructorHarness, "first", {});
+request(terminalConstructorHarness, "second", {});
+const terminalConstructorAttemptsBeforeRetry = terminalConstructorHarness.constructorAttempts();
+const terminalConstructorRetryTimers = pendingTimers(terminalConstructorHarness).filter(timer => timer.delay === 250);
+fireTimer(terminalConstructorRetryTimers[0]);
+const terminalConstructor = terminalPreOpenResult(terminalConstructorHarness, terminalConstructorAttemptsBeforeRetry, terminalConstructorRetryTimers, null);
+
+function runTerminalAsyncFailure(eventName) {
+  const harness = makeHarness();
+  request(harness, "first", {});
+  request(harness, "second", {});
+  const firstSocket = harness.sockets[0];
+  if (eventName === "error") {
+    firstSocket.emitError();
+    firstSocket.emitClose(1006);
+  } else {
+    firstSocket.emitClose(1006);
+  }
+  const attemptsBeforeRetry = harness.constructorAttempts();
+  const retryTimers = pendingTimers(harness).filter(timer => timer.delay === 250);
+  fireTimer(retryTimers[0]);
+  const secondSocket = harness.sockets[1];
+  if (eventName === "error") {
+    secondSocket.emitError();
+    secondSocket.emitClose(1006);
+  } else {
+    secondSocket.emitClose(1006);
+  }
+  return terminalPreOpenResult(harness, attemptsBeforeRetry, retryTimers, secondSocket);
+}
+
+const terminalAsyncError = runTerminalAsyncFailure("error");
+const terminalAsyncClose = runTerminalAsyncFailure("close");
 
 const policyHarness = makeHarness();
 request(policyHarness, "first", {});
@@ -485,6 +600,9 @@ process.stdout.write(JSON.stringify({
   },
   mismatch: {
     firstFailedOnce: completionCount(mismatchHarness, "first") === 1 && mismatchHarness.completions.find(item => item.command === "first").status === false,
+    noSynchronousRetry: mismatchNoSynchronousRetry,
+    retryDelay: mismatchRetryTimers[0] ? mismatchRetryTimers[0].delay : -1,
+    pendingRetryTimers: mismatchRetryTimers.length,
     reconnected: mismatchHarness.sockets.length === 2,
     replayCommands: mismatchReplay.map(message => message.cmd),
     secondStillPending: mismatchSecondStillPending,
@@ -493,6 +611,8 @@ process.stdout.write(JSON.stringify({
     escapedErrors: constructorHarness.escapedErrors.length,
     attemptsBeforeRetry: constructorAttemptsBeforeRetry,
     alertsBeforeRetry: constructorAlertsBeforeRetry,
+    pendingRetryTimers: constructorRetryTimers.length,
+    retryDelay: constructorRetryTimers[0] ? constructorRetryTimers[0].delay : -1,
     queueBeforeRetry: constructorQueueBeforeRetry,
     socketsBeforeRetry: constructorSocketsBeforeRetry,
     sentAfterRetry: constructorSentAfterRetry,
@@ -501,6 +621,8 @@ process.stdout.write(JSON.stringify({
   sendThrow: {
     escapedErrors: sendThrowHarness.escapedErrors.length,
     failureCounts: ["first", "second"].map(command => completionCount(sendThrowHarness, command)),
+    noSynchronousRetry: sendThrowNoSynchronousRetry,
+    retryDelay: sendThrowRetryTimers[0] ? sendThrowRetryTimers[0].delay : -1,
     reconnectCommands: sendThrowReconnect.map(message => message.cmd),
     socketCount: sendThrowHarness.sockets.length,
   },
@@ -510,9 +632,13 @@ process.stdout.write(JSON.stringify({
     errorCommands: preOpenError.commands,
     errorCompleted: preOpenError.completed,
     noEarlyFailures: preOpenClose.noEarlyFailures && preOpenError.noEarlyFailures,
+    delayedRetries: preOpenClose.delayedRetry && preOpenError.delayedRetry,
+    singleRetryTimers: preOpenClose.singleRetryTimer && preOpenError.singleRetryTimer,
   },
   transport: {
     firstFailedOnce: completionCount(transportHarness, "first") === 1,
+    noSynchronousRetry: transportNoSynchronousRetry,
+    retryDelay: transportRetryTimers[0] ? transportRetryTimers[0].delay : -1,
     reconnected: transportHarness.sockets.length === 2,
     reconnectCommands: transportReconnect.map(message => message.cmd),
     completionCounts: ["first", "second", "third"].map(command => completionCount(transportHarness, command)),
@@ -551,6 +677,11 @@ process.stdout.write(JSON.stringify({
     socketCount: policyHarness.sockets.length,
     queueLength: policyHarness.context.THREADFIN_CONNECTION ? policyHarness.context.THREADFIN_CONNECTION.queue.length : -1,
     activeCleared: policyHarness.context.THREADFIN_CONNECTION ? policyHarness.context.THREADFIN_CONNECTION.active === null : false,
+  },
+  preOpenTerminal: {
+    constructor: terminalConstructor,
+    asyncError: terminalAsyncError,
+    asyncClose: terminalAsyncClose,
   },
 }));
 `

@@ -436,6 +436,49 @@ func TestWebSocketRevokedSessionClosesWithPolicyViolation(t *testing.T) {
 	}
 }
 
+func TestWebSocketOpenModeTransitionClosesBeforeMutation(t *testing.T) {
+	tests := []struct {
+		name                  string
+		authenticationEnabled bool
+		configurationWizard   bool
+	}{
+		{name: "authentication disabled then enabled"},
+		{name: "configuration setup then complete", authenticationEnabled: true, configurationWizard: true},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			restorePersistentState(t)
+			previousWebScreenLog := WebScreenLog
+			t.Cleanup(func() { WebScreenLog = previousWebScreenLog })
+			initializeWebSocketAuthentication(t, 60, true)
+			configureWebSocketAuthentication(test.authenticationEnabled, test.configurationWizard)
+			server, webSocketURL := newWebSocketTestServer(t)
+			conn := dialWebSocket(t, webSocketURL, http.Header{"Origin": []string{server.URL}})
+
+			WebScreenLog.Log = []string{"must remain"}
+			WebScreenLog.Errors = 2
+			WebScreenLog.Warnings = 3
+			configureWebSocketAuthentication(true, false)
+
+			if err := conn.WriteJSON(RequestStruct{Cmd: "resetLogs", RequestID: "transition-request"}); err != nil {
+				t.Fatal(err)
+			}
+			_, _, err := conn.ReadMessage()
+			var closeError *websocket.CloseError
+			if !errors.As(err, &closeError) {
+				t.Fatalf("authentication transition read error = %v, want WebSocket close", err)
+			}
+			if closeError.Code != websocket.ClosePolicyViolation {
+				t.Fatalf("authentication transition close code = %d, want %d", closeError.Code, websocket.ClosePolicyViolation)
+			}
+			if len(WebScreenLog.Log) != 1 || WebScreenLog.Log[0] != "must remain" || WebScreenLog.Errors != 2 || WebScreenLog.Warnings != 3 {
+				t.Fatalf("authentication transition command executed: log=%v errors=%d warnings=%d", WebScreenLog.Log, WebScreenLog.Errors, WebScreenLog.Warnings)
+			}
+		})
+	}
+}
+
 func TestWebSocketServerClosesConnections(t *testing.T) {
 	previousWebScreenLog := WebScreenLog
 	t.Cleanup(func() { WebScreenLog = previousWebScreenLog })
