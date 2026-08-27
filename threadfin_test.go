@@ -2,11 +2,41 @@ package main
 
 import (
 	"errors"
+	"os"
 	"reflect"
+	"regexp"
 	"testing"
 
 	"threadfin/src"
 )
+
+func TestDockerfileNvidiaBaseMatchesJellyfinRepository(t *testing.T) {
+	dockerfile, err := os.ReadFile("Dockerfile")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	wantUbuntuByCodename := map[string]string{
+		"noble":    "24.04",
+		"resolute": "26.04",
+	}
+	baseStages := regexp.MustCompile(`(?m)^FROM (?:nvidia/cuda:[^[:space:]]+-ubuntu|ubuntu:)([0-9]+\.[0-9]+) AS (standard|nvidia)\nENV OS_CODENAME=([^[:space:]]+)$`).FindAllSubmatch(dockerfile, -1)
+	if len(baseStages) != 2 {
+		t.Fatalf("Dockerfile has %d codename-mapped final base stages, want 2", len(baseStages))
+	}
+	for _, stage := range baseStages {
+		ubuntuVersion := string(stage[1])
+		stageName := string(stage[2])
+		jellyfinCodename := string(stage[3])
+		wantUbuntu, ok := wantUbuntuByCodename[jellyfinCodename]
+		if !ok {
+			t.Fatalf("stage %q uses unsupported Jellyfin Ubuntu codename %q", stageName, jellyfinCodename)
+		}
+		if ubuntuVersion != wantUbuntu {
+			t.Fatalf("stage %q Ubuntu version = %q, want %q for Jellyfin codename %q", stageName, ubuntuVersion, wantUbuntu, jellyfinCodename)
+		}
+	}
+}
 
 func TestDispatchThreadfinStartupHandlesPrivateModeBeforeApplication(t *testing.T) {
 	applicationCalled := false

@@ -16,7 +16,9 @@ RUN CGO_ENABLED=0 go build -mod=vendor -ldflags="-s -w" -trimpath -o threadfin t
 # -----------------------------------------------------------------------------
 ARG USE_NVIDIA
 FROM ubuntu:24.04 AS standard
+ENV OS_CODENAME=noble
 FROM nvidia/cuda:13.3.1-base-ubuntu26.04 AS nvidia
+ENV OS_CODENAME=resolute
 FROM standard AS final
 FROM nvidia AS final-nvidia
 
@@ -62,7 +64,6 @@ WORKDIR $THREADFIN_HOME
 # Arguments to add the jellyfin repository
 ARG TARGETARCH
 ARG OS_VERSION=ubuntu
-ARG OS_CODENAME=noble
 
 # Install dependencies in a single layer
 RUN apt-get update && \
