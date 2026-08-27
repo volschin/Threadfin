@@ -68,6 +68,15 @@ func authorizeBrowserRequest(r *http.Request, permissions ...string) (string, er
 	return authentication.AuthorizeBrowserSession(cookie.Value, permissions...)
 }
 
+func browserCookieSecure(r *http.Request) bool {
+	if r.TLS != nil {
+		return true
+	}
+	systemMutex.Lock()
+	defer systemMutex.Unlock()
+	return Settings.ForceHttps && Settings.HttpsThreadfinDomain != ""
+}
+
 func tokenAuthentication(token string) (newToken string, err error) {
 
 	if System.ConfigurationWizard == true {

@@ -81,10 +81,6 @@ func StartWebserver() (err error) {
 	return
 }
 
-func browserCookieSecure(r *http.Request) bool {
-	return r.TLS != nil || System.ServerProtocol.WEB == "https"
-}
-
 func serveHTTPServer(server *http.Server, signalReady func() error) error {
 	listener, err := net.Listen("tcp", server.Addr)
 	if err != nil {

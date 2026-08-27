@@ -16,20 +16,31 @@ import (
 
 func TestBrowserCookieSecureUsesDirectTLSOrConfiguredHTTPS(t *testing.T) {
 	restorePersistentState(t)
-	System.ServerProtocol.WEB = "http"
 	request := httptest.NewRequest(http.MethodGet, "http://threadfin.example/web/", nil)
 	request.Header.Set("X-Forwarded-Proto", "https")
 	if browserCookieSecure(request) {
 		t.Fatal("forwarded HTTPS header selected Secure cookie")
 	}
+
+	systemMutex.Lock()
+	Settings = SettingsStruct{ForceHttps: true}
+	systemMutex.Unlock()
+	if browserCookieSecure(request) {
+		t.Fatal("force HTTPS without configured domain selected Secure cookie")
+	}
+	systemMutex.Lock()
+	Settings.HttpsThreadfinDomain = "threadfin.example"
+	systemMutex.Unlock()
+	if !browserCookieSecure(request) {
+		t.Fatal("configured HTTPS domain did not select Secure cookie")
+	}
+
+	systemMutex.Lock()
+	Settings = SettingsStruct{}
+	systemMutex.Unlock()
 	request.TLS = &tls.ConnectionState{}
 	if !browserCookieSecure(request) {
 		t.Fatal("direct TLS did not select Secure cookie")
-	}
-	request.TLS = nil
-	System.ServerProtocol.WEB = "https"
-	if !browserCookieSecure(request) {
-		t.Fatal("configured HTTPS protocol did not select Secure cookie")
 	}
 }
 
