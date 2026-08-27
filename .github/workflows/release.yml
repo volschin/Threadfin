@@ -200,8 +200,12 @@ jobs:
             suffix: -nvidia
     permissions:
       contents: read
+      id-token: write
       packages: write
     steps:
+      - name: Check out code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
       - name: Download digests
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
@@ -212,6 +216,9 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4.3.0
 
+      - name: Install Cosign
+        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+
       - name: Login to GitHub Container Registry
         uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         with:
@@ -220,6 +227,7 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Create and verify manifest
+        id: manifest
         env:
           DIGEST_DIR: ${{ runner.temp }}/digests
           IMAGE: ghcr.io/volschin/threadfin
@@ -253,6 +261,19 @@ jobs:
             printf '%s\n' "$platforms" >&2
             exit 1
           fi
+
+          image_digest=$(docker buildx imagetools inspect "$IMAGE:$VERSION$SUFFIX" --format '{{json .Manifest}}' | jq -r .digest)
+          if ! [[ "$image_digest" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+            echo "Invalid image digest: $image_digest" >&2
+            exit 1
+          fi
+          echo "digest=$image_digest" >> "$GITHUB_OUTPUT"
+
+      - name: Sign and verify image
+        env:
+          IMAGE: ghcr.io/volschin/threadfin
+          DIGEST: ${{ steps.manifest.outputs.digest }}
+        run: scripts/sign-container-image.sh "$IMAGE@$DIGEST"
 
   release:
     name: Create GitHub Release
