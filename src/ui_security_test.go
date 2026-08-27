@@ -2,9 +2,11 @@ package src
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"regexp"
 	"strings"
 	"testing"
@@ -41,6 +43,9 @@ type runtimeValueSecurityResult struct {
 	LogoIDs       []string   `json:"logoIds"`
 	DoneCalls     [][]string `json:"doneCalls"`
 	ChangedStates []bool     `json:"changedStates"`
+	ProviderAttrs []string   `json:"providerAttrs"`
+	ProviderCalls [][]string `json:"providerCalls"`
+	ProviderData  [][]string `json:"providerData"`
 	DangerousTags []string   `json:"dangerousTags"`
 	EventHandlers int        `json:"eventHandlers"`
 	Injected      bool       `json:"injected"`
@@ -146,43 +151,134 @@ func TestGeneratedRuntimeValuesRemainText(t *testing.T) {
 				t.Errorf("mapping listener %d did not preserve its changed-state side effect", index)
 			}
 		}
+		if len(result.ProviderAttrs) != 0 {
+			t.Errorf("provider controls retain executable inline handlers: %v", result.ProviderAttrs)
+		}
+		wantProviderCalls := [][]string{
+			{"m3u", runtimeDoubleQuoteHandlerPayload, "true", "0"},
+			{"m3u", runtimeDoubleQuoteHandlerPayload, "false", "1"},
+			{"m3u", runtimeDoubleQuoteHandlerPayload, "false", "0"},
+			{"hdhr", runtimeDoubleQuoteHandlerPayload, "true", "0"},
+			{"hdhr", runtimeDoubleQuoteHandlerPayload, "false", "1"},
+			{"hdhr", runtimeDoubleQuoteHandlerPayload, "false", "0"},
+			{"xmltv", runtimeDoubleQuoteHandlerPayload, "true", "0"},
+			{"xmltv", runtimeDoubleQuoteHandlerPayload, "false", "1"},
+			{"xmltv", runtimeDoubleQuoteHandlerPayload, "false", "0"},
+			{"filter", runtimeDoubleQuoteHandlerPayload, "true", "0"},
+			{"filter", runtimeDoubleQuoteHandlerPayload, "false", "0"},
+			{"users", runtimeDoubleQuoteHandlerPayload, "true", "0"},
+			{"users", runtimeDoubleQuoteHandlerPayload, "false", "undefined"},
+		}
+		if !reflect.DeepEqual(result.ProviderCalls, wantProviderCalls) {
+			t.Errorf("provider listener calls = %#v, want exact inert arguments %#v", result.ProviderCalls, wantProviderCalls)
+		}
+		wantProviderData := [][]string{
+			{"m3u", runtimeHTMLInjectionPayload, runtimeSingleQuoteHandlerPayload},
+			{"hdhr", runtimeHTMLInjectionPayload, runtimeSingleQuoteHandlerPayload},
+			{"xmltv", runtimeHTMLInjectionPayload, runtimeSingleQuoteHandlerPayload},
+			{"custom-filter", runtimeHTMLInjectionPayload, ""},
+			{"users", runtimeHTMLInjectionPayload, ""},
+		}
+		if !reflect.DeepEqual(result.ProviderData, wantProviderData) {
+			t.Errorf("provider popup runtime input values = %#v, want exact inert data %#v", result.ProviderData, wantProviderData)
+		}
 	})
 
 	t.Run("TypeScript source contract", func(t *testing.T) {
-		assignment := regexp.MustCompile(`\.innerHTML\s*=\s*(.+?)\s*;?\s*$`)
-		emptyLiteral := regexp.MustCompile(`^(?:""|'')$`)
-		interpolatedInlineHandler := regexp.MustCompile(`setAttribute\(\s*["']on[A-Za-z]+["']\s*,.*(?:\+|\$\{)`)
-		stringEventProperty := regexp.MustCompile("\\.on[A-Za-z]+\\s*=\\s*(?:\\\"|'|`)")
-		forbiddenHTMLSink := regexp.MustCompile(`(?:\.outerHTML\s*=|\.insertAdjacentHTML\s*\(|document\.(?:write|writeln)\s*\()`)
 		for _, name := range []string{"network_ts.ts", "menu_ts.ts"} {
 			content, err := os.ReadFile(filepath.Join("..", "ts", name))
 			if err != nil {
 				t.Fatal(err)
 			}
-			for index, line := range strings.Split(string(content), "\n") {
-				trimmed := strings.TrimSpace(line)
-				if forbiddenHTMLSink.MatchString(trimmed) {
-					t.Errorf("%s:%d uses an executable HTML parsing sink: %s", name, index+1, trimmed)
-				}
-				if interpolatedInlineHandler.MatchString(trimmed) {
-					t.Errorf("%s:%d interpolates runtime data into an executable inline handler: %s", name, index+1, trimmed)
-				}
-				if stringEventProperty.MatchString(trimmed) {
-					t.Errorf("%s:%d assigns executable source text to an event property: %s", name, index+1, trimmed)
-				}
-				match := assignment.FindStringSubmatch(trimmed)
-				if len(match) == 0 {
-					if strings.Contains(trimmed, ".innerHTML") && strings.Contains(trimmed, "=") {
-						t.Errorf("%s:%d has an unrecognized innerHTML assignment; keep the emptying assignment line-local: %s", name, index+1, trimmed)
-					}
-					continue
-				}
-				if !emptyLiteral.MatchString(strings.TrimSpace(match[1])) {
-					t.Errorf("%s:%d assigns runtime or interpolated markup through innerHTML: %s", name, index+1, strings.TrimSpace(line))
-				}
+			for _, violation := range runtimeDOMSinkViolations(string(content)) {
+				t.Errorf("%s: %s", name, violation)
 			}
 		}
 	})
+
+	t.Run("source contract rejects multiline and indirect handler source", func(t *testing.T) {
+		mutations := map[string]struct {
+			source string
+			want   string
+		}{
+			"multiline setAttribute concatenation": {source: `button.setAttribute(
+  "onclick",
+  "javascript: probeChannel('" + providerURL + "')"
+)`, want: "supplies computed source"},
+			"indirect setAttribute source": {source: `const handlerSource = "javascript: probeChannel('" + providerURL + "')"
+button.setAttribute("onclick", handlerSource)`, want: "supplies computed source"},
+			"multiline event property source": {source: `button.onclick =
+  "javascript: probeChannel('" + providerURL + "')"`, want: "assigns executable source text"},
+			"indirect event property source": {source: `const handlerSource = "javascript: probeChannel('" + providerURL + "')"
+button.onclick = handlerSource`, want: "assigns indirect string source"},
+		}
+		for name, mutation := range mutations {
+			t.Run(name, func(t *testing.T) {
+				violations := strings.Join(runtimeDOMSinkViolations(mutation.source), "\n")
+				if !strings.Contains(violations, mutation.want) {
+					t.Fatalf("source contract violations = %q, want %q", violations, mutation.want)
+				}
+			})
+		}
+	})
+}
+
+func runtimeDOMSinkViolations(source string) []string {
+	var violations []string
+	lineNumber := func(offset int) int {
+		return strings.Count(source[:offset], "\n") + 1
+	}
+
+	forbiddenHTMLSink := regexp.MustCompile(`(?:\.outerHTML\s*=|\.insertAdjacentHTML\s*\(|document\.(?:write|writeln)\s*\()`)
+	for _, location := range forbiddenHTMLSink.FindAllStringIndex(source, -1) {
+		violations = append(violations, fmt.Sprintf("line %d uses an executable HTML parsing sink", lineNumber(location[0])))
+	}
+
+	assignment := regexp.MustCompile(`\.innerHTML\s*=\s*(.+?)\s*;?\s*$`)
+	emptyLiteral := regexp.MustCompile(`^(?:""|'')$`)
+	for index, line := range strings.Split(source, "\n") {
+		trimmed := strings.TrimSpace(line)
+		match := assignment.FindStringSubmatch(trimmed)
+		if len(match) == 0 {
+			if strings.Contains(trimmed, ".innerHTML") && strings.Contains(trimmed, "=") {
+				violations = append(violations, fmt.Sprintf("line %d has an unrecognized innerHTML assignment", index+1))
+			}
+			continue
+		}
+		if !emptyLiteral.MatchString(strings.TrimSpace(match[1])) {
+			violations = append(violations, fmt.Sprintf("line %d assigns runtime or interpolated markup through innerHTML", index+1))
+		}
+	}
+
+	handlerStart := regexp.MustCompile(`setAttribute\(\s*["']on[A-Za-z]+["']\s*,`)
+	handlerCall := regexp.MustCompile(`(?s)setAttribute\(\s*["']on[A-Za-z]+["']\s*,\s*(.*?)\)\s*;?\s*(?://[^\n]*)?(?:\n|$)`)
+	literalHandlerSource := regexp.MustCompile(`(?s)^(?:"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*')$`)
+	starts := handlerStart.FindAllStringIndex(source, -1)
+	calls := handlerCall.FindAllStringSubmatchIndex(source, -1)
+	if len(calls) != len(starts) {
+		violations = append(violations, "has an unrecognized or unterminated inline event-handler construction")
+	}
+	for _, location := range calls {
+		expression := strings.TrimSpace(source[location[2]:location[3]])
+		if !literalHandlerSource.MatchString(expression) {
+			violations = append(violations, fmt.Sprintf("line %d supplies computed source to an inline event handler", lineNumber(location[0])))
+		}
+	}
+
+	stringEventProperty := regexp.MustCompile("(?s)\\.on[A-Za-z]+\\s*=\\s*(?:\\\"|'|`)")
+	for _, location := range stringEventProperty.FindAllStringIndex(source, -1) {
+		violations = append(violations, fmt.Sprintf("line %d assigns executable source text to an event property", lineNumber(location[0])))
+	}
+
+	stringAssignment := regexp.MustCompile("(?m)([A-Za-z_$][A-Za-z0-9_$]*)\\s*=\\s*(?:\\\"|'|`)")
+	for _, match := range stringAssignment.FindAllStringSubmatch(source, -1) {
+		indirectEventProperty := regexp.MustCompile(`\.on[A-Za-z]+\s*=\s*` + regexp.QuoteMeta(match[1]) + `\b`)
+		if location := indirectEventProperty.FindStringIndex(source); location != nil {
+			violations = append(violations, fmt.Sprintf("line %d assigns indirect string source to an event property", lineNumber(location[0])))
+		}
+	}
+
+	return violations
 }
 
 func evaluateRuntimeValueSecurity(t *testing.T) runtimeValueSecurityResult {
@@ -427,8 +523,63 @@ const xmltvCalls = [];
 const toggleIDs = [];
 const logoIDs = [];
 const doneCalls = [];
+const providerCalls = [];
+const providerAttrs = [];
+const providerData = [];
 changedName.value = payload;
 changedGroup.value = payload;
+
+const providerFixtures = {
+  m3u: {
+    "id.provider": handlerPayload,
+    name: payload,
+    description: payload,
+    "file.source": singleQuoteHandlerPayload,
+    buffer: "-",
+    tuner: "1",
+    "http_proxy.ip": "",
+    "http_proxy.port": "",
+    "http_headers.origin": "",
+    "http_headers.referer": "",
+  },
+  hdhr: {
+    "id.provider": handlerPayload,
+    name: payload,
+    description: payload,
+    "file.source": singleQuoteHandlerPayload,
+    buffer: "-",
+    tuner: "1",
+    "http_proxy.ip": "",
+    "http_proxy.port": "",
+  },
+  xmltv: {
+    "id.provider": handlerPayload,
+    name: payload,
+    description: payload,
+    "file.source": singleQuoteHandlerPayload,
+    "http_proxy.ip": "",
+    "http_proxy.port": "",
+  },
+  "custom-filter": {
+    name: payload,
+    description: payload,
+    type: "custom-filter",
+    caseSensitive: false,
+    filter: payload,
+    startingNumber: "1000",
+    "x-category": "",
+  },
+  users: {
+    username: payload,
+    defaultUser: false,
+    "authentication.web": true,
+    "authentication.pms": true,
+    "authentication.m3u": true,
+    "authentication.xml": true,
+    "authentication.api": true,
+    "authentication.config": true,
+  },
+};
 
 const mappingData = {
   "x-active": true,
@@ -458,7 +609,7 @@ runtimeContext = {
   WebSocket: class {},
   SERVER: {
     clientInfo: {activePlaylist: payload, totalPlaylist: payload, activeClients: payload, totalClients: payload},
-    settings: {files: {xmltv: {X1: {name: payload}}}, epgCategories: "", epgCategoriesColors: ""},
+    settings: {files: {xmltv: {X1: {name: payload}}}, buffer: "-", epgCategories: "", epgCategoriesColors: ""},
     xepg: {
       epgMapping: {
         channel: {"x-active": true, "tvg-logo": "https://example.invalid/logo.png"},
@@ -480,8 +631,13 @@ runtimeContext = {
   getObjKeys(value) { return Object.keys(value || {}); },
   getOwnObjProps(value) { return Object.keys(value || {}); },
   getAllSelectedChannels() { return []; },
-  getLocalData(type, id) { return type == "mapping" && id == mappingID ? mappingData : {}; },
+  getLocalData(type, id) {
+    if (type == "mapping" && id == mappingID) return mappingData;
+    if (id == handlerPayload && providerFixtures[type]) return providerFixtures[type];
+    return {};
+  },
   enhanceSourcePopup() {},
+  enhanceUsersPopup() {},
   showElement() {},
   showPreview() {},
   showPopUpElement() {},
@@ -575,6 +731,36 @@ const replacementMappingControl = document.getElementById("xmltv-id-picker-input
 replacementMappingControl.value = singleQuoteHandlerPayload;
 replacementMappingControl.dispatchEvent({type: "change"});
 
+runtimeContext.savePopupData = function(type, id, remove, option) {
+  providerCalls.push([String(type), String(id), String(remove), String(option)]);
+};
+function exerciseProviderPopup(dataType, buttonLabels) {
+  const invoker = document.createElement("button");
+  invoker.id = handlerPayload;
+  document.body.appendChild(invoker);
+  runtimeContext.openPopUp(dataType, invoker);
+
+  const inputs = walk(popup).filter(item => item.tagName == "INPUT");
+  const nameKey = dataType == "users" ? "username" : "name";
+  const nameControl = inputs.find(item => item.name == nameKey);
+  const sourceControl = inputs.find(item => item.name == "file.source");
+  providerData.push([dataType, nameControl ? nameControl.value : "", sourceControl ? sourceControl.value : ""]);
+
+  for (const label of buttonLabels) {
+    const control = inputs.find(item => item.value == label);
+    if (!control) throw new Error("missing real " + dataType + " popup control " + label);
+    for (const [attribute, value] of Object.entries(control.attributes)) {
+      if (attribute.startsWith("on")) providerAttrs.push(dataType + ":" + label + ":" + attribute + "=" + value);
+    }
+    control.dispatchEvent({type: "click"});
+  }
+}
+exerciseProviderPopup("m3u", ["{{.button.delete}}", "{{.button.update}}", "{{.button.save}}"]);
+exerciseProviderPopup("hdhr", ["{{.button.delete}}", "{{.button.update}}", "{{.button.save}}"]);
+exerciseProviderPopup("xmltv", ["{{.button.delete}}", "{{.button.update}}", "{{.button.save}}"]);
+exerciseProviderPopup("custom-filter", ["{{.button.delete}}", "{{.button.save}}"]);
+exerciseProviderPopup("users", ["{{.button.delete}}", "{{.button.save}}"]);
+
 const ppvHostCell = append(document.body, "td");
 append(ppvHostCell, "input", "x-ppv-extra");
 const ppvChoice = document.createElement("select");
@@ -625,6 +811,9 @@ process.stdout.write(JSON.stringify({
   logoIds: logoIDs,
   doneCalls,
   changedStates: [logoControl, xmltvFileControl, initialMappingControl, ...backupControls, replacementMappingControl].map(control => control.className.split(/\s+/).includes("changed")),
+  providerAttrs,
+  providerCalls,
+  providerData,
   dangerousTags,
   eventHandlers,
   injected: parsedInjection || runtimeContext.threadfinInjected,
