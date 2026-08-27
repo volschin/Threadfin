@@ -267,7 +267,7 @@ func TestUIFilterGeneratedTransportRetainsFormState(t *testing.T) {
 		t.Fatalf("execute generated Filter transport contract: %v\n%s", err, output)
 	}
 	var got struct {
-		BusyStatus      string `json:"busyStatus"`
+		QueuedStatus    string `json:"queuedStatus"`
 		TransportStatus string `json:"transportStatus"`
 		Name            string `json:"name"`
 		Focus           int    `json:"focus"`
@@ -277,8 +277,8 @@ func TestUIFilterGeneratedTransportRetainsFormState(t *testing.T) {
 	if err := json.Unmarshal(output, &got); err != nil {
 		t.Fatalf("decode generated Filter transport contract: %v\n%s", err, output)
 	}
-	if got.BusyStatus != "busy" || got.TransportStatus != "transport" || got.Name != "Retained" || got.Focus != 0 || !got.Settled || got.LoadingHides != 1 {
-		t.Fatalf("Filter busy/transport handling did not retain and settle the form: %+v", got)
+	if got.QueuedStatus != "queued" || got.TransportStatus != "transport" || got.Name != "Retained" || got.Focus != 0 || !got.Settled || got.LoadingHides != 1 {
+		t.Fatalf("Filter queued/transport handling did not retain and settle the form: %+v", got)
 	}
 }
 
@@ -466,9 +466,18 @@ class Element {
   focus() { this.focusCount += 1; }
 }
 class FakeWebSocket {
-  constructor() { sockets.push(this); }
-  send() {}
+  constructor() { this.readyState = FakeWebSocket.CONNECTING; this.OPEN = FakeWebSocket.OPEN; this.sent = []; sockets.push(this); }
+  send(value) { this.sent.push(value); }
+  open() { this.readyState = FakeWebSocket.OPEN; this.onopen.call(this, {}); }
+  close(code = 1000) { if (this.readyState === FakeWebSocket.CLOSED) return; this.readyState = FakeWebSocket.CLOSED; if (this.onclose) this.onclose.call(this, {code}); }
+  emitClose(code) { this.readyState = FakeWebSocket.CLOSED; this.onclose.call(this, {code}); }
+  emitError() { this.onerror.call(this, {}); }
+  respond(response) { response.requestId = JSON.parse(this.sent[this.sent.length - 1]).requestId; this.onmessage.call(this, {data: JSON.stringify(response)}); }
 }
+FakeWebSocket.CONNECTING = 0;
+FakeWebSocket.OPEN = 1;
+FakeWebSocket.CLOSING = 2;
+FakeWebSocket.CLOSED = 3;
 const name = new Element();
 name.value = "Retained";
 const popup = {querySelectorAll() { return [name]; }};
@@ -484,23 +493,25 @@ const context = {
   SERVER_CONNECTION: false,
   WS_AVAILABLE: true,
   UNDO: {},
+  setTimeout(callback, delay) { return {callback, delay}; },
+  clearTimeout() {},
 };
 vm.createContext(context);
 vm.runInContext(fs.readFileSync(process.argv[2], "utf8").replaceAll("{{.sources.responseInvalid}}", "invalid"), context);
 vm.runInContext(fs.readFileSync(process.argv[3], "utf8").replaceAll("{{.sources.requestBusy}}", "busy").replaceAll("{{.sources.transportError}}", "transport").replaceAll("{{.sources.responseInvalid}}", "invalid"), context);
 const data = {filter: {G1: {name: "Retained"}}};
 context.data = data;
-context.SERVER_CONNECTION = true;
 vm.runInContext('new Server("saveFilter").request(data)', context);
-const busyStatus = status.textContent;
-context.SERVER_CONNECTION = false;
+vm.runInContext('new Server("saveFilter").request(data)', context);
+const socket = sockets[0];
+socket.open();
+socket.respond({status: false, err: "queued"});
+const queuedStatus = status.textContent;
 status.textContent = "";
 displayCalls.length = 0;
-vm.runInContext('new Server("saveFilter").request(data)', context);
-const socket = sockets[sockets.length - 1];
-socket.onerror({});
-socket.onclose({code: 1006});
-process.stdout.write(JSON.stringify({busyStatus, transportStatus: status.textContent, name: name.value, focus: name.focusCount, settled: context.SERVER_CONNECTION === false, loadingHides: displayCalls.filter(call => call[0] === "loading" && call[1] === false).length}));
+socket.emitError();
+socket.emitClose(1006);
+process.stdout.write(JSON.stringify({queuedStatus, transportStatus: status.textContent, name: name.value, focus: name.focusCount, settled: context.THREADFIN_CONNECTION.active === null, loadingHides: displayCalls.filter(call => call[0] === "loading" && call[1] === false).length}));
 `
 
 const filterPopupNodeScript = `
