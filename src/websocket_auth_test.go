@@ -1,7 +1,6 @@
 package src
 
 import (
-	"crypto/tls"
 	"encoding/json"
 	"errors"
 	"net"
@@ -24,43 +23,29 @@ func TestWebSocketOriginAllowed(t *testing.T) {
 	restorePersistentState(t)
 
 	tests := []struct {
-		name            string
-		origin          string
-		directTLS       bool
-		configuredHTTPS bool
-		want            bool
+		name   string
+		origin string
+		want   bool
 	}{
 		{name: "absent", want: true},
 		{name: "exact HTTP", origin: "http://threadfin.example:34400", want: true},
-		{name: "exact HTTPS from direct TLS", origin: "https://threadfin.example:34400", directTLS: true, want: true},
-		{name: "exact HTTPS from configuration", origin: "https://THREADFIN.EXAMPLE:34400", configuredHTTPS: true, want: true},
-		{name: "wrong scheme", origin: "https://threadfin.example:34400"},
-		{name: "unsupported scheme", origin: "ws://threadfin.example:34400"},
-		{name: "wrong port", origin: "http://threadfin.example:34401"},
-		{name: "userinfo", origin: "http://user@threadfin.example:34400"},
-		{name: "path", origin: "http://threadfin.example:34400/web"},
-		{name: "query", origin: "http://threadfin.example:34400?source=web"},
-		{name: "fragment", origin: "http://threadfin.example:34400#web"},
-		{name: "malformed", origin: "http://threadfin.example:34400/%zz"},
-		{name: "host prefix", origin: "http://evilthreadfin.example:34400"},
-		{name: "host suffix", origin: "http://threadfin.example.evil:34400"},
+		{name: "exact HTTPS over HTTP upstream", origin: "https://threadfin.example:34400", want: true},
+		{name: "case insensitive HTTPS authority", origin: "https://THREADFIN.EXAMPLE:34400", want: true},
+		{name: "unsupported websocket scheme", origin: "ws://threadfin.example:34400"},
+		{name: "unsupported file scheme", origin: "file://threadfin.example:34400"},
+		{name: "wrong port", origin: "https://threadfin.example:34401"},
+		{name: "userinfo", origin: "https://user@threadfin.example:34400"},
+		{name: "path", origin: "https://threadfin.example:34400/web"},
+		{name: "query", origin: "https://threadfin.example:34400?source=web"},
+		{name: "fragment", origin: "https://threadfin.example:34400#web"},
+		{name: "malformed", origin: "https://threadfin.example:34400/%zz"},
+		{name: "host prefix", origin: "https://evilthreadfin.example:34400"},
+		{name: "host suffix", origin: "https://threadfin.example.evil:34400"},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			systemMutex.Lock()
-			Settings = SettingsStruct{}
-			System.ServerProtocol.WEB = "http"
-			if test.configuredHTTPS {
-				Settings.ForceHttps = true
-				Settings.HttpsThreadfinDomain = "threadfin.example"
-			}
-			systemMutex.Unlock()
-
 			request := httptest.NewRequest(http.MethodGet, "http://threadfin.example:34400/data/", nil)
-			if test.directTLS {
-				request.TLS = &tls.ConnectionState{}
-			}
 			if test.origin != "" {
 				request.Header.Set("Origin", test.origin)
 			}
@@ -69,6 +54,18 @@ func TestWebSocketOriginAllowed(t *testing.T) {
 				t.Fatalf("webSocketOriginAllowed(%q) = %v, want %v", test.origin, got, test.want)
 			}
 		})
+	}
+}
+
+func TestWebSocketOriginAllowsHTTPSAtHTTPUpstream(t *testing.T) {
+	restorePersistentState(t)
+	configureWebSocketAuthentication(false, false)
+	server, webSocketURL := newWebSocketTestServer(t)
+
+	origin := "https" + strings.TrimPrefix(server.URL, "http")
+	conn := dialWebSocket(t, webSocketURL, http.Header{"Origin": []string{origin}})
+	if err := conn.Close(); err != nil {
+		t.Fatal(err)
 	}
 }
 
