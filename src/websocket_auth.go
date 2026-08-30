@@ -32,20 +32,7 @@ func webSocketOriginAllowed(r *http.Request) bool {
 		return false
 	}
 
-	systemMutex.Lock()
-	configuredProtocol := System.ServerProtocol.WEB
-	configuredHTTPS := Settings.ForceHttps && Settings.HttpsThreadfinDomain != ""
-	systemMutex.Unlock()
-
-	effectiveScheme := configuredProtocol
-	if r.TLS != nil || configuredHTTPS {
-		effectiveScheme = "https"
-	}
-	if !strings.EqualFold(effectiveScheme, "http") && !strings.EqualFold(effectiveScheme, "https") {
-		return false
-	}
-
-	return strings.EqualFold(parsedOrigin.Scheme, effectiveScheme) && strings.EqualFold(parsedOrigin.Host, r.Host)
+	return strings.EqualFold(parsedOrigin.Host, r.Host)
 }
 
 func authenticateWebSocketRequest(r *http.Request) (webSocketAuthentication, error) {
