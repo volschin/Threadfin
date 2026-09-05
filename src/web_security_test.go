@@ -91,6 +91,63 @@ func TestWebBrowserSecurityHeaders(t *testing.T) {
 		}
 		assertNoBrowserSecurityHeaders(t, response.Header())
 	})
+
+	t.Run("stream redirect defaults missing source buffer values", func(t *testing.T) {
+		const streamID = "fedcba9876543210fedcba9876543210"
+		const providerURL = "http://provider.invalid/missing-buffer"
+		tests := []struct {
+			name   string
+			source map[string]interface{}
+		}{
+			{name: "missing", source: map[string]interface{}{}},
+			{name: "nil", source: map[string]interface{}{"buffer": nil}},
+			{name: "non-string", source: map[string]interface{}{"buffer": true}},
+		}
+		previousPlaylist, hadPreviousPlaylist := BufferInformation.Load("M2")
+		BufferInformation.Store("M2", Playlist{
+			PlaylistID: "M2",
+			Streams: map[int]ThisStream{1: {
+				Status: true,
+				URL:    providerURL,
+			}},
+			Clients: map[int]ThisClient{1: {}},
+		})
+		t.Cleanup(func() {
+			if hadPreviousPlaylist {
+				BufferInformation.Store("M2", previousPlaylist)
+				return
+			}
+			BufferInformation.Delete("M2")
+		})
+
+		for _, test := range tests {
+			t.Run(test.name, func(t *testing.T) {
+				Settings.Files.M3U = map[string]interface{}{"M2": test.source}
+				Data.Cache.StreamingURLS = map[string]StreamInfo{
+					streamID: {
+						Name:       "Missing buffer fixture",
+						PlaylistID: "M2",
+						URL:        providerURL,
+						URLid:      streamID,
+					},
+				}
+
+				response := httptest.NewRecorder()
+				Stream(response, httptest.NewRequest(http.MethodGet, "/stream/"+streamID, nil))
+
+				if response.Code != http.StatusFound {
+					t.Fatalf("stream status = %d, want %d; body=%q", response.Code, http.StatusFound, response.Body.String())
+				}
+				if got := response.Header().Get("Location"); got != providerURL {
+					t.Errorf("stream Location = %q, want %q", got, providerURL)
+				}
+				if got := response.Header().Get("Access-Control-Allow-Origin"); got != "*" {
+					t.Errorf("stream Access-Control-Allow-Origin = %q, want *", got)
+				}
+				assertNoBrowserSecurityHeaders(t, response.Header())
+			})
+		}
+	})
 }
 
 func assertNoBrowserSecurityHeaders(t *testing.T, header http.Header) {

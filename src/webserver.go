@@ -225,7 +225,7 @@ func Stream(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var playListBuffer string
+	playListBuffer := "-"
 	systemMutex.Lock()
 	playListInterface := Settings.Files.M3U[streamInfo.PlaylistID]
 	if playListInterface == nil {
@@ -233,10 +233,8 @@ func Stream(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if playListMap, ok := playListInterface.(map[string]interface{}); ok {
-		if bufferValue, exists := playListMap["buffer"]; exists && bufferValue != nil {
-			if buffer, ok := bufferValue.(string); ok {
-				playListBuffer = buffer
-			}
+		if buffer, ok := playListMap["buffer"].(string); ok {
+			playListBuffer = buffer
 		}
 	}
 	systemMutex.Unlock()
