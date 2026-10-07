@@ -8,12 +8,6 @@
 
 For setup and configuration, see the [Threadfin user guide](docs/user-guide.md).
 
-### Donation
-[Github Sponsor](https://github.com/sponsors/Fyb3roptik)
-
-### Support
-- [Discord](https://discord.gg/CNaSkER2zD)
-
 ## Requirements
 ### Plex
 * Plex Media Server (1.11.1.4730 or newer)
