@@ -25,6 +25,9 @@ type ThisClient struct {
 
 // ThisStream : Enthält Informationen zu dem abzuspielenden Stream einer Playlist
 type ThisStream struct {
+	// done identifies this producer and is closed under Lock after its last client leaves.
+	done chan struct{}
+
 	ChannelName      string
 	Error            string
 	Folder           string

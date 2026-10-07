@@ -108,14 +108,6 @@ func Index(w http.ResponseWriter, r *http.Request) {
 	var response []byte
 	var path = r.URL.Path
 
-	systemMutex.Lock()
-	if Settings.HttpThreadfinDomain != "" {
-		setGlobalDomain(getBaseUrl(Settings.HttpThreadfinDomain, Settings.Port))
-	} else {
-		setGlobalDomain(r.Host)
-	}
-	systemMutex.Unlock()
-
 	switch path {
 	case "/discover.json":
 		response, err = getDiscover()
@@ -205,13 +197,13 @@ func Stream(w http.ResponseWriter, r *http.Request) {
 		client := &http.Client{}
 		req, err := http.NewRequest("HEAD", streamInfo.URL, nil)
 		if err != nil {
-			ShowError(err, 1501)
+			ShowError(errors.New("could not create stream HEAD request"), 1501)
 			httpStatusError(w, r, 405)
 			return
 		}
 		resp, err := client.Do(req)
 		if err != nil {
-			ShowError(err, 1502)
+			ShowError(errors.New("stream HEAD request failed"), 1502)
 			httpStatusError(w, r, 405)
 			return
 		}
@@ -246,7 +238,7 @@ func Stream(w http.ResponseWriter, r *http.Request) {
 		if strings.Index(streamInfo.URL, "rtsp://") != -1 || strings.Index(streamInfo.URL, "rtp://") != -1 {
 			err = errors.New("RTSP and RTP streams are not supported")
 			ShowError(err, 2004)
-			showInfo("Streaming URL:" + streamInfo.URL)
+			showInfo("Streaming URL:" + streamURLForLog(streamInfo.URL))
 			http.Redirect(w, r, streamInfo.URL, 302)
 			return
 		}
@@ -260,7 +252,7 @@ func Stream(w http.ResponseWriter, r *http.Request) {
 
 	switch playListBuffer {
 	case "-":
-		showInfo("Streaming URL:" + streamInfo.URL)
+		showInfo("Streaming URL:" + streamURLForLog(streamInfo.URL))
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 		http.Redirect(w, r, streamInfo.URL, 302)
 		showInfo("Streaming Info:URL was passed to the client.")
@@ -375,16 +367,8 @@ func Threadfin(w http.ResponseWriter, r *http.Request) {
 	var err error
 	var path = strings.TrimPrefix(r.URL.Path, "/")
 
-	systemMutex.Lock()
-	if Settings.HttpThreadfinDomain != "" {
-		setGlobalDomain(getBaseUrl(Settings.HttpThreadfinDomain, Settings.Port))
-	} else {
-		setGlobalDomain(r.Host)
-	}
-	systemMutex.Unlock()
-
 	// XMLTV Datei
-	if strings.Contains(path, "xmltv/") {
+	if strings.HasPrefix(path, "xmltv/") {
 
 		requestType = "xml"
 
@@ -396,8 +380,17 @@ func Threadfin(w http.ResponseWriter, r *http.Request) {
 		}
 
 		systemMutex.Lock()
-		file = System.Folder.Data + getFilenameFromPath(path)
+		switch path {
+		case "xmltv/threadfin.xml":
+			file = System.File.XML
+		case "xmltv/threadfin.xml.gz":
+			file = System.Compressed.GZxml
+		}
 		systemMutex.Unlock()
+		if file == "" {
+			httpStatusError(w, r, http.StatusNotFound)
+			return
+		}
 
 		content, err = readStringFromFile(file)
 		if err != nil {
@@ -408,7 +401,7 @@ func Threadfin(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// M3U Datei
-	if strings.Contains(path, "m3u/") {
+	if strings.HasPrefix(path, "m3u/") {
 
 		requestType = "m3u"
 
@@ -523,14 +516,6 @@ func WS(w http.ResponseWriter, r *http.Request) {
 	}
 	defer conn.Close()
 
-	systemMutex.Lock()
-	if Settings.HttpThreadfinDomain != "" {
-		setGlobalDomain(getBaseUrl(Settings.HttpThreadfinDomain, Settings.Port))
-	} else {
-		setGlobalDomain(r.Host)
-	}
-	systemMutex.Unlock()
-
 	for {
 		var request RequestStruct
 		if err := conn.ReadJSON(&request); err != nil {
@@ -581,9 +566,7 @@ func WS(w http.ResponseWriter, r *http.Request) {
 					response.Reload = true
 				}
 
-				// if Settings.StoreBufferInRAM != previousStoreBufferInRAM {
 				initBufferVFS()
-				// }
 			}
 
 		case "saveFilesM3U":
@@ -757,14 +740,6 @@ func Web(w http.ResponseWriter, r *http.Request) {
 	var content, contentType, file string
 
 	var language LanguageUI
-
-	systemMutex.Lock()
-	if Settings.HttpThreadfinDomain != "" {
-		setGlobalDomain(getBaseUrl(Settings.HttpThreadfinDomain, Settings.Port))
-	} else {
-		setGlobalDomain(r.Host)
-	}
-	systemMutex.Unlock()
 
 	systemMutex.Lock()
 	if System.Dev == true {
@@ -1036,18 +1011,11 @@ func API(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if Settings.HttpThreadfinDomain != "" {
-		setGlobalDomain(getBaseUrl(Settings.HttpThreadfinDomain, Settings.Port))
-	} else {
-		setGlobalDomain(r.Host)
-	}
 	var request APIRequestStruct
 	var response APIResponseStruct
 	var err error
 
 	var responseAPIError = func(err error) {
-
-		var response APIResponseStruct
 
 		response.Status = false
 		response.Error = err.Error()
@@ -1164,6 +1132,7 @@ func API(w http.ResponseWriter, r *http.Request) {
 
 	if err != nil {
 		responseAPIError(err)
+		return
 	}
 
 	w.Write([]byte(mapToJSON(response)))
@@ -1173,20 +1142,43 @@ func API(w http.ResponseWriter, r *http.Request) {
 
 // Download : Datei Download
 func Download(w http.ResponseWriter, r *http.Request) {
-
-	var path = r.URL.Path
-	var file = System.Folder.Temp + getFilenameFromPath(path)
-	w.Header().Set("Content-Disposition", "attachment; filename="+getFilenameFromPath(file))
-
-	content, err := readStringFromFile(file)
-	if err != nil {
-		w.WriteHeader(404)
+	if !authorizeAdministrativeRequest(w, r) {
 		return
 	}
-
-	os.RemoveAll(System.Folder.Temp + getFilenameFromPath(path))
-	w.Write([]byte(content))
-	return
+	if r.Method != http.MethodGet && r.Method != http.MethodHead {
+		w.Header().Set("Allow", "GET, HEAD")
+		httpStatusError(w, r, http.StatusMethodNotAllowed)
+		return
+	}
+	name := strings.TrimPrefix(r.URL.Path, "/download/")
+	stamp := strings.TrimSuffix(strings.TrimPrefix(name, "threadfin_backup_"), ".zip")
+	if name != "threadfin_backup_"+stamp+".zip" {
+		httpStatusError(w, r, http.StatusNotFound)
+		return
+	}
+	if _, err := time.Parse("20060102_1504", stamp); err != nil {
+		httpStatusError(w, r, http.StatusNotFound)
+		return
+	}
+	systemMutex.Lock()
+	filename := filepath.Join(System.Folder.Temp, name)
+	systemMutex.Unlock()
+	content, err := os.ReadFile(filename)
+	if err != nil {
+		httpStatusError(w, r, http.StatusNotFound)
+		return
+	}
+	w.Header().Set("Content-Disposition", "attachment; filename="+name)
+	w.Header().Set("Content-Type", "application/zip")
+	w.Header().Set("Content-Length", strconv.Itoa(len(content)))
+	if r.Method == http.MethodHead {
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+	if written, err := w.Write(content); err == nil && written == len(content) {
+		// Preserve the one-time download lifecycle, after an authorized transfer.
+		_ = os.Remove(filename)
+	}
 }
 
 func setDefaultResponseData(response ResponseStruct, data bool) (defaults ResponseStruct) {
@@ -1328,6 +1320,14 @@ func authenticationSettingsRequireReload(previous, current bool) bool {
 }
 
 func enablePPV(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		w.Header().Set("Allow", "POST")
+		httpStatusError(w, r, http.StatusMethodNotAllowed)
+		return
+	}
+	if !authorizeAdministrativeRequest(w, r) {
+		return
+	}
 	configMutationMutex.Lock()
 	defer configMutationMutex.Unlock()
 
@@ -1337,7 +1337,9 @@ func enablePPV(w http.ResponseWriter, r *http.Request) {
 
 		response.Status = false
 		response.Error = err.Error()
+		w.WriteHeader(http.StatusInternalServerError)
 		w.Write([]byte(mapToJSON(response)))
+		return
 	}
 
 	for _, c := range xepg {
@@ -1355,8 +1357,8 @@ func enablePPV(w http.ResponseWriter, r *http.Request) {
 
 		response.Status = false
 		response.Error = err.Error()
+		w.WriteHeader(http.StatusInternalServerError)
 		w.Write([]byte(mapToJSON(response)))
-		w.WriteHeader(405)
 		return
 	}
 	buildXEPG(false)
@@ -1366,6 +1368,14 @@ func enablePPV(w http.ResponseWriter, r *http.Request) {
 }
 
 func disablePPV(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		w.Header().Set("Allow", "POST")
+		httpStatusError(w, r, http.StatusMethodNotAllowed)
+		return
+	}
+	if !authorizeAdministrativeRequest(w, r) {
+		return
+	}
 	configMutationMutex.Lock()
 	defer configMutationMutex.Unlock()
 
@@ -1375,7 +1385,9 @@ func disablePPV(w http.ResponseWriter, r *http.Request) {
 
 		response.Status = false
 		response.Error = err.Error()
+		w.WriteHeader(http.StatusInternalServerError)
 		w.Write([]byte(mapToJSON(response)))
+		return
 	}
 
 	for _, c := range xepg {
@@ -1393,7 +1405,9 @@ func disablePPV(w http.ResponseWriter, r *http.Request) {
 
 		response.Status = false
 		response.Error = err.Error()
+		w.WriteHeader(http.StatusInternalServerError)
 		w.Write([]byte(mapToJSON(response)))
+		return
 	}
 	buildXEPG(false)
 
@@ -1407,6 +1421,8 @@ func httpStatusError(w http.ResponseWriter, r *http.Request, httpStatusCode int)
 }
 
 func resetStreamingURLCache(filename string) error {
+	streamingURLMutex.Lock()
+	defer streamingURLMutex.Unlock()
 	empty := make(map[string]StreamInfo)
 	if err := saveMapToJSONFile(filename, empty); err != nil {
 		return err

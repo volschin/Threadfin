@@ -8,8 +8,41 @@ import (
 	"os"
 	"reflect"
 	"strings"
+	"sync"
 	"time"
 )
+
+// streamingURLMutex owns every access to the stream lookup map, including
+// loading and persisting it. Callers only receive copies of cache entries.
+var streamingURLMutex sync.Mutex
+
+func copyStreamInfo(info StreamInfo) StreamInfo {
+	if info.BackupChannel1 != nil {
+		backup := *info.BackupChannel1
+		info.BackupChannel1 = &backup
+	}
+	if info.BackupChannel2 != nil {
+		backup := *info.BackupChannel2
+		info.BackupChannel2 = &backup
+	}
+	if info.BackupChannel3 != nil {
+		backup := *info.BackupChannel3
+		info.BackupChannel3 = &backup
+	}
+	return info
+}
+
+func clearStreamingURLCache() {
+	streamingURLMutex.Lock()
+	defer streamingURLMutex.Unlock()
+	Data.Cache.StreamingURLS = make(map[string]StreamInfo)
+}
+
+func saveStreamingURLCache(filename string) error {
+	streamingURLMutex.Lock()
+	defer streamingURLMutex.Unlock()
+	return saveMapToJSONFile(filename, Data.Cache.StreamingURLS)
+}
 
 // Entwicklerinfos anzeigen
 func showDevInfo() {
@@ -329,6 +362,7 @@ func createStreamingURL(streamingType, playlistID, channelNumber, channelName, u
 	var streamInfo StreamInfo
 	var serverProtocol string
 
+	streamingURLMutex.Lock()
 	if len(Data.Cache.StreamingURLS) == 0 {
 		Data.Cache.StreamingURLS = make(map[string]StreamInfo)
 	}
@@ -348,9 +382,10 @@ func createStreamingURL(streamingType, playlistID, channelNumber, channelName, u
 		streamInfo.ChannelNumber = channelNumber
 		streamInfo.URLid = urlID
 
-		Data.Cache.StreamingURLS[urlID] = streamInfo
+		Data.Cache.StreamingURLS[urlID] = copyStreamInfo(streamInfo)
 
 	}
+	streamingURLMutex.Unlock()
 
 	switch streamingType {
 
@@ -362,18 +397,21 @@ func createStreamingURL(streamingType, playlistID, channelNumber, channelName, u
 
 	}
 
+	domain := System.Domain
 	if Settings.ForceHttps {
 		if Settings.HttpsThreadfinDomain != "" {
 			serverProtocol = "https"
-			System.Domain = Settings.HttpsThreadfinDomain
+			domain = Settings.HttpsThreadfinDomain
 		}
 	}
 
-	streamingURL = fmt.Sprintf("%s://%s/stream/%s", serverProtocol, System.Domain, streamInfo.URLid)
+	streamingURL = fmt.Sprintf("%s://%s/stream/%s", serverProtocol, domain, streamInfo.URLid)
 	return
 }
 
 func getStreamInfo(urlID string) (streamInfo StreamInfo, err error) {
+	streamingURLMutex.Lock()
+	defer streamingURLMutex.Unlock()
 
 	if len(Data.Cache.StreamingURLS) == 0 {
 
@@ -382,17 +420,19 @@ func getStreamInfo(urlID string) (streamInfo StreamInfo, err error) {
 			return streamInfo, err
 		}
 
-		err = json.Unmarshal([]byte(mapToJSON(tmp)), &Data.Cache.StreamingURLS)
+		var loaded map[string]StreamInfo
+		err = json.Unmarshal([]byte(mapToJSON(tmp)), &loaded)
 		if err != nil {
 			return streamInfo, err
 		}
+		Data.Cache.StreamingURLS = loaded
 
 	}
 
 	if s, ok := Data.Cache.StreamingURLS[urlID]; ok {
 		s.URL = strings.Trim(s.URL, "\r\n")
 
-		streamInfo = s
+		streamInfo = copyStreamInfo(s)
 	} else {
 		err = errors.New("streaming error")
 	}

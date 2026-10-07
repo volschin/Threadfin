@@ -141,6 +141,9 @@ func BinaryUpdate() (err error) {
 	updater.Name = System.Update.Name
 	updater.Branch = System.Branch
 	updater.WindowsUpdateReadinessTimeout = windowsUpdateReadinessBudget(Settings)
+	// Every check starts with fresh metadata; an absent release must not reuse
+	// a candidate from a previous check or another release channel.
+	updater.Response = up2date.ServerResponse{}
 
 	up2date.Init()
 
@@ -158,6 +161,10 @@ func BinaryUpdate() (err error) {
 			ShowError(err, 6003)
 			return nil
 		}
+		if resp.StatusCode != http.StatusOK {
+			_ = resp.Body.Close()
+			return fmt.Errorf("release discovery returned %s", resp.Status)
+		}
 
 		git, err = decodeGitHubReleases(resp.Body)
 		if err != nil {
@@ -167,7 +174,10 @@ func BinaryUpdate() (err error) {
 		// Get latest prerelease tag name
 		if System.Branch == "Beta" {
 			for _, release := range git {
-				if release.Prerelease {
+				if release != nil && release.Prerelease {
+					if release.TagName == "" {
+						return errors.New("release has no version tag")
+					}
 					latest = release.TagName
 					updater.Response.Version = release.TagName
 					break
@@ -178,7 +188,10 @@ func BinaryUpdate() (err error) {
 		// Latest main tag name
 		if System.Branch == "Main" {
 			for _, release := range git {
-				if !release.Prerelease {
+				if release != nil && !release.Prerelease {
+					if release.TagName == "" {
+						return errors.New("release has no version tag")
+					}
 					updater.Response.Version = release.TagName
 					latest = release.TagName
 					log.Println("TAG LATEST: ", release.TagName)
@@ -187,6 +200,9 @@ func BinaryUpdate() (err error) {
 			}
 		}
 
+		if latest == "" {
+			return nil
+		}
 		var File = fmt.Sprintf("%s/releases/download/%s/%s", System.Update.Git, latest, officialUpdateAssetName(System.OS, System.ARCH))
 
 		updater.Response.Status = true
@@ -227,9 +243,18 @@ func BinaryUpdate() (err error) {
 
 	}
 
+	if !updater.Response.Status {
+		return nil
+	}
 	var currentVersion = System.Version + "." + System.Build
-	current_version, _ := version.NewVersion(currentVersion)
-	response_version, _ := version.NewVersion(updater.Response.Version)
+	current_version, err := version.NewVersion(currentVersion)
+	if err != nil {
+		return fmt.Errorf("invalid current version: %w", err)
+	}
+	response_version, err := version.NewVersion(updater.Response.Version)
+	if err != nil {
+		return fmt.Errorf("invalid update version: %w", err)
+	}
 	// Versionsnummer überprüfen
 	if response_version.GreaterThan(current_version) && updater.Response.Status {
 		if Settings.ThreadfinAutoUpdate {

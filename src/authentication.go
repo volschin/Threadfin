@@ -68,6 +68,25 @@ func authorizeBrowserRequest(r *http.Request, permissions ...string) (string, er
 	return authentication.AuthorizeBrowserSession(cookie.Value, permissions...)
 }
 
+// Administrative downloads and mutations use the same permission as the web UI.
+// A token cookie or URL credential is not a browser session.
+func authorizeAdministrativeRequest(w http.ResponseWriter, r *http.Request) bool {
+	if !webSocketOriginAllowed(r) {
+		httpStatusError(w, r, http.StatusForbidden)
+		return false
+	}
+	systemMutex.Lock()
+	required := Settings.AuthenticationWEB || Settings.AuthenticationAPI
+	systemMutex.Unlock()
+	if required {
+		if _, err := authorizeBrowserRequest(r, "authentication.web"); err != nil {
+			httpStatusError(w, r, http.StatusForbidden)
+			return false
+		}
+	}
+	return true
+}
+
 func browserCookieSecure(r *http.Request) bool {
 	if r.TLS != nil {
 		return true

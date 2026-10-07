@@ -15,7 +15,6 @@ var (
 	parameterRegex   = regexp.MustCompile(`[a-z-A-Z&=]*(".*?")`)
 	channelNameRegex = regexp.MustCompile(`,([^\n]*|,[^\r]*)`)
 	quoteReplacer    = strings.NewReplacer(`"`, "")
-	commaReplacer    = strings.NewReplacer(`,`, "")
 )
 
 // MakeInterfaceFromM3UOptimized : Optimized version for large M3U files
@@ -33,10 +32,11 @@ func MakeInterfaceFromM3UOptimized(byteStream []byte) (allChannels []interface{}
 
 	// Use scanner for line-by-line processing instead of loading full content
 	scanner := bufio.NewScanner(bytes.NewReader(byteStream))
-	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024) // 1MB max line length
+	// The playlist is already in memory; allow its full line length so small
+	// and large inputs share the same parsing limits.
+	scanner.Buffer(make([]byte, 0, 64*1024), len(byteStream)+1)
 
-	var currentChannel strings.Builder
-	var isInChannel bool
+	var extinfLine string
 
 	// Pre-allocate channels slice with estimated capacity
 	estimatedChannels := bytes.Count(byteStream, []byte("#EXTINF"))
@@ -46,22 +46,13 @@ func MakeInterfaceFromM3UOptimized(byteStream []byte) (allChannels []interface{}
 		line := scanner.Text()
 
 		// Skip empty lines
-		if len(line) == 0 {
+		if strings.TrimSpace(line) == "" {
 			continue
 		}
 
 		// Process #EXTINF lines
 		if strings.HasPrefix(line, "#EXTINF") {
-			if isInChannel && currentChannel.Len() > 0 {
-				// Process previous channel
-				if stream := parseMetaDataOptimized(currentChannel.String()); len(stream) > 0 {
-					allChannels = append(allChannels, stream)
-				}
-				currentChannel.Reset()
-			}
-			currentChannel.WriteString(line)
-			currentChannel.WriteByte('\n')
-			isInChannel = true
+			extinfLine = strings.ReplaceAll(line, "'", `"`)
 			continue
 		}
 
@@ -71,21 +62,11 @@ func MakeInterfaceFromM3UOptimized(byteStream []byte) (allChannels []interface{}
 		}
 
 		// This is a URL line
-		if isInChannel {
-			currentChannel.WriteString(line)
-			// Process complete channel
-			if stream := parseMetaDataOptimized(currentChannel.String()); len(stream) > 0 {
+		if extinfLine != "" {
+			if stream := parseMetaDataOptimized(extinfLine, line); len(stream) > 0 {
 				allChannels = append(allChannels, stream)
 			}
-			currentChannel.Reset()
-			isInChannel = false
-		}
-	}
-
-	// Process last channel if exists
-	if isInChannel && currentChannel.Len() > 0 {
-		if stream := parseMetaDataOptimized(currentChannel.String()); len(stream) > 0 {
-			allChannels = append(allChannels, stream)
+			extinfLine = ""
 		}
 	}
 
@@ -97,34 +78,9 @@ func MakeInterfaceFromM3UOptimized(byteStream []byte) (allChannels []interface{}
 }
 
 // parseMetaDataOptimized : Optimized metadata parsing
-func parseMetaDataOptimized(channel string) map[string]string {
+func parseMetaDataOptimized(extinfLine, streamURL string) map[string]string {
 	stream := make(map[string]string, 12) // Pre-allocate with typical size
-
-	// Use bufio.Scanner for line splitting
-	scanner := bufio.NewScanner(strings.NewReader(channel))
-	lines := make([]string, 0, 3) // Most channels have 2-3 lines
-	extinfLine := ""
-
-	for scanner.Scan() {
-		line := scanner.Text()
-		if strings.HasPrefix(line, "#EXTINF") && extinfLine == "" {
-			extinfLine = line
-		}
-		if len(line) > 0 && !strings.HasPrefix(line, "#") {
-			lines = append(lines, line)
-		}
-	}
-
-	if len(lines) < 2 {
-		return nil // Invalid channel format
-	}
-
-	// URL is always the last non-# line
-	stream["url"] = strings.TrimSpace(lines[len(lines)-1])
-
-	if extinfLine == "" {
-		return nil
-	}
+	stream["url"] = strings.TrimSpace(streamURL)
 
 	// Extract parameters using pre-compiled regex
 	var value strings.Builder
@@ -138,7 +94,7 @@ func parseMetaDataOptimized(channel string) map[string]string {
 			key, val := paramParts[0], paramParts[1]
 
 			// Save TVG Key in lowercase
-			if strings.Contains(key, "tvg") {
+			if strings.Contains(strings.ToLower(key), "tvg") {
 				stream[strings.ToLower(key)] = val
 			} else {
 				stream[key] = val
@@ -156,7 +112,6 @@ func parseMetaDataOptimized(channel string) map[string]string {
 	var channelName string
 	if nameMatches := channelNameRegex.FindStringSubmatch(extinfLine); len(nameMatches) > 1 {
 		channelName = nameMatches[1]
-		channelName = commaReplacer.Replace(channelName)
 		channelName = strings.TrimSpace(channelName)
 	}
 
@@ -193,11 +148,5 @@ func parseMetaDataOptimized(channel string) map[string]string {
 
 // Wrapper to maintain backward compatibility
 func MakeInterfaceFromM3U(byteStream []byte) (allChannels []interface{}, err error) {
-	// For files larger than 10MB, use optimized version
-	if len(byteStream) > 10*1024*1024 {
-		return MakeInterfaceFromM3UOptimized(byteStream)
-	}
-
-	// Use original implementation for smaller files to maintain compatibility
-	return makeInterfaceFromM3UOriginal(byteStream)
+	return MakeInterfaceFromM3UOptimized(byteStream)
 }

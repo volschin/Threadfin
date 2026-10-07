@@ -295,7 +295,7 @@ func TestGetBufTmpFilesReturnsCompletedNonOverlappingBackupSegment(t *testing.T)
 		Folder:      folder,
 		OldSegments: []string{"1.ts", "2.ts", "3.ts", "4.ts", "5.ts"},
 	}
-	files := getBufTmpFiles(&stream)
+	files := getBufTmpFiles(&stream, false)
 	if len(files) != 1 || files[0] != "6.ts" {
 		t.Fatalf("getBufTmpFiles() = %v, want [6.ts]", files)
 	}
@@ -314,7 +314,7 @@ func TestGetBufTmpFilesReturnsFirstCompletedSegmentWithCurrentSuccessor(t *testi
 	writeBufferTestFile(t, vfs, filepath.Join(folder, "2.ts"), "in progress")
 
 	stream := ThisStream{Folder: folder}
-	if got := getBufTmpFiles(&stream); !slices.Equal(got, []string{"1.ts"}) {
+	if got := getBufTmpFiles(&stream, false); !slices.Equal(got, []string{"1.ts"}) {
 		t.Fatalf("getBufTmpFiles() = %v, want [1.ts]", got)
 	}
 	if !slices.Equal(stream.OldSegments, []string{"1.ts"}) {
@@ -338,7 +338,7 @@ func TestGetBufTmpFilesPreservesAdjacentLargeSegmentBasenames(t *testing.T) {
 	}
 
 	stream := ThisStream{Folder: folder}
-	if got := getBufTmpFiles(&stream); !slices.Equal(got, completed) {
+	if got := getBufTmpFiles(&stream, false); !slices.Equal(got, completed) {
 		t.Fatalf("getBufTmpFiles() = %v, want %v", got, completed)
 	}
 	if !slices.Equal(stream.OldSegments, completed) {
