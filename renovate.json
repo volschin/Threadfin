@@ -1,4 +1,16 @@
 {
-    "extends": ["config:recommended"],
-    "forkProcessing": "enabled"
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "local>olcond/renovate-config"
+  ],
+  "lockFileMaintenance": {
+    "enabled": true
+  },
+  "packageRules": [
+    {
+      "description": "The shared preset automerges GitHub Actions and pre-commit updates with ignoreTests, which predates this repository having CI. Now that .github/workflows/ci.yml runs the suite on every pull request, require it to pass before anything merges itself.",
+      "matchManagers": ["github-actions", "pre-commit"],
+      "ignoreTests": false
+    }
+  ]
 }
