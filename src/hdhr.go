@@ -180,7 +180,7 @@ func getLineup() (jsonContent []byte, err error) {
 
 	Data.Cache.PMS = nil
 
-	err = saveMapToJSONFile(System.File.URLS, Data.Cache.StreamingURLS)
+	err = saveStreamingURLCache(System.File.URLS)
 
 	return
 }

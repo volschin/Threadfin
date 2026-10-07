@@ -498,11 +498,11 @@ func ChangeCredentials(userID, username, password string) (err error) {
 	err = createError(032)
 
 	if userData, ok := data["users"].(map[string]interface{})[userID]; ok {
-		//var userData = tmp.(map[string]interface{})
-		var salt = userData.(map[string]interface{})["_salt"].(string)
+		updated := cloneAuthenticationMap(userData.(map[string]interface{}))
+		var salt = updated["_salt"].(string)
 
 		if len(username) > 0 {
-			userData.(map[string]interface{})["_username"] = SHA256(username, salt)
+			updated["_username"] = SHA256(username, salt)
 		}
 
 		if len(password) > 0 {
@@ -510,12 +510,22 @@ func ChangeCredentials(userID, username, password string) (err error) {
 			if hashErr != nil {
 				return hashErr
 			}
-			userData.(map[string]interface{})["_password"] = passwordHash
+			updated["_password"] = passwordHash
 		}
 
+		data["users"].(map[string]interface{})[userID] = updated
 		err = saveDatabase(data)
-		if err == nil && len(password) > 0 {
+		if err != nil {
+			data["users"].(map[string]interface{})[userID] = userData
+			return err
+		}
+		if len(password) > 0 {
 			invalidateUserBrowserSessionsLocked(userID)
+			for token, value := range tokens {
+				if record, ok := value.(map[string]interface{}); ok && record["id"] == userID {
+					delete(tokens, token)
+				}
+			}
 		}
 	}
 

@@ -95,8 +95,7 @@ func buildXEPGWithResult(background bool) error {
 	// Enter maintenance during core steps
 
 	// Clear streaming URL cache
-	Data.Cache.StreamingURLS = make(map[string]StreamInfo)
-	if err := saveMapToJSONFile(System.File.URLS, Data.Cache.StreamingURLS); err != nil {
+	if err := resetStreamingURLCache(System.File.URLS); err != nil {
 		System.ScanInProgress = 0
 		return err
 	}
@@ -147,7 +146,7 @@ func buildXEPGWithResult(background bool) error {
 						System.ImageCachingInProgress = 1
 						systemMutex.Unlock()
 
-						showInfo(fmt.Sprintf("Image Caching:Images are cached (%d)", len(Data.Cache.Images.Queue)))
+						showInfo(fmt.Sprintf("Image Caching:Images are cached (%d)", Data.Cache.Images.Pending()))
 
 						Data.Cache.Images.Image.Caching()
 						Data.Cache.Images.Image.Remove()
@@ -206,7 +205,7 @@ func buildXEPGWithResult(background bool) error {
 						System.ImageCachingInProgress = 1
 						systemMutex.Unlock()
 
-						showInfo(fmt.Sprintf("Image Caching:Images are cached (%d)", len(Data.Cache.Images.Queue)))
+						showInfo(fmt.Sprintf("Image Caching:Images are cached (%d)", Data.Cache.Images.Pending()))
 
 						Data.Cache.Images.Image.Caching()
 						Data.Cache.Images.Image.Remove()
@@ -423,8 +422,7 @@ func createXEPGDatabase() (err error) {
 	Data.XEPG.Channels = make(map[string]interface{}, System.UnfilteredChannelLimit)
 
 	// Clear streaming URL cache
-	Data.Cache.StreamingURLS = make(map[string]StreamInfo)
-	if err = saveMapToJSONFile(System.File.URLS, Data.Cache.StreamingURLS); err != nil {
+	if err = resetStreamingURLCache(System.File.URLS); err != nil {
 		return err
 	}
 
@@ -1018,10 +1016,6 @@ func mapping() (err error) {
 // XMLTV Datei erstellen
 func createXMLTVFile() (err error) {
 
-	// Image Cache
-	// 4edd81ab7c368208cc6448b615051b37.jpg
-	var imgc = Data.Cache.Images
-
 	Data.Cache.ImagesFiles = []string{}
 	Data.Cache.ImagesURLS = []string{}
 	Data.Cache.ImagesCache = []string{}
@@ -1046,18 +1040,11 @@ func createXMLTVFile() (err error) {
 
 	showInfo("XEPG:" + fmt.Sprintf("Create XMLTV file (%s)", System.File.XML))
 
-	// Stream XML to disk to avoid huge memory usage
-	xmlFile, err := os.Create(System.File.XML)
-	if err != nil {
-		return err
-	}
-	writer := bufio.NewWriterSize(xmlFile, 1<<20) // 1MB buffer
-	finalized := false
-	defer func() {
-		if !finalized {
-			err = errors.Join(err, finalizeXMLTVOutput(writer, xmlFile))
-		}
-	}()
+	return publishXMLTVFiles(System.File.XML, System.Compressed.GZxml, writeXMLTVFile)
+}
+
+func writeXMLTVFile(writer io.Writer) (err error) {
+	imgc := Data.Cache.Images
 
 	var xepgXML XMLTV
 
@@ -1117,34 +1104,18 @@ func createXMLTVFile() (err error) {
 		xepgChannel := e.ch
 		if xepgChannel.XActive && !xepgChannel.XHideChannel {
 			*tmpProgram, err = getProgramData(xepgChannel)
-			if err == nil {
-				for _, p := range tmpProgram.Program {
-					if err = document.WriteProgram(p); err != nil {
-						return err
-					}
+			if err != nil {
+				return err
+			}
+			for _, p := range tmpProgram.Program {
+				if err = document.WriteProgram(p); err != nil {
+					return err
 				}
-			} else {
-				showDebug("XEPG:"+fmt.Sprintf("Error: %s", err), 3)
 			}
 		}
 	}
 
-	if err = document.Close(); err != nil {
-		return err
-	}
-
-	if err = finalizeXMLTVOutput(writer, xmlFile); err != nil {
-		finalized = true
-		return err
-	}
-	finalized = true
-
-	showInfo("XEPG:" + fmt.Sprintf("Compress XMLTV file (%s)", System.Compressed.GZxml))
-	if err = compressGZIPFile(System.File.XML, System.Compressed.GZxml); err != nil {
-		return err
-	}
-
-	return
+	return document.Close()
 }
 
 func finalizeXMLTVOutput(writer *bufio.Writer, file io.Closer) error {
@@ -1161,7 +1132,7 @@ func getProgramData(xepgChannel XEPGChannelStruct) (xepgXML XMLTV, err error) {
 	if strings.Contains(xmltvFile, "Threadfin Dummy") {
 		xmltv = createDummyProgram(xepgChannel)
 	} else {
-		if xepgChannel.XmltvFile != "" {
+		if xepgChannel.XmltvFile != "" && xepgChannel.XmltvFile != "-" {
 			err = getLocalXMLTV(xmltvFile, &xmltv)
 			if err != nil {
 				return
@@ -1782,7 +1753,7 @@ func createM3UFile() error {
 		return err
 	}
 
-	return saveMapToJSONFile(System.File.URLS, Data.Cache.StreamingURLS)
+	return saveStreamingURLCache(System.File.URLS)
 }
 
 func writeXEPGOutputFiles() error {

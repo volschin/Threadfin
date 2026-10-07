@@ -196,6 +196,13 @@ func updateServerSettings(request RequestStruct) (settings SettingsStruct, err e
 
 	err = saveSettings(Settings)
 	if err == nil {
+		systemMutex.Lock()
+		if Settings.HttpThreadfinDomain != "" {
+			setGlobalDomain(getBaseUrl(Settings.HttpThreadfinDomain, Settings.Port))
+		} else {
+			setGlobalDomain(fmt.Sprintf("%s:%s", System.IPAddress, Settings.Port))
+		}
+		systemMutex.Unlock()
 
 		settings = Settings
 
@@ -535,7 +542,7 @@ func saveXEpgMapping(request RequestStruct) (result MappingSaveResult, err error
 
 	var tmp = Data.XEPG
 
-	Data.Cache.StreamingURLS = make(map[string]StreamInfo)
+	clearStreamingURLCache()
 
 	Data.Cache.Images, err = imgcache.New(System.Folder.ImagesCache, fmt.Sprintf("%s://%s/images/", System.ServerProtocol.WEB, System.Domain), Settings.CacheImages)
 	if err != nil {

@@ -10,6 +10,12 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"time"
+)
+
+const (
+	imageResponseLimit = 10 << 20
+	imageTempPrefix    = ".threadfin-image-"
 )
 
 // Cache : Cache strcut
@@ -18,6 +24,8 @@ type Cache struct {
 	cacheURL string
 	caching  bool
 	images   map[string]string
+	client   *http.Client
+	cacheMu  sync.Mutex
 	Queue    []string
 	Cache    []string
 	Image    imageFunc
@@ -32,31 +40,42 @@ type imageFunc struct {
 
 // New : New cahce
 func (c *Cache) cacheImage(src string) (filteredSource string, cached bool) {
-	resp, err := http.Get(src)
+	resp, err := c.client.Get(src)
 	if err != nil {
 		return "", false
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
+	if resp.StatusCode != http.StatusOK || resp.ContentLength > imageResponseLimit {
 		return "", false
 	}
 
 	filteredSource = strings.Split(src, "?")[0]
-	filename := fmt.Sprintf("%s%s%s", c.path, strToMD5(filteredSource), filepath.Ext(filteredSource))
-	file, err := os.Create(filename)
+	u, err := url.Parse(filteredSource)
 	if err != nil {
 		return "", false
 	}
-	defer file.Close()
+	filename := strToMD5(filteredSource) + filepath.Ext(u.Path)
+	file, err := os.CreateTemp(c.path, imageTempPrefix+"*")
+	if err != nil {
+		return "", false
+	}
+	defer os.Remove(file.Name())
 
-	if _, err = io.Copy(file, resp.Body); err != nil {
+	written, copyErr := io.Copy(file, io.LimitReader(resp.Body, imageResponseLimit+1))
+	closeErr := file.Close()
+	if copyErr != nil || closeErr != nil || written > imageResponseLimit {
 		return "", false
 	}
 
-	if u, err := url.Parse(filteredSource); err == nil {
-		c.images[fmt.Sprintf("%s%s", strToMD5(filteredSource), filepath.Ext(u.Path))] = c.cacheURL + filename
+	// Only publish a closed, complete image. Cleanup and URL lookups can run
+	// while the network transfer is in progress.
+	c.Lock()
+	defer c.Unlock()
+	if err := os.Rename(file.Name(), filepath.Join(c.path, filename)); err != nil {
+		return "", false
 	}
+	c.images[filename] = c.cacheURL + filename
 
 	return filteredSource, true
 }
@@ -66,13 +85,12 @@ func New(path, cacheURL string, caching bool) (c *Cache, err error) {
 	c = &Cache{}
 
 	c.images = make(map[string]string)
+	c.client = &http.Client{Timeout: 10 * time.Second}
 	c.path = path
 	c.cacheURL = cacheURL
 	c.caching = caching
 	c.Queue = []string{}
 	c.Cache = []string{}
-
-	var queue []string
 
 	c.Image.GetURL = func(src string, http_domain string, http_port string, force_https bool, https_port int, https_domain string) (cacheURL string) {
 
@@ -129,20 +147,20 @@ func New(path, cacheURL string, caching bool) (c *Cache, err error) {
 	}
 
 	c.Image.Caching = func() {
-
+		// Serialize download passes, without holding the map/queue lock over I/O.
+		c.cacheMu.Lock()
+		defer c.cacheMu.Unlock()
 		c.Lock()
-		defer c.Unlock()
+		queue := slices.Clone(c.Queue)
+		c.Unlock()
 
-		for _, src := range c.Queue {
-			if filteredSource, cached := c.cacheImage(src); cached {
-				queue = append(queue, filteredSource)
+		for _, src := range queue {
+			if _, cached := c.cacheImage(src); cached {
+				c.Lock()
+				c.Queue = removeStringFromSlice(src, c.Queue)
+				c.Unlock()
 			}
 		}
-
-		for _, q := range queue {
-			c.Queue = removeStringFromSlice(q, c.Queue)
-		}
-
 	}
 
 	c.Image.Remove = func() {
@@ -156,12 +174,17 @@ func New(path, cacheURL string, caching bool) (c *Cache, err error) {
 		}
 
 		for _, file := range files {
+			if strings.HasPrefix(file.Name(), imageTempPrefix) {
+				continue
+			}
 			if c.caching {
 				if _, ok := c.images[file.Name()]; ok {
 					continue
 				}
 			}
-			os.RemoveAll(c.path + file.Name())
+			if err := os.RemoveAll(filepath.Join(c.path, file.Name())); err == nil {
+				c.Cache = removeStringFromSlice(file.Name(), c.Cache)
+			}
 		}
 
 	}
@@ -172,8 +195,17 @@ func New(path, cacheURL string, caching bool) (c *Cache, err error) {
 	}
 
 	for _, file := range files {
-		c.Cache = append(c.Cache, file.Name())
+		if !file.IsDir() && !strings.HasPrefix(file.Name(), imageTempPrefix) {
+			c.Cache = append(c.Cache, file.Name())
+		}
 	}
 
 	return
+}
+
+// Pending returns the queue length without racing with lookups or caching.
+func (c *Cache) Pending() int {
+	c.RLock()
+	defer c.RUnlock()
+	return len(c.Queue)
 }
