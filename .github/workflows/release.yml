@@ -189,7 +189,7 @@ jobs:
 
   docker_manifest:
     name: Create Docker Manifest (${{ matrix.variant }})
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     needs: docker
     strategy:
       matrix:
