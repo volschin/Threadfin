@@ -17,7 +17,7 @@ RUN CGO_ENABLED=0 GOARCH=$TARGETARCH go build -mod=vendor -ldflags="-s -w" -trim
 # -----------------------------------------------------------------------------
 ARG USE_NVIDIA
 FROM ubuntu:26.04 AS standard
-FROM nvidia/cuda:13.3.1-base-ubuntu26.04 AS nvidia
+FROM nvidia/cuda:13.4.3-base-ubuntu26.04 AS nvidia
 FROM standard AS final
 FROM nvidia AS final-nvidia
 
