@@ -216,7 +216,7 @@ func TestUIMappingNavigationGuardGeneratedFixture(t *testing.T) {
 }
 
 func TestUIMappingGeneratedDOMAccessibilityAndEditor(t *testing.T) {
-	output := runMappingNodeFixture(t, "mapping-dom", mappingDOMNodeScript, "mapping_state_ts.js", "mapping_ts.js", "navigation_ts.js")
+	output := runMappingNodeFixture(t, "mapping-dom", mappingDOMNodeScript, "mapping_state_ts.js", "mapping_ts.js", "navigation_ts.js", "network_ts.js")
 	var got struct {
 		PageText                 string `json:"pageText"`
 		EditorText               string `json:"editorText"`
@@ -615,6 +615,49 @@ for (const source of ["X1.xml","missing-guide.xml"]) {
  const retained = context.mappingWorkspaceState.draft.valid;
  if (retained["x-mapping"] !== "unavailable-channel" || retained["x-xmltv-file"] !== source || retained["x-active"] !== true) throw new Error("Unrelated editor change erased unavailable assignment or deactivated channel");
 }
+// Exercise the actual FIFO transport callback, Mapping completion and render
+// together. SERVER still contains the pre-save snapshot when completion starts.
+const integrationSockets = [], integrationTimers = [];
+class IntegrationWebSocket {
+ constructor() {this.readyState = IntegrationWebSocket.CONNECTING; this.sent = []; integrationSockets.push(this);}
+ send(value) {this.sent.push(JSON.parse(value));}
+ open() {this.readyState = IntegrationWebSocket.OPEN; this.onopen({});}
+ respond(response) {response.requestId = this.sent[this.sent.length - 1].requestId; this.onmessage({data:JSON.stringify(response)});}
+ close() {this.readyState = IntegrationWebSocket.CLOSED;}
+}
+IntegrationWebSocket.CONNECTING = 0; IntegrationWebSocket.OPEN = 1; IntegrationWebSocket.CLOSED = 3;
+context.WebSocket = IntegrationWebSocket; context.UNDO = {}; context.WS_AVAILABLE = false; context.SERVER_CONNECTION = false;
+context.setTimeout = function(callback,delay) {const timer = {callback,delay}; integrationTimers.push(timer); return timer;}; context.clearTimeout = function() {};
+context.window.location = {protocol:"http:",hostname:"127.0.0.1",port:"34400"}; context.location = {reload() {}};
+context.alert = function() {}; context.showElement = function() {}; context.createLayout = function() {};
+vm.runInContext(fs.readFileSync(process.argv[5],"utf8"),context);
+for (const outcome of ["outputsRebuilt","outputRebuildRequested","rebuildFailed","notPersisted"]) {
+ const before = JSON.parse(JSON.stringify(context.SERVER));
+ before.xepg.epgMapping.valid["x-name"] = "Original"; before.xepg.epgMapping.valid["x-mapping"] = "-"; before.xepg.epgMapping.valid["x-active"] = false;
+ context.SERVER = before; context.initializeMappingWorkspace(before,true); context.renderMappingPage(host);
+ context.mappingApplyChannelPatch(context.mappingWorkspaceState,["valid"],{"x-name":"Saved without reload","x-mapping":"guide-1","x-active":true});
+ context.saveMappingDraft(); const socket = integrationSockets[0]; if (socket.readyState === IntegrationWebSocket.CONNECTING) socket.open();
+ const submitted = socket.sent[socket.sent.length - 1].epgMapping;
+ const response = JSON.parse(JSON.stringify(before)); response.status = outcome !== "rebuildFailed" && outcome !== "notPersisted"; response.mappingSaveResult = outcome; response.err = "fixture rebuild failed";
+ response.xepg.epgMapping = outcome === "notPersisted" ? before.xepg.epgMapping : submitted;
+ socket.respond(response);
+ const final = context.mappingWorkspaceState;
+ if (final.draft.valid["x-name"] !== "Saved without reload" || final.draft.valid["x-mapping"] !== "guide-1" || final.draft.valid["x-active"] !== true) throw new Error("Mapping save response rendered stale SERVER snapshot: " + outcome);
+ if (outcome !== "notPersisted" && (context.mappingDirtyIDs(final).length !== 0 || !final.feedback.includes("Mapping saved"))) throw new Error("Persisted mapping feedback or clean state lost: " + outcome);
+ if (outcome === "notPersisted" && context.mappingDirtyIDs(final).length !== 1) throw new Error("Failed save lost mapping draft");
+ if (outcome === "outputsRebuilt" && !text(host).includes("outputs rebuilt")) throw new Error("Actual Mapping render lost confirmed rebuild feedback");
+}
+// A transport-ambiguous save uses the same publication ordering when the
+// authoritative refetch confirms persistence; it must not restore the old draft.
+const beforeRefetch = JSON.parse(JSON.stringify(context.SERVER)); beforeRefetch.xepg.epgMapping.valid["x-name"] = "Before refetch";
+context.SERVER = beforeRefetch; context.initializeMappingWorkspace(beforeRefetch,true);
+context.mappingApplyChannelPatch(context.mappingWorkspaceState,["valid"],{"x-name":"Confirmed by refetch"}); context.saveMappingDraft();
+const uncertainSubmitted = integrationSockets[0].sent[integrationSockets[0].sent.length - 1].epgMapping;
+integrationSockets[0].onerror({});
+const reconnect = integrationTimers.filter(timer => timer.delay === 250).pop(); reconnect.callback(); integrationSockets[1].open();
+const refetched = JSON.parse(JSON.stringify(beforeRefetch)); refetched.status = true; refetched.xepg.epgMapping = uncertainSubmitted;
+integrationSockets[1].respond(refetched);
+if (context.mappingWorkspaceState.draft.valid["x-name"] !== "Confirmed by refetch" || context.mappingDirtyIDs(context.mappingWorkspaceState).length !== 0 || !text(host).includes("Authoritative mapping reloaded")) throw new Error("Authoritative save refetch rendered stale mapping snapshot");
 process.stdout.write(JSON.stringify({pageText, editorText, selectAllLabel: selectAll.getAttribute("aria-label"), editorRole: editor.getAttribute("role"), editorLabelledBy: editor.getAttribute("aria-labelledby"), advancedInitially, advancedSearch, backupLists, saveFocus: save.focusCount, draftName: "Keyboard renamed", liveStatus: live.getAttribute("aria-live"), unloadPrevented: unload.prevented, unloadReturnValue: unload.returnValue, stayContinued, discardContinued, saveContinued, pendingSaveDisabled, pendingDiscardDisabled, pendingStayEnabled, pendingStayClosed, ambiguousStayClosed, typedSearch, searchFocused, searchCaret, filterFocused, selectAllFocused, keyboardSelected, keyboardFocused, pendingMutationsDisabled, pendingEditorBlocked, initialEditorFocus, nativeDrawer, shiftNativeDrawer, editorEscapeClosed, editorInvokerRestored, editorEscapeDraft, guardEscapeClosed, guardEscapeContinued, initialSort, toggledSort, sidebarReturnFocus, pendingReturnFocus, pendingSaveAvoided, ambiguousReturnFocus, removedReturnFocus, programmaticReturnFocus, historyReturnFocus, pmsText, pmsSettingsHash}));
 `
 

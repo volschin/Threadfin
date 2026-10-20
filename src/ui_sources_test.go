@@ -1214,7 +1214,7 @@ const nonSourceLabel = modal.getAttribute("aria-labelledby") || "";
 const invoker = new Element("button");
 invoker.setAttribute("data-source-focus-key", "m3u:M1:edit");
 context.enhanceSourcePopup("playlist");
-modal.classList.add("show");
+modal.open = true;
 context.openPopUp = function(kind) { popupKind = kind; context.enhanceSourcePopup(kind); };
 const focusBeforeTransition = name.focusCount;
 context.openSourcePopup("m3u", undefined, invoker);

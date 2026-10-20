@@ -304,7 +304,7 @@ function focusSourcePopupFirstControl() {
     }
 }
 function focusRenderedSourcePopup(modal) {
-    if (modal && modal.classList.contains("show")) {
+    if (modal && modal.open) {
         window.setTimeout(focusSourcePopupFirstControl, 0);
     }
 }

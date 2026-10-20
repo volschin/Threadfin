@@ -8171,6 +8171,12 @@ function mappingResponseAuthoritative(response) {
   var present = Object.prototype.hasOwnProperty.call(xepg, "epgMapping");
   return { present, mapping: mappingRecord(xepg.epgMapping), xmltvMap: mappingRecord(xepg.xmltvMap) };
 }
+function publishMappingAuthoritativeResponse(authoritative) {
+  SERVER["xepg"] = Object.assign({}, mappingRecord(SERVER["xepg"]), {
+    epgMapping: mappingDeepClone(authoritative.mapping),
+    xmltvMap: mappingDeepClone(authoritative.xmltvMap)
+  });
+}
 function completeMappingRequest(command, data, response, failureKind) {
   if (command == "probeChannel") {
     completeMappingProbe(response);
@@ -8179,6 +8185,7 @@ function completeMappingRequest(command, data, response, failureKind) {
   if (command == "getServerConfig" && mappingWorkspaceState && mappingWorkspaceState.saveState == "ambiguous") {
     var refetched = mappingResponseAuthoritative(response);
     if (mappingRecord(response).status === true && refetched.present) {
+      publishMappingAuthoritativeResponse(refetched);
       mappingWorkspaceState.xmltvMap = mappingDeepClone(refetched.xmltvMap);
       mappingReconcileAuthoritative(mappingWorkspaceState, refetched.mapping, mappingRecord(data).epgMapping, false);
       mappingWorkspaceState.saveState = "idle";
@@ -8213,6 +8220,7 @@ function completeMappingRequest(command, data, response, failureKind) {
     renderMappingWorkspaceIfOpen();
     return;
   }
+  publishMappingAuthoritativeResponse(authoritative);
   mappingWorkspaceState.xmltvMap = mappingDeepClone(authoritative.xmltvMap);
   var reconciliation = mappingReconcileAuthoritative(mappingWorkspaceState, authoritative.mapping, mappingRecord(data).epgMapping, root.status === true);
   mappingWorkspaceState.saveState = "idle";
@@ -8532,6 +8540,29 @@ function renderMappingFilters() {
     { value: "hidden", label: "Hidden from outputs" },
     { value: "inactive", label: "Inactive" }
   ], mappingString(mappingCurrentQuery.reason)));
+  var sortField = document.createElement("label");
+  sortField.className = "form-field";
+  sortField.textContent = "Sort by";
+  var sortSelect = document.createElement("select");
+  sortSelect.setAttribute("data-mapping-focus", "sort-order");
+  [["number", "Channel"], ["name", "Name"], ["playlist", "Playlist"], ["group", "Group"], ["xmltv", "XMLTV / guide"]].forEach(function(entry) {
+    ;
+    ["asc", "desc"].forEach(function(direction) {
+      var option = document.createElement("option");
+      option.value = entry[0] + ":" + direction;
+      option.textContent = entry[1] + (direction == "asc" ? " (ascending)" : " (descending)");
+      sortSelect.appendChild(option);
+    });
+  });
+  sortSelect.value = (mappingCurrentQuery.sort || "number") + (mappingCurrentQuery.descending ? ":desc" : ":asc");
+  sortSelect.addEventListener("change", function() {
+    var order = sortSelect.value.split(":");
+    mappingCurrentQuery.sort = order[0];
+    mappingCurrentQuery.descending = order[1] == "desc";
+    renderMappingWorkspaceIfOpen();
+  });
+  sortField.appendChild(sortSelect);
+  region.appendChild(sortField);
   region.appendChild(renderMappingFilterChips());
   return region;
 }
@@ -8657,6 +8688,27 @@ function renderMappingCounts(rows) {
   counts.textContent = rows.length + " results \xB7 " + mappingWorkspaceState.selected.size + " selected (" + mappingSelectedVisibleCount(mappingWorkspaceState, rows.map(function(row) {
     return row.id;
   })) + " in results)";
+  var selection = document.createElement("label");
+  selection.className = "tf-mapping-select-results";
+  var all = document.createElement("input");
+  all.type = "checkbox";
+  all.setAttribute("aria-label", "Select all visible channels");
+  all.setAttribute("data-mapping-focus", "select-all-visible");
+  var selected = mappingSelectedVisibleCount(mappingWorkspaceState, rows.map(function(row) {
+    return row.id;
+  }));
+  all.checked = rows.length > 0 && selected == rows.length;
+  all.indeterminate = selected > 0 && selected < rows.length;
+  all.disabled = rows.length == 0;
+  all.addEventListener("change", function() {
+    mappingSelectVisible(mappingWorkspaceState, rows.map(function(row) {
+      return row.id;
+    }), all.checked);
+    renderMappingWorkspaceIfOpen();
+  });
+  selection.appendChild(all);
+  selection.appendChild(document.createTextNode("Select results"));
+  counts.appendChild(selection);
   return counts;
 }
 function renderMappingBulkBar(rows) {
@@ -8714,28 +8766,16 @@ function renderMappingTable(rows) {
     return empty;
   }
   var scroll = document.createElement("div");
-  scroll.className = "tf-mapping-table-scroll";
+  scroll.className = "table-responsive tf-mapping-table-scroll";
   var table = document.createElement("table");
-  table.className = "tf-mapping-table";
+  table.className = "table lg:table-stacked tf-mapping-table";
   var caption = document.createElement("caption");
   caption.textContent = "Mapping channels";
   table.appendChild(caption);
   var head = document.createElement("thead"), header = document.createElement("tr");
   var selection = document.createElement("th");
-  var all = document.createElement("input");
-  all.type = "checkbox";
-  all.setAttribute("aria-label", "Select all visible channels");
-  all.setAttribute("data-mapping-focus", "select-all-visible");
-  all.checked = rows.length > 0 && mappingSelectedVisibleCount(mappingWorkspaceState, rows.map(function(row) {
-    return row.id;
-  })) == rows.length;
-  all.addEventListener("change", function() {
-    mappingSelectVisible(mappingWorkspaceState, rows.map(function(row) {
-      return row.id;
-    }), all.checked);
-    renderMappingWorkspaceIfOpen();
-  });
-  selection.appendChild(all);
+  selection.scope = "col";
+  selection.textContent = "Selection";
   header.appendChild(selection);
   [["number", "Channel"], ["name", "Name"], ["playlist", "Playlist"], ["group", "Group"], ["xmltv", "XMLTV / guide"], ["", "State"], ["", "Actions"]].forEach(function(entry) {
     var th = document.createElement("th");
@@ -8752,6 +8792,7 @@ function renderMappingTable(rows) {
         renderMappingWorkspaceIfOpen();
       });
       button.setAttribute("data-mapping-focus", "sort-" + sort);
+      button.setAttribute("tabindex", "-1");
       if ((mappingCurrentQuery.sort || "number") == sort)
         th.setAttribute("aria-sort", mappingCurrentQuery.descending ? "descending" : "ascending");
       th.appendChild(button);
@@ -8805,6 +8846,10 @@ function renderMappingRow(row, visibleRows) {
   edit.disabled = mappingDraftIsLocked(mappingWorkspaceState);
   action.appendChild(edit);
   tr.appendChild(action);
+  var cellLabels = ["Selection", "Channel", "Name", "Playlist", "Group", "XMLTV / guide", "State", "Actions"];
+  Array.prototype.forEach.call(tr.children, function(cell, index) {
+    cell.setAttribute("data-cell", cellLabels[index]);
+  });
   return tr;
 }
 function mappingAppendCell(row, value) {
@@ -9486,7 +9531,7 @@ function focusSourcePopupFirstControl() {
   }
 }
 function focusRenderedSourcePopup(modal) {
-  if (modal && modal.classList.contains("show")) {
+  if (modal && modal.open) {
     window.setTimeout(focusSourcePopupFirstControl, 0);
   }
 }

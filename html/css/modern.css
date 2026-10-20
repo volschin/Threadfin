@@ -49,11 +49,11 @@ a { color: var(--tf-cyan); }
 .tf-mapping-editor .menu-item { min-height: 2.75rem; white-space: normal; }
 .tf-mapping-guard.dialog { inset: 0; padding: 1.5rem; max-width: min(32rem, 95vw); }
 :focus-visible { outline: 3px solid var(--tf-cyan); outline-offset: 3px; }
-@media (min-width: 992px) {
+@media (min-width: 768px) {
   .tf-app .tf-navigation { display: flex; }
   .tf-app .tf-nav-toggle { display: none; }
 }
-@media (max-width: 991.98px) {
+@media (width < 768px) {
   .tf-app { grid-template-columns: minmax(0, 1fr); }
   .tf-app .tf-sidebar { height: auto; position: sticky; padding: .5rem 1rem; }
   .tf-app .tf-sidebar-toggle { display: none; }
@@ -78,3 +78,27 @@ a { color: var(--tf-cyan); }
 }
 
 .tf-app .tf-navigation-drawer { border: 0; padding: 0; background: var(--bs-bg-1); color: var(--bs-fg-body); }
+/* Bootstrap's container-based stacked rows keep actions on screen, including
+   when the desktop master/detail panel narrows the Mapping workspace. */
+@container (width < 1024px) {
+  .tf-app .tf-mapping-table { min-width: 0; }
+  .tf-app .tf-mapping-table tbody { display: block; }
+  .tf-app .tf-mapping-table td { width: auto; max-width: none; border: 0; overflow-wrap: anywhere; }
+  .tf-app .tf-mapping-table td[data-cell="Name"] { font-size: 1.1rem; font-weight: 700; }
+  .tf-app .tf-mapping-table td[data-cell="Actions"] button { width: 100%; }
+}
+
+@media (min-width: 768px) {
+  .tf-app.tf-sidebar-collapsed .tf-theme-control { width: 100%; min-width: 0; padding-inline: .2rem; font-size: .75rem; }
+}
+@media (min-width: 768px) and (max-width: 1200px) {
+  .tf-app .tf-navigation-item, .tf-app .tf-sidebar-toggle { min-height: 44px; min-inline-size: 44px; }
+}
+@media (min-width: 1536px) {
+  .tf-app.tf-sidebar-collapsed:has(#mapping-editor) { grid-template-columns: var(--tf-sidebar-rail-width) minmax(0, 1fr) minmax(24rem, 34rem); }
+}
+@media (width < 1200px) {
+  .tf-app .tf-theme-control, .tf-app .tf-mapping :is(button, input, select), .tf-mapping-editor :is(button, input, select) { min-height: 44px; min-inline-size: 44px; }
+}
+.tf-mapping-select-results { display: inline-flex; align-items: center; gap: .5rem; margin-inline-start: 1rem; }
+.tf-mapping-select-results input { accent-color: var(--tf-cyan); }

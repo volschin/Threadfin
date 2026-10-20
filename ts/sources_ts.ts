@@ -359,7 +359,7 @@ function focusSourcePopupFirstControl(): void {
 }
 
 function focusRenderedSourcePopup(modal: HTMLElement): void {
-  if (modal && modal.classList.contains("show")) {
+  if (modal && (modal as HTMLDialogElement).open) {
     window.setTimeout(focusSourcePopupFirstControl, 0)
   }
 }
