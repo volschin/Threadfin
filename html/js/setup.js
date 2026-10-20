@@ -6101,7 +6101,8 @@ var PopupContent = class extends PopupWindow {
     return select;
   }
   description(value, repositoryTemplate = false) {
-    var span = document.createElement("PRE");
+    var span = document.createElement("div");
+    span.className = "tf-field-help";
     if (repositoryTemplate) {
       appendDescriptionText(span, value);
     } else {
@@ -6950,9 +6951,10 @@ var SettingsCategory = class {
     var tdLeft = document.createElement("TD");
     tdLeft.innerHTML = "";
     var tdRight = document.createElement("TD");
-    var pre = document.createElement("PRE");
-    pre.innerHTML = text;
-    tdRight.appendChild(pre);
+    var help = document.createElement("div");
+    help.className = "tf-field-help";
+    help.innerHTML = text;
+    tdRight.appendChild(help);
     description.appendChild(tdLeft);
     description.appendChild(tdRight);
     return description;

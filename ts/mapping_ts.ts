@@ -610,7 +610,9 @@ function renderMappingRow(row: MappingRow, visibleRows: MappingRow[]): HTMLEleme
   mappingAppendCell(tr, mappingString(row.channel["x-name"] || row.channel["tvg-name"] || row.id))
   mappingAppendCell(tr, mappingProviderLabel("_file.m3u.id", mappingString(row.channel["_file.m3u.id"])))
   mappingAppendCell(tr, mappingString(row.channel["x-group-title"] || row.channel["group-title"]))
-  mappingAppendCell(tr, mappingProviderLabel("x-xmltv-file", mappingString(row.channel["x-xmltv-file"])) + " · " + mappingString(row.channel["x-mapping"]))
+  var guide = document.createElement("td")
+  guide.appendChild(document.createTextNode(mappingProviderLabel("x-xmltv-file", mappingString(row.channel["x-xmltv-file"])) + " · "))
+  var guideID = document.createElement("code"); guideID.textContent = mappingString(row.channel["x-mapping"]); guide.appendChild(guideID); tr.appendChild(guide)
   var state = document.createElement("td")
   state.className = "tf-mapping-state"
   state.textContent = row.reasons.length ? row.reasons.map(mappingAttentionReasonLabel).join(" · ") : "Active"

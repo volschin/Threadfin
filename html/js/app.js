@@ -6742,7 +6742,8 @@ var PopupContent = class extends PopupWindow {
     return select;
   }
   description(value, repositoryTemplate = false) {
-    var span = document.createElement("PRE");
+    var span = document.createElement("div");
+    span.className = "tf-field-help";
     if (repositoryTemplate) {
       appendDescriptionText(span, value);
     } else {
@@ -7218,7 +7219,8 @@ function openPopUp(dataType, element) {
         input.setAttribute("readonly", "true");
       }
       content.appendRow("{{.mapping.channelName.title}}", input);
-      var mappingDescription = document.createElement("PRE");
+      var mappingDescription = document.createElement("div");
+      mappingDescription.className = "tf-technical-value";
       var mappingTvgID = document.createElement("SPAN");
       mappingTvgID.className = "text-danger";
       mappingTvgID.textContent = data["tvg-id"];
@@ -8830,7 +8832,12 @@ function renderMappingRow(row, visibleRows) {
   mappingAppendCell(tr, mappingString(row.channel["x-name"] || row.channel["tvg-name"] || row.id));
   mappingAppendCell(tr, mappingProviderLabel("_file.m3u.id", mappingString(row.channel["_file.m3u.id"])));
   mappingAppendCell(tr, mappingString(row.channel["x-group-title"] || row.channel["group-title"]));
-  mappingAppendCell(tr, mappingProviderLabel("x-xmltv-file", mappingString(row.channel["x-xmltv-file"])) + " \xB7 " + mappingString(row.channel["x-mapping"]));
+  var guide = document.createElement("td");
+  guide.appendChild(document.createTextNode(mappingProviderLabel("x-xmltv-file", mappingString(row.channel["x-xmltv-file"])) + " \xB7 "));
+  var guideID = document.createElement("code");
+  guideID.textContent = mappingString(row.channel["x-mapping"]);
+  guide.appendChild(guideID);
+  tr.appendChild(guide);
   var state = document.createElement("td");
   state.className = "tf-mapping-state";
   state.textContent = row.reasons.length ? row.reasons.map(mappingAttentionReasonLabel).join(" \xB7 ") : "Active";
@@ -11563,9 +11570,10 @@ var SettingsCategory = class {
     var tdLeft = document.createElement("TD");
     tdLeft.innerHTML = "";
     var tdRight = document.createElement("TD");
-    var pre = document.createElement("PRE");
-    pre.innerHTML = text;
-    tdRight.appendChild(pre);
+    var help = document.createElement("div");
+    help.className = "tf-field-help";
+    help.innerHTML = text;
+    tdRight.appendChild(help);
     description.appendChild(tdLeft);
     description.appendChild(tdRight);
     return description;

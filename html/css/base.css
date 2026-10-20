@@ -86,7 +86,7 @@ pre {
   color: #ddd;
   letter-spacing: 1px;
   white-space: pre-wrap;
-  font-family: monospace;
+  font-family: var(--bs-font-mono);
   font-size: 12px;
   font-style: normal;
   font-variant: normal;

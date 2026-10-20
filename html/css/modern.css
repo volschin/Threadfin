@@ -102,3 +102,36 @@ a { color: var(--tf-cyan); }
 }
 .tf-mapping-select-results { display: inline-flex; align-items: center; gap: .5rem; margin-inline-start: 1rem; }
 .tf-mapping-select-results input { accent-color: var(--tf-cyan); }
+
+/* Form explanations are prose, independent of the legacy dialog renderer.
+   Preserve intentional line breaks without preformatted type or spacing. */
+.tf-field-help {
+  margin: 0;
+  color: var(--tf-text-muted);
+  font: inherit;
+  font-weight: 400;
+  line-height: 1.5;
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+}
+/* Six pixels of outer focus indicator must fit between adjacent dialog rows. */
+#popup table { border-collapse: separate; border-spacing: 0 .5rem; }
+:is(input, select, textarea, .combobox-toggle):focus-visible {
+  position: relative;
+  z-index: 1;
+}
+/* Monospace denotes literal machine input/output, never surrounding prose.
+   Select by stable field names: legacy change tracking replaces className. */
+:is(code, kbd, samp, .tf-technical-value),
+input:is([name="file.source"], [name="http_proxy.ip"], [name="http_proxy.port"],
+  [name="http_headers.origin"], [name="http_headers.referer"],
+  [name="backup.path"], [name="temp.path"], [name="ffmpeg.path"], [name="ffmpeg.options"],
+  [name="vlc.path"], [name="vlc.options"], [name="user.agent"], [name="udpxy"],
+  [name="bindIpAddress"], [name="httpThreadfinDomain"], [name="httpsThreadfinDomain"],
+  [name="epgCategories"], [name="epgCategoriesColors"], [name="tvg-logo"]) {
+  font-family: var(--bs-font-mono);
+  font-weight: 400;
+  letter-spacing: normal;
+}
+
+.tf-mapping-editor-field :is(input, select, .combobox-toggle) { font-weight: 400; }

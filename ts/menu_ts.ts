@@ -268,7 +268,8 @@ class PopupContent extends PopupWindow {
   }
 
   description(value: string, repositoryTemplate: boolean = false): any {
-    var span = document.createElement("PRE")
+    var span = document.createElement("div")
+    span.className = "tf-field-help"
     if (repositoryTemplate) {
       appendDescriptionText(span, value)
     } else {
@@ -915,7 +916,8 @@ function openPopUp(dataType, element) {
         input.setAttribute("readonly", "true")
       }
       content.appendRow("{{.mapping.channelName.title}}", input)
-      var mappingDescription = document.createElement("PRE")
+      var mappingDescription = document.createElement("div")
+      mappingDescription.className = "tf-technical-value"
       var mappingTvgID = document.createElement("SPAN")
       mappingTvgID.className = "text-danger"
       mappingTvgID.textContent = data["tvg-id"]

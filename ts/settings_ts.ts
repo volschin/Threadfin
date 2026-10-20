@@ -790,9 +790,10 @@ class SettingsCategory {
     tdLeft.innerHTML = ""
 
     var tdRight = document.createElement("TD")
-    var pre = document.createElement("PRE")
-    pre.innerHTML = text
-    tdRight.appendChild(pre)
+    var help = document.createElement("div")
+    help.className = "tf-field-help"
+    help.innerHTML = text
+    tdRight.appendChild(help)
 
     description.appendChild(tdLeft)
     description.appendChild(tdRight)

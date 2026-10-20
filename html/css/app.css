@@ -178,7 +178,7 @@ nav p {
 #clientInfo,
 #activeStreams,
 #inactiveStreams {
-  font-family: monospace;
+  font-family: var(--bs-body-font-family);
   display: block;
   font-size: 12px;
   color: #00E6FF;
@@ -406,7 +406,7 @@ tbody {
   font-family: "Arial", sans-serif;
   */
   letter-spacing: 1px;
-  font-family: monospace;
+  font-family: var(--bs-font-mono);
   font-size: 12px;
   font-style: normal;
   font-variant: normal;
@@ -897,7 +897,7 @@ pre {
   color: #ddd;
   letter-spacing: 1px;
   white-space: pre-wrap;
-  font-family: monospace;
+  font-family: var(--bs-font-mono);
   font-size: 12px;
   font-style: normal;
   font-variant: normal;
@@ -1277,7 +1277,7 @@ table {
   grid-template-columns: var(--tf-sidebar-width) minmax(0, 1fr);
   color: var(--tf-text);
   background: var(--tf-signal-black);
-  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-family: var(--bs-body-font-family);
 }
 
 .tf-app .tf-sidebar {
@@ -1606,7 +1606,7 @@ table {
 }
 
 .tf-app .tf-signal-stage-summary {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-variant-numeric: tabular-nums;
   font-weight: 700;
 }
 
@@ -1675,7 +1675,7 @@ table {
 
 .tf-app .tf-overview-metrics dd {
   margin: 0.25rem 0 0;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-variant-numeric: tabular-nums;
   font-size: 1.25rem;
   font-weight: 700;
   letter-spacing: normal;
@@ -1719,10 +1719,6 @@ table {
 
 .tf-app .tf-source-state[data-status="unavailable"] {
   border-left-color: var(--tf-fault-red);
-}
-
-.tf-app .tf-source-state-kind {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
 
 .tf-app .tf-overview-status {
@@ -1845,7 +1841,7 @@ table {
 
 .tf-app .tf-activity-capacity :is(#playlist-connection-information, #client-connection-information) {
   color: var(--tf-text);
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-variant-numeric: tabular-nums;
   font-size: 1.1rem;
   font-weight: 700;
 }
@@ -2214,7 +2210,6 @@ table {
 }
 
 .tf-app .tf-source-type {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 0.8rem;
   font-weight: 700;
 }
@@ -2247,7 +2242,7 @@ table {
 
 .tf-app .tf-source-counts dd {
   margin: 0.2rem 0 0;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-variant-numeric: tabular-nums;
   font-weight: 700;
 }
 
@@ -2348,7 +2343,7 @@ table {
 
 .tf-app .tf-filter-counts dd {
   margin: 0.25rem 0 0;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-variant-numeric: tabular-nums;
   font-size: 1.5rem;
   font-weight: 700;
 }
@@ -2473,7 +2468,7 @@ table {
   margin: 0;
   color: var(--tf-text);
   background: var(--tf-signal-black);
-  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-family: var(--bs-body-font-family);
 }
 
 .tf-setup {
@@ -2730,7 +2725,7 @@ table {
   border-radius: 0.375rem;
 }
 
-.tf-app .tf-settings-table pre {
+.tf-app .tf-settings-table .tf-field-help {
   margin: 0;
   color: var(--tf-text-muted);
   font: inherit;
@@ -2768,7 +2763,6 @@ table {
 
 .tf-app .tf-permission-guide dt {
   color: var(--tf-cyan);
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
 
 .tf-app .tf-permission-guide dd {
@@ -2930,7 +2924,7 @@ table {
 .tf-app .tf-log-entry pre {
   margin: 0;
   color: var(--tf-text);
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-family: var(--bs-font-mono);
   letter-spacing: normal;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
@@ -2940,7 +2934,6 @@ table {
   align-self: start;
   padding: 0.15rem 0.4rem;
   color: var(--tf-signal-black);
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 0.75rem;
   background: var(--tf-cyan);
   border-radius: 0.25rem;
@@ -2965,7 +2958,7 @@ table {
   min-height: 100%;
   color: var(--tf-text);
   background: var(--tf-signal-black);
-  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-family: var(--bs-body-font-family);
   letter-spacing: normal;
 }
 
@@ -3385,6 +3378,39 @@ a { color: var(--tf-cyan); }
 }
 .tf-mapping-select-results { display: inline-flex; align-items: center; gap: .5rem; margin-inline-start: 1rem; }
 .tf-mapping-select-results input { accent-color: var(--tf-cyan); }
+
+/* Form explanations are prose, independent of the legacy dialog renderer.
+   Preserve intentional line breaks without preformatted type or spacing. */
+.tf-field-help {
+  margin: 0;
+  color: var(--tf-text-muted);
+  font: inherit;
+  font-weight: 400;
+  line-height: 1.5;
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+}
+/* Six pixels of outer focus indicator must fit between adjacent dialog rows. */
+#popup table { border-collapse: separate; border-spacing: 0 .5rem; }
+:is(input, select, textarea, .combobox-toggle):focus-visible {
+  position: relative;
+  z-index: 1;
+}
+/* Monospace denotes literal machine input/output, never surrounding prose.
+   Select by stable field names: legacy change tracking replaces className. */
+:is(code, kbd, samp, .tf-technical-value),
+input:is([name="file.source"], [name="http_proxy.ip"], [name="http_proxy.port"],
+  [name="http_headers.origin"], [name="http_headers.referer"],
+  [name="backup.path"], [name="temp.path"], [name="ffmpeg.path"], [name="ffmpeg.options"],
+  [name="vlc.path"], [name="vlc.options"], [name="user.agent"], [name="udpxy"],
+  [name="bindIpAddress"], [name="httpThreadfinDomain"], [name="httpsThreadfinDomain"],
+  [name="epgCategories"], [name="epgCategoriesColors"], [name="tvg-logo"]) {
+  font-family: var(--bs-font-mono);
+  font-weight: 400;
+  letter-spacing: normal;
+}
+
+.tf-mapping-editor-field :is(input, select, .combobox-toggle) { font-weight: 400; }
 
 }
 /* The alpha emits component variable defaults outside layers. Configure only
