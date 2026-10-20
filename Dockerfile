@@ -22,8 +22,8 @@ FROM binary${USE_PREBUILT:+-prebuilt} AS binary-final
 # Second stage. Creating a minimal image
 # -----------------------------------------------------------------------------
 ARG USE_NVIDIA
-FROM ubuntu:24.04 AS standard
-ENV OS_CODENAME=noble
+FROM ubuntu:26.04 AS standard
+ENV OS_CODENAME=resolute
 FROM nvidia/cuda:13.4.3-base-ubuntu26.04 AS nvidia
 ENV OS_CODENAME=resolute
 FROM standard AS final
