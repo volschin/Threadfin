@@ -77,7 +77,6 @@ RUN apt-get update && \
     apt-get install -y --no-install-recommends \
     ca-certificates \
     curl \
-    ffmpeg \
     vlc \
     tzdata \
     gnupg \
@@ -94,7 +93,9 @@ RUN apt-get update && \
     fi) && \
     apt-get update && \
     apt-get install --no-install-recommends --no-install-suggests --yes \
-        jellyfin-ffmpeg7 && \
+        jellyfin-ffmpeg8 && \
+    ln -s /usr/lib/jellyfin-ffmpeg/ffmpeg /usr/bin/ffmpeg && \
+    ln -s /usr/lib/jellyfin-ffmpeg/ffprobe /usr/bin/ffprobe && \
     apt-get remove gnupg apt-transport-https --yes  && \
     apt-get clean autoclean --yes && \
     apt-get autoremove --yes && \

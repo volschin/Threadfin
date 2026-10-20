@@ -473,7 +473,8 @@ func buildM3U(groups []string) (m3u string, err error) {
 func probeChannel(request RequestStruct) (string, string, string, error) {
 
 	ffmpegPath := Settings.FFmpegPath
-	ffprobePath := strings.Replace(ffmpegPath, "ffmpeg", "ffprobe", 1)
+	dir, name := filepath.Split(ffmpegPath)
+	ffprobePath := dir + strings.Replace(name, "ffmpeg", "ffprobe", 1)
 
 	cmd := exec.Command(ffprobePath, "-v", "error", "-show_streams", "-of", "json", request.ProbeURL)
 	output, err := cmd.Output()
