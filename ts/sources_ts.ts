@@ -329,7 +329,7 @@ function openSourcePopup(dataType: string, element: any, invoker: HTMLElement): 
   }
   if (modal && !sourcePopupFocusListenerAttached) {
     sourcePopupFocusListenerAttached = true
-    modal.addEventListener("hidden.bs.modal", function () {
+    modal.addEventListener("hidden.bs.dialog", function () {
       var focusTarget = sourcePopupInvoker && document.contains(sourcePopupInvoker) ? sourcePopupInvoker : sourcePopupReplacement(sourcePopupFocusKey)
       if (focusTarget) {
         focusTarget.focus()
@@ -340,7 +340,7 @@ function openSourcePopup(dataType: string, element: any, invoker: HTMLElement): 
   }
   if (modal && !sourcePopupShownListenerAttached) {
     sourcePopupShownListenerAttached = true
-    modal.addEventListener("shown.bs.modal", function () {
+    modal.addEventListener("shown.bs.dialog", function () {
       focusSourcePopupFirstControl()
     })
   }

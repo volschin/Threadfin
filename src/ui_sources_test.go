@@ -787,7 +787,7 @@ func TestSourceUIIntegrationAndWizardMarkup(t *testing.T) {
 		t.Fatal("existing source popups are missing shared guidance/field validation")
 	}
 	sources := readUITypeScript(t, "sources_ts.ts")
-	for _, contract := range []string{`modal.setAttribute("role", "dialog")`, `modal.setAttribute("aria-modal", "true")`, `modal.setAttribute("aria-labelledby", title.id)`, `modal.addEventListener("shown.bs.modal"`, `firstControl.focus()`} {
+	for _, contract := range []string{`modal.setAttribute("role", "dialog")`, `modal.setAttribute("aria-modal", "true")`, `modal.setAttribute("aria-labelledby", title.id)`, `modal.addEventListener("shown.bs.dialog"`, `firstControl.focus()`} {
 		if !strings.Contains(sources, contract) {
 			t.Errorf("source popup accessibility contract is missing %q", contract)
 		}
@@ -800,20 +800,13 @@ func TestSourceUIIntegrationAndWizardMarkup(t *testing.T) {
 		t.Fatal("successful wizard completion does not use the Overview completion route")
 	}
 
-	index, err := os.ReadFile(filepath.Join("..", "html", "index.html"))
-	if err != nil {
-		t.Fatal(err)
-	}
+	assertUIBundleControllers(t, "index.html", "app", "sources")
+	assertUIBundleControllers(t, "configuration.html", "setup", "sources")
 	configuration, err := os.ReadFile(filepath.Join("..", "html", "configuration.html"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	for name, content := range map[string]string{"index": string(index), "configuration": string(configuration)} {
-		if !strings.Contains(content, `src="js/sources_ts.js"`) {
-			t.Errorf("%s page does not load the shared source module", name)
-		}
-	}
-	for _, fragment := range []string{`class="tf-setup"`, `id="wizard-progress"`, `id="wizard-request-status"`, `href="css/app-shell.css"`} {
+	for _, fragment := range []string{`class="tf-setup"`, `id="wizard-progress"`, `id="wizard-request-status"`, `href="css/app.css"`} {
 		if !strings.Contains(string(configuration), fragment) {
 			t.Errorf("configuration wizard is missing %s", fragment)
 		}
@@ -1226,10 +1219,10 @@ context.openPopUp = function(kind) { popupKind = kind; context.enhanceSourcePopu
 const focusBeforeTransition = name.focusCount;
 context.openSourcePopup("m3u", undefined, invoker);
 const transitionFocusCount = name.focusCount - focusBeforeTransition;
-modal.listeners["hidden.bs.modal"]();
+modal.listeners["hidden.bs.dialog"]();
 invokerConnected = false;
 context.openSourcePopup("m3u", undefined, invoker);
-modal.listeners["hidden.bs.modal"]();
+modal.listeners["hidden.bs.dialog"]();
 process.stdout.write(JSON.stringify({
   valid,
   values: {name: name.value, source: source.value},

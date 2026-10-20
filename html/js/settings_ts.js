@@ -24,7 +24,7 @@ class SettingsCategory {
                 var tdRight = document.createElement("TD");
                 var input = content.createInput("text", "update", data.toString());
                 input.setAttribute("placeholder", "{{.settings.update.placeholder}}");
-                input.setAttribute("onchange", "javascript: this.className = 'changed'");
+                addRuntimeEventListener(input, "change", (event) => { event.currentTarget.className = "changed"; });
                 tdRight.appendChild(input);
                 setting.appendChild(tdLeft);
                 setting.appendChild(tdRight);
@@ -35,7 +35,7 @@ class SettingsCategory {
                 var tdRight = document.createElement("TD");
                 var input = content.createInput("text", "backup.path", data);
                 input.setAttribute("placeholder", "{{.settings.backupPath.placeholder}}");
-                input.setAttribute("onchange", "javascript: this.className = 'changed'");
+                addRuntimeEventListener(input, "change", (event) => { event.currentTarget.className = "changed"; });
                 tdRight.appendChild(input);
                 setting.appendChild(tdLeft);
                 setting.appendChild(tdRight);
@@ -46,7 +46,7 @@ class SettingsCategory {
                 var tdRight = document.createElement("TD");
                 var input = content.createInput("text", "temp.path", data);
                 input.setAttribute("placeholder", "{{.settings.tmpPath.placeholder}}");
-                input.setAttribute("onchange", "javascript: this.className = 'changed'");
+                addRuntimeEventListener(input, "change", (event) => { event.currentTarget.className = "changed"; });
                 tdRight.appendChild(input);
                 setting.appendChild(tdLeft);
                 setting.appendChild(tdRight);
@@ -57,7 +57,7 @@ class SettingsCategory {
                 var tdRight = document.createElement("TD");
                 var input = content.createInput("text", "user.agent", data);
                 input.setAttribute("placeholder", "{{.settings.userAgent.placeholder}}");
-                input.setAttribute("onchange", "javascript: this.className = 'changed'");
+                addRuntimeEventListener(input, "change", (event) => { event.currentTarget.className = "changed"; });
                 tdRight.appendChild(input);
                 setting.appendChild(tdLeft);
                 setting.appendChild(tdRight);
@@ -68,7 +68,7 @@ class SettingsCategory {
                 var tdRight = document.createElement("TD");
                 var input = content.createInput("text", "buffer.timeout", data);
                 input.setAttribute("placeholder", "{{.settings.bufferTimeout.placeholder}}");
-                input.setAttribute("onchange", "javascript: this.className = 'changed'");
+                addRuntimeEventListener(input, "change", (event) => { event.currentTarget.className = "changed"; });
                 tdRight.appendChild(input);
                 setting.appendChild(tdLeft);
                 setting.appendChild(tdRight);
@@ -79,7 +79,7 @@ class SettingsCategory {
                 var tdRight = document.createElement("TD");
                 var input = content.createInput("text", "ffmpeg.path", data);
                 input.setAttribute("placeholder", "{{.settings.ffmpegPath.placeholder}}");
-                input.setAttribute("onchange", "javascript: this.className = 'changed'");
+                addRuntimeEventListener(input, "change", (event) => { event.currentTarget.className = "changed"; });
                 tdRight.appendChild(input);
                 setting.appendChild(tdLeft);
                 setting.appendChild(tdRight);
@@ -90,7 +90,7 @@ class SettingsCategory {
                 var tdRight = document.createElement("TD");
                 var input = content.createInput("text", "ffmpeg.options", data);
                 input.setAttribute("placeholder", "{{.settings.ffmpegOptions.placeholder}}");
-                input.setAttribute("onchange", "javascript: this.className = 'changed'");
+                addRuntimeEventListener(input, "change", (event) => { event.currentTarget.className = "changed"; });
                 tdRight.appendChild(input);
                 setting.appendChild(tdLeft);
                 setting.appendChild(tdRight);
@@ -101,7 +101,7 @@ class SettingsCategory {
                 var tdRight = document.createElement("TD");
                 var input = content.createCheckbox(settingsKey);
                 input.checked = data;
-                input.setAttribute("onchange", "javascript: this.className = 'changed'");
+                addRuntimeEventListener(input, "change", (event) => { event.currentTarget.className = "changed"; });
                 tdRight.appendChild(input);
                 setting.appendChild(tdLeft);
                 setting.appendChild(tdRight);
@@ -112,7 +112,7 @@ class SettingsCategory {
                 var tdRight = document.createElement("TD");
                 var input = content.createInput("text", "vlc.path", data);
                 input.setAttribute("placeholder", "{{.settings.vlcPath.placeholder}}");
-                input.setAttribute("onchange", "javascript: this.className = 'changed'");
+                addRuntimeEventListener(input, "change", (event) => { event.currentTarget.className = "changed"; });
                 tdRight.appendChild(input);
                 setting.appendChild(tdLeft);
                 setting.appendChild(tdRight);
@@ -123,7 +123,7 @@ class SettingsCategory {
                 var tdRight = document.createElement("TD");
                 var input = content.createInput("text", "vlc.options", data);
                 input.setAttribute("placeholder", "{{.settings.vlcOptions.placeholder}}");
-                input.setAttribute("onchange", "javascript: this.className = 'changed'");
+                addRuntimeEventListener(input, "change", (event) => { event.currentTarget.className = "changed"; });
                 tdRight.appendChild(input);
                 setting.appendChild(tdLeft);
                 setting.appendChild(tdRight);
@@ -135,7 +135,7 @@ class SettingsCategory {
                 var tdRight = document.createElement("TD");
                 var input = content.createCheckbox(settingsKey);
                 input.checked = data;
-                input.setAttribute("onchange", "javascript: this.className = 'changed'");
+                addRuntimeEventListener(input, "change", (event) => { event.currentTarget.className = "changed"; });
                 tdRight.appendChild(input);
                 setting.appendChild(tdLeft);
                 setting.appendChild(tdRight);
@@ -146,7 +146,7 @@ class SettingsCategory {
                 var tdRight = document.createElement("TD");
                 var input = content.createCheckbox(settingsKey);
                 input.checked = data;
-                input.setAttribute("onchange", "javascript: this.className = 'changed'");
+                addRuntimeEventListener(input, "change", (event) => { event.currentTarget.className = "changed"; });
                 tdRight.appendChild(input);
                 setting.appendChild(tdLeft);
                 setting.appendChild(tdRight);
@@ -157,7 +157,7 @@ class SettingsCategory {
                 var tdRight = document.createElement("TD");
                 var input = content.createCheckbox(settingsKey);
                 input.checked = data;
-                input.setAttribute("onchange", "javascript: this.className = 'changed'");
+                addRuntimeEventListener(input, "change", (event) => { event.currentTarget.className = "changed"; });
                 tdRight.appendChild(input);
                 setting.appendChild(tdLeft);
                 setting.appendChild(tdRight);
@@ -168,7 +168,7 @@ class SettingsCategory {
                 var tdRight = document.createElement("TD");
                 var input = content.createCheckbox(settingsKey);
                 input.checked = data;
-                input.setAttribute("onchange", "javascript: this.className = 'changed'");
+                addRuntimeEventListener(input, "change", (event) => { event.currentTarget.className = "changed"; });
                 tdRight.appendChild(input);
                 setting.appendChild(tdLeft);
                 setting.appendChild(tdRight);
@@ -179,7 +179,7 @@ class SettingsCategory {
                 var tdRight = document.createElement("TD");
                 var input = content.createCheckbox(settingsKey);
                 input.checked = data;
-                input.setAttribute("onchange", "javascript: this.className = 'changed'");
+                addRuntimeEventListener(input, "change", (event) => { event.currentTarget.className = "changed"; });
                 tdRight.appendChild(input);
                 setting.appendChild(tdLeft);
                 setting.appendChild(tdRight);
@@ -190,7 +190,7 @@ class SettingsCategory {
                 var tdRight = document.createElement("TD");
                 var input = content.createCheckbox(settingsKey);
                 input.checked = data;
-                input.setAttribute("onchange", "javascript: this.className = 'changed'");
+                addRuntimeEventListener(input, "change", (event) => { event.currentTarget.className = "changed"; });
                 tdRight.appendChild(input);
                 setting.appendChild(tdLeft);
                 setting.appendChild(tdRight);
@@ -201,7 +201,7 @@ class SettingsCategory {
                 var tdRight = document.createElement("TD");
                 var input = content.createCheckbox(settingsKey);
                 input.checked = data;
-                input.setAttribute("onchange", "javascript: this.className = 'changed'");
+                addRuntimeEventListener(input, "change", (event) => { event.currentTarget.className = "changed"; });
                 tdRight.appendChild(input);
                 setting.appendChild(tdLeft);
                 setting.appendChild(tdRight);
@@ -212,7 +212,7 @@ class SettingsCategory {
                 var tdRight = document.createElement("TD");
                 var input = content.createCheckbox(settingsKey);
                 input.checked = data;
-                input.setAttribute("onchange", "javascript: this.className = 'changed'");
+                addRuntimeEventListener(input, "change", (event) => { event.currentTarget.className = "changed"; });
                 tdRight.appendChild(input);
                 setting.appendChild(tdLeft);
                 setting.appendChild(tdRight);
@@ -223,7 +223,7 @@ class SettingsCategory {
                 var tdRight = document.createElement("TD");
                 var input = content.createCheckbox(settingsKey);
                 input.checked = data;
-                input.setAttribute("onchange", "javascript: this.className = 'changed'");
+                addRuntimeEventListener(input, "change", (event) => { event.currentTarget.className = "changed"; });
                 tdRight.appendChild(input);
                 setting.appendChild(tdLeft);
                 setting.appendChild(tdRight);
@@ -234,7 +234,7 @@ class SettingsCategory {
                 var tdRight = document.createElement("TD");
                 var input = content.createCheckbox(settingsKey);
                 input.checked = data;
-                input.setAttribute("onchange", "javascript: this.className = 'changed'");
+                addRuntimeEventListener(input, "change", (event) => { event.currentTarget.className = "changed"; });
                 tdRight.appendChild(input);
                 setting.appendChild(tdLeft);
                 setting.appendChild(tdRight);
@@ -245,7 +245,7 @@ class SettingsCategory {
                 var tdRight = document.createElement("TD");
                 var input = content.createCheckbox(settingsKey);
                 input.checked = data;
-                input.setAttribute("onchange", "javascript: this.className = 'changed'");
+                addRuntimeEventListener(input, "change", (event) => { event.currentTarget.className = "changed"; });
                 tdRight.appendChild(input);
                 setting.appendChild(tdLeft);
                 setting.appendChild(tdRight);
@@ -256,7 +256,7 @@ class SettingsCategory {
                 var tdRight = document.createElement("TD");
                 var input = content.createCheckbox(settingsKey);
                 input.checked = data;
-                input.setAttribute("onchange", "javascript: this.className = 'changed'");
+                addRuntimeEventListener(input, "change", (event) => { event.currentTarget.className = "changed"; });
                 tdRight.appendChild(input);
                 setting.appendChild(tdLeft);
                 setting.appendChild(tdRight);
@@ -267,7 +267,7 @@ class SettingsCategory {
                 var tdRight = document.createElement("TD");
                 var input = content.createInput("text", "httpsPort", data.toString());
                 input.setAttribute("placeholder", "{{.settings.httpsPort.placeholder}}");
-                input.setAttribute("onchange", "javascript: this.className = 'changed'");
+                addRuntimeEventListener(input, "change", (event) => { event.currentTarget.className = "changed"; });
                 tdRight.appendChild(input);
                 setting.appendChild(tdLeft);
                 setting.appendChild(tdRight);
@@ -278,7 +278,7 @@ class SettingsCategory {
                 var tdRight = document.createElement("TD");
                 var input = content.createInput("text", "httpsThreadfinDomain", data.toString());
                 input.setAttribute("placeholder", "{{.settings.httpsThreadfinDomain.placeholder}}");
-                input.setAttribute("onchange", "javascript: this.className = 'changed'");
+                addRuntimeEventListener(input, "change", (event) => { event.currentTarget.className = "changed"; });
                 tdRight.appendChild(input);
                 setting.appendChild(tdLeft);
                 setting.appendChild(tdRight);
@@ -289,7 +289,7 @@ class SettingsCategory {
                 var tdRight = document.createElement("TD");
                 var input = content.createInput("text", "bindIpAddress", data.toString());
                 input.setAttribute("placeholder", "{{.settings.bindIpAddress.placeholder}}");
-                input.setAttribute("onchange", "javascript: this.className = 'changed'");
+                addRuntimeEventListener(input, "change", (event) => { event.currentTarget.className = "changed"; });
                 tdRight.appendChild(input);
                 setting.appendChild(tdLeft);
                 setting.appendChild(tdRight);
@@ -300,7 +300,7 @@ class SettingsCategory {
                 var tdRight = document.createElement("TD");
                 var input = content.createInput("text", "httpThreadfinDomain", data.toString());
                 input.setAttribute("placeholder", "{{.settings.httpThreadfinDomain.placeholder}}");
-                input.setAttribute("onchange", "javascript: this.className = 'changed'");
+                addRuntimeEventListener(input, "change", (event) => { event.currentTarget.className = "changed"; });
                 tdRight.appendChild(input);
                 setting.appendChild(tdLeft);
                 setting.appendChild(tdRight);
@@ -311,7 +311,7 @@ class SettingsCategory {
                 var tdRight = document.createElement("TD");
                 var input = content.createCheckbox(settingsKey);
                 input.checked = data;
-                input.setAttribute("onchange", "javascript: this.className = 'changed'");
+                addRuntimeEventListener(input, "change", (event) => { event.currentTarget.className = "changed"; });
                 tdRight.appendChild(input);
                 setting.appendChild(tdLeft);
                 setting.appendChild(tdRight);
@@ -322,7 +322,7 @@ class SettingsCategory {
                 var tdRight = document.createElement("TD");
                 var input = content.createInput("text", "epgCategories", data.toString());
                 input.setAttribute("placeholder", "{{.settings.epgCategories.placeholder}}");
-                input.setAttribute("onchange", "javascript: this.className = 'changed'");
+                addRuntimeEventListener(input, "change", (event) => { event.currentTarget.className = "changed"; });
                 tdRight.appendChild(input);
                 setting.appendChild(tdLeft);
                 setting.appendChild(tdRight);
@@ -333,7 +333,7 @@ class SettingsCategory {
                 var tdRight = document.createElement("TD");
                 var input = content.createInput("text", "epgCategoriesColors", data.toString());
                 input.setAttribute("placeholder", "{{.settings.epgCategoriesColors.placeholder}}");
-                input.setAttribute("onchange", "javascript: this.className = 'changed'");
+                addRuntimeEventListener(input, "change", (event) => { event.currentTarget.className = "changed"; });
                 tdRight.appendChild(input);
                 setting.appendChild(tdLeft);
                 setting.appendChild(tdRight);
@@ -344,7 +344,7 @@ class SettingsCategory {
                 var tdRight = document.createElement("TD");
                 var input = content.createCheckbox(settingsKey);
                 input.checked = data;
-                input.setAttribute("onchange", "javascript: this.className = 'changed'");
+                addRuntimeEventListener(input, "change", (event) => { event.currentTarget.className = "changed"; });
                 tdRight.appendChild(input);
                 setting.appendChild(tdLeft);
                 setting.appendChild(tdRight);
@@ -355,7 +355,7 @@ class SettingsCategory {
                 var tdRight = document.createElement("TD");
                 var input = content.createCheckbox(settingsKey);
                 input.checked = data;
-                input.setAttribute("onchange", "javascript: this.className = 'changed'");
+                addRuntimeEventListener(input, "change", (event) => { event.currentTarget.className = "changed"; });
                 tdRight.appendChild(input);
                 setting.appendChild(tdLeft);
                 setting.appendChild(tdRight);
@@ -366,7 +366,7 @@ class SettingsCategory {
                 var tdRight = document.createElement("TD");
                 var input = content.createCheckbox(settingsKey);
                 input.checked = data;
-                input.setAttribute("onchange", "javascript: this.className = 'changed'");
+                addRuntimeEventListener(input, "change", (event) => { event.currentTarget.className = "changed"; });
                 tdRight.appendChild(input);
                 setting.appendChild(tdLeft);
                 setting.appendChild(tdRight);
@@ -378,7 +378,7 @@ class SettingsCategory {
                 var text = ["PPV", "30 Minutes", "60 Minutes", "90 Minutes", "120 Minutes", "180 Minutes", "240 Minutes", "360 Minutes"];
                 var values = ["PPV", "30_Minutes", "60_Minutes", "90_Minutes", "120_Minutes", "180_Minutes", "240_Minutes", "360_Minutes"];
                 var select = content.createSelect(text, values, data, settingsKey);
-                select.setAttribute("onchange", "javascript: this.className = 'changed'");
+                addRuntimeEventListener(select, "change", (event) => { event.currentTarget.className = "changed"; });
                 tdRight.appendChild(select);
                 setting.appendChild(tdLeft);
                 setting.appendChild(tdRight);
@@ -389,7 +389,7 @@ class SettingsCategory {
                 var tdRight = document.createElement("TD");
                 var input = content.createCheckbox(settingsKey);
                 input.checked = data;
-                input.setAttribute("onchange", "javascript: this.className = 'changed'");
+                addRuntimeEventListener(input, "change", (event) => { event.currentTarget.className = "changed"; });
                 tdRight.appendChild(input);
                 setting.appendChild(tdLeft);
                 setting.appendChild(tdRight);
@@ -400,7 +400,7 @@ class SettingsCategory {
                 var tdRight = document.createElement("TD");
                 var input = content.createCheckbox(settingsKey);
                 input.checked = data;
-                input.setAttribute("onchange", "javascript: this.className = 'changed'");
+                addRuntimeEventListener(input, "change", (event) => { event.currentTarget.className = "changed"; });
                 tdRight.appendChild(input);
                 setting.appendChild(tdLeft);
                 setting.appendChild(tdRight);
@@ -417,7 +417,7 @@ class SettingsCategory {
                     values.push(i);
                 }
                 var select = content.createSelect(text, values, data, settingsKey);
-                select.setAttribute("onchange", "javascript: this.className = 'changed'");
+                addRuntimeEventListener(select, "change", (event) => { event.currentTarget.className = "changed"; });
                 tdRight.appendChild(select);
                 setting.appendChild(tdLeft);
                 setting.appendChild(tdRight);
@@ -429,7 +429,7 @@ class SettingsCategory {
                 var text = ["PMS", "XEPG"];
                 var values = ["PMS", "XEPG"];
                 var select = content.createSelect(text, values, data, settingsKey);
-                select.setAttribute("onchange", "javascript: this.className = 'changed'");
+                addRuntimeEventListener(select, "change", (event) => { event.currentTarget.className = "changed"; });
                 tdRight.appendChild(select);
                 setting.appendChild(tdLeft);
                 setting.appendChild(tdRight);
@@ -441,7 +441,7 @@ class SettingsCategory {
                 var text = ["5", "10", "20", "30", "40", "50"];
                 var values = ["5", "10", "20", "30", "40", "50"];
                 var select = content.createSelect(text, values, data, settingsKey);
-                select.setAttribute("onchange", "javascript: this.className = 'changed'");
+                addRuntimeEventListener(select, "change", (event) => { event.currentTarget.className = "changed"; });
                 tdRight.appendChild(select);
                 setting.appendChild(tdLeft);
                 setting.appendChild(tdRight);
@@ -453,7 +453,7 @@ class SettingsCategory {
                 var text = ["0.5 MB", "1 MB", "2 MB", "3 MB", "4 MB", "5 MB", "6 MB", "7 MB", "8 MB"];
                 var values = ["512", "1024", "2048", "3072", "4096", "5120", "6144", "7168", "8192"];
                 var select = content.createSelect(text, values, data, settingsKey);
-                select.setAttribute("onchange", "javascript: this.className = 'changed'");
+                addRuntimeEventListener(select, "change", (event) => { event.currentTarget.className = "changed"; });
                 tdRight.appendChild(select);
                 setting.appendChild(tdLeft);
                 setting.appendChild(tdRight);
@@ -465,7 +465,7 @@ class SettingsCategory {
                 var text = ["{{.settings.streamBuffering.info_false}}", "FFmpeg: ({{.settings.streamBuffering.info_ffmpeg}})", "VLC: ({{.settings.streamBuffering.info_vlc}})"];
                 var values = ["-", "ffmpeg", "vlc"];
                 var select = content.createSelect(text, values, data, settingsKey);
-                select.setAttribute("onchange", "javascript: this.className = 'changed'");
+                addRuntimeEventListener(select, "change", (event) => { event.currentTarget.className = "changed"; });
                 tdRight.appendChild(select);
                 setting.appendChild(tdLeft);
                 setting.appendChild(tdRight);
@@ -476,7 +476,7 @@ class SettingsCategory {
                 var tdRight = document.createElement("TD");
                 var input = content.createInput("text", "udpxy", data);
                 input.setAttribute("placeholder", "{{.settings.udpxy.placeholder}}");
-                input.setAttribute("onchange", "javascript: this.className = 'changed'");
+                addRuntimeEventListener(input, "change", (event) => { event.currentTarget.className = "changed"; });
                 tdRight.appendChild(input);
                 setting.appendChild(tdLeft);
                 setting.appendChild(tdRight);

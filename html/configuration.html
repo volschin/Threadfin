@@ -5,37 +5,30 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Threadfin</title>
-  <link
-    rel="stylesheet"
-    href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/7.3.1/css/all.min.css"
-  />
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-sRIl4kxILFvY47J16cr9ZwB07vP4J8+LH7qKQnuqkuIAvNWLzeN8tE5YBujZqJLB" crossorigin="anonymous">
-  <link rel="stylesheet" href="css/screen.css" type="text/css">
-  <link rel="stylesheet" href="css/base.css" type="text/css">
-  <link rel="stylesheet" href="css/app-shell.css" type="text/css">
+  <link rel="stylesheet" href="css/vendor/fontawesome.min.css">
+  <link rel="stylesheet" href="css/vendor/bootstrap.min.css">
+  <link rel="stylesheet" href="css/app.css">
 </head>
 
-<body class="tf-setup-page" onload="javascript: readyForConfiguration(0);">
+<body class="tf-setup-page">
 
-  <div id="loading" class="modal fade">
-    <div class="modal-dialog loader"></div>
-  </div>
+  <div id="loading" class="tf-loading" role="status" aria-live="polite" hidden>Working…</div>
 
-  <div id="popup" class="modal fade">
-    <div class="modal-dialog modal-xl">
-      <div class="modal-content">
-        <div class="modal-header" id="popup_header"></div>
-        <div class="modal-body">
+  <dialog id="popup" class="dialog dialog-xl" aria-label="Threadfin editor">
+    <div class="dialog-content">
+      <div class="tf-dialog-content">
+        <div class="dialog-header" id="popup_header"></div>
+        <div class="dialog-body">
           <div class="container-fluid">
             <div class="row">
               <div id="popup-custom"></div>
             </div>
           </div>
         </div>
-        <div class="modal-footer" id="popup_footer"></div>
+        <div class="dialog-footer" id="popup_footer"></div>
       </div>
     </div>
-  </div>
+  </dialog>
 
   <main class="tf-setup" aria-labelledby="head-text">
   <div id="header" class="imgCenter" aria-hidden="true"></div>
@@ -57,19 +50,12 @@
 
     </div>
     <div id="box-footer">
-      <input id="next" class="" type="button" name="next" value="Next" onclick="javascript: saveWizard();">
+      <input id="next" class="" type="button" name="next" value="Next">
     </div>
     <p id="wizard-request-status" class="tf-wizard-request-status" role="status" aria-live="polite"></p>
   </div>
   </main>
-  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/js/bootstrap.bundle.min.js" integrity="sha384-FKyoEForCGlyvwx9Hj09JcYn3nv7wiPVlz7YYwJrWVcXK/BmnVDxM+D2scQbITxI" crossorigin="anonymous"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/clipboard.js/2.0.11/clipboard.min.js"></script>
-  <script language="javascript" type="text/javascript" src="js/configuration_ts.js"></script>
-  <script language="javascript" type="text/javascript" src="js/network_ts.js"></script>
-  <script language="javascript" type="text/javascript" src="js/menu_ts.js"></script>
-  <script language="javascript" type="text/javascript" src="js/sources_ts.js"></script>
-  <script language="javascript" type="text/javascript" src="js/settings_ts.js"></script>
-  <script language="javascript" type="text/javascript" src="js/base_ts.js"></script>
+  <script type="module" src="js/setup.js"></script>
 </body>
 
 </html>

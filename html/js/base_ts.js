@@ -8,24 +8,18 @@ var UNDO = new Object();
 var SERVER_CONNECTION = false;
 var WS_AVAILABLE = false;
 const tooltipTriggerList = document.querySelectorAll('[data-bs-toggle="tooltip"]');
-const tooltipList = [...tooltipTriggerList].map(tooltipTriggerEl => new bootstrap.Tooltip(tooltipTriggerEl));
+const tooltipList = [...tooltipTriggerList].map(tooltipTriggerEl => new Tooltip(tooltipTriggerEl));
 // new ClipboardJS('.copy-btn');
 var clipboard = new ClipboardJS('.copy-btn');
 clipboard.on('success', function (e) {
-    const tooltip = bootstrap.Tooltip.getInstance(e.trigger);
-    tooltip.setContent({ '.tooltip-inner': 'Copied!' });
+    const tooltip = Tooltip.getInstance(e.trigger);
+    if (tooltip)
+        tooltip.setContent({ '.tooltip-inner': 'Copied!' });
 });
 clipboard.on('error', function (e) {
     console.log(e);
 });
-var popupModal = new bootstrap.Modal(document.getElementById("popup"), {
-    keyboard: true,
-    focus: true
-});
-var loadingModal = new bootstrap.Modal(document.getElementById("loading"), {
-    keyboard: true,
-    focus: true
-});
+var popupModal = new Dialog(document.getElementById("popup"));
 // Menü
 var menuItems = new Array();
 menuItems.push(new MainMenuItem("playlist", "{{.mainMenu.item.playlist}}"));
@@ -64,17 +58,13 @@ function showElement(elmID, type) {
     if (elmID == "loading") {
         switch (type) {
             case true:
-                loadingModal.show();
+                document.getElementById("loading").hidden = false;
                 break;
             case false:
-                loadingModal.hide();
+                document.getElementById("loading").hidden = true;
                 break;
         }
     }
-}
-function changeButtonAction(element, buttonID, attribute) {
-    var value = element.options[element.selectedIndex].value;
-    document.getElementById(buttonID).setAttribute(attribute, value);
 }
 function getLocalData(dataType, id) {
     var data = new Object();

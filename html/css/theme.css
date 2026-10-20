@@ -1,0 +1,4 @@
+/* The alpha emits component variable defaults outside layers. Configure only
+   these tokens outside layers; application layout and styling stay in custom. */
+.tf-mapping-editor { --bs-drawer-width: min(44rem, 100vw); }
+:root { --bs-primary-base: #007c91; --bs-primary-fg: light-dark(#006476, #65dce8); }

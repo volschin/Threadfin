@@ -7,6 +7,11 @@ var mappingProbeFeedback = "";
 var mappingGuardDialog;
 var mappingGuardReturnFocus;
 var mappingBeforeUnloadBound = false;
+var mappingFilterChips;
+var mappingEditorDrawer;
+var mappingEPGCombobox;
+var mappingEditorBreakpoint;
+var mappingEditorResize;
 function initializeMappingWorkspace(server, force = false) {
     var authoritative = mappingAuthoritativeMap(server);
     if (force || !mappingWorkspaceState || (mappingDirtyIDs(mappingWorkspaceState).length == 0 && mappingComparable(mappingWorkspaceState.baseline) != mappingComparable(authoritative))) {
@@ -203,13 +208,13 @@ function openMappingGuard() {
         updateMappingGuardButtons();
         return;
     }
-    var guard = document.createElement("div");
-    guard.className = "tf-mapping-guard";
+    var guard = document.createElement("dialog");
+    guard.className = "dialog tf-mapping-guard";
     guard.setAttribute("role", "dialog");
     guard.setAttribute("aria-modal", "true");
     guard.setAttribute("aria-labelledby", "mapping-guard-title");
     var panel = document.createElement("div");
-    panel.className = "tf-mapping-guard-panel";
+    panel.className = "dialog-body tf-mapping-guard-panel";
     var title = document.createElement("h2");
     title.id = "mapping-guard-title";
     title.textContent = "Unsaved mapping draft";
@@ -241,9 +246,17 @@ function openMappingGuard() {
     guard.appendChild(panel);
     mappingOverlayHost().appendChild(guard);
     mappingGuardDialog = guard;
-    bindMappingDialogKeyboard(guard, stayOnMapping);
+    guard.addEventListener("cancel.bs.dialog", function () {
+        mappingAfterSave = undefined;
+    });
+    guard.addEventListener("hidden.bs.dialog", function () {
+        if (mappingGuardDialog == guard) {
+            stayOnMapping();
+        }
+    });
     updateMappingGuardButtons();
-    stay.focus();
+    var dialog = new Dialog(guard);
+    dialog.show().then(function () { stay.focus(); });
 }
 function updateMappingGuardButtons() {
     if (!mappingGuardDialog || !mappingWorkspaceState)
@@ -261,8 +274,13 @@ function stayOnMapping() {
     restoreMappingGuardFocus(returnFocus);
 }
 function closeMappingGuard() {
-    if (mappingGuardDialog && mappingGuardDialog.parentElement)
-        mappingGuardDialog.parentElement.removeChild(mappingGuardDialog);
+    if (mappingGuardDialog) {
+        var instance = Dialog.getInstance(mappingGuardDialog);
+        if (instance)
+            instance.dispose();
+        if (mappingGuardDialog.parentElement)
+            mappingGuardDialog.parentElement.removeChild(mappingGuardDialog);
+    }
     mappingGuardDialog = undefined;
     mappingPendingNavigation = undefined;
     mappingGuardReturnFocus = undefined;
@@ -286,49 +304,6 @@ function restoreMappingGuardFocus(returnFocus) {
         fallback.focus();
     }
 }
-function mappingDialogFocusables(dialog) {
-    var controls = dialog.querySelectorAll("button, input, select, summary, [tabindex]");
-    return Array.prototype.filter.call(controls, function (control) {
-        if (control.disabled || control.getAttribute("tabindex") == "-1")
-            return false;
-        var current = control;
-        while (current && current != dialog) {
-            if (current.hidden)
-                return false;
-            if (current.parentElement && current.parentElement.tagName == "DETAILS" && !current.parentElement.open && current.tagName != "SUMMARY")
-                return false;
-            current = current.parentElement;
-        }
-        return true;
-    });
-}
-function bindMappingDialogKeyboard(dialog, onEscape) {
-    dialog.addEventListener("keydown", function (event) {
-        if (event.key == "Escape") {
-            event.preventDefault();
-            event.stopPropagation();
-            onEscape();
-            return;
-        }
-        if (event.key != "Tab")
-            return;
-        var focusables = mappingDialogFocusables(dialog);
-        if (!focusables.length) {
-            event.preventDefault();
-            return;
-        }
-        var first = focusables[0];
-        var last = focusables[focusables.length - 1];
-        if (event.shiftKey && document.activeElement == first) {
-            event.preventDefault();
-            last.focus();
-        }
-        else if (!event.shiftKey && document.activeElement == last) {
-            event.preventDefault();
-            first.focus();
-        }
-    });
-}
 function bindMappingBeforeUnload() {
     if (mappingBeforeUnloadBound || typeof window == "undefined")
         return;
@@ -344,6 +319,10 @@ function mappingOverlayHost() {
     return document.querySelector(".tf-app") || document.body;
 }
 function renderMappingPage(host) {
+    if (mappingFilterChips) {
+        mappingFilterChips.dispose();
+        mappingFilterChips = undefined;
+    }
     host.innerHTML = "";
     var page = document.createElement("div");
     page.className = "tf-mapping";
@@ -377,6 +356,7 @@ function renderMappingPage(host) {
     page.appendChild(renderMappingBackupOptions());
     page.appendChild(renderMappingSaveBar());
     host.appendChild(page);
+    initializeMappingFilterChips();
 }
 function renderMappingHeader(showViews = true) {
     var header = document.createElement("header");
@@ -425,7 +405,49 @@ function renderMappingFilters() {
         { value: "missing", label: "Missing EPG assignment" }, { value: "invalid", label: "Invalid EPG assignment" },
         { value: "hidden", label: "Hidden from outputs" }, { value: "inactive", label: "Inactive" },
     ], mappingString(mappingCurrentQuery.reason)));
+    region.appendChild(renderMappingFilterChips());
     return region;
+}
+function renderMappingFilterChips() {
+    var chips = document.createElement("div");
+    chips.id = "mapping-filter-chips";
+    chips.className = "chips tf-mapping-filter-chips";
+    chips.setAttribute("aria-label", "Active mapping filters");
+    [["search", "Search"], ["playlist", "Playlist"], ["group", "Group"], ["xmltv", "XMLTV source"], ["activation", "Activation"], ["reason", "Attention reason"]].forEach(function (entry) {
+        var value = mappingString(mappingCurrentQuery[entry[0]]);
+        if (!value)
+            return;
+        var chip = document.createElement("span");
+        chip.className = "chip";
+        chip.setAttribute("data-mapping-filter", entry[0]);
+        chip.setAttribute("data-bs-chip-value", entry[0]);
+        chip.textContent = entry[1] + ": " + mappingProviderLabel(entry[0] == "playlist" ? "_file.m3u.id" : entry[0] == "xmltv" ? "x-xmltv-file" : entry[0], value);
+        chips.appendChild(chip);
+    });
+    return chips;
+}
+function initializeMappingFilterChips() {
+    var region = document.getElementById("mapping-filter-chips");
+    if (!region)
+        return;
+    mappingFilterChips = new Chips(region, { createOnBlur: false, separator: null });
+    var input = region.querySelector("input");
+    if (input) {
+        input.hidden = true;
+        input.disabled = true;
+    }
+    region.addEventListener("add.bs.chips", function (event) { event.preventDefault(); });
+    region.addEventListener("change.bs.chips", function () {
+        var remaining = mappingFilterChips.getValues();
+        ["search", "playlist", "group", "xmltv", "activation", "reason"].forEach(function (key) {
+            if (remaining.indexOf(key) == -1)
+                mappingCurrentQuery[key] = "";
+        });
+        renderMappingWorkspaceIfOpen();
+        var search = document.querySelector('[data-mapping-focus="filter-search"]');
+        if (search)
+            search.focus();
+    });
 }
 function mappingFilterInput(label, value, update) {
     var wrapper = document.createElement("label");
@@ -664,18 +686,16 @@ function updateMappingMutationControls() {
 function openMappingEditor(ids, invoker) {
     if (!ids.length || mappingDraftIsLocked(mappingWorkspaceState))
         return;
-    var existing = document.getElementById("mapping-editor");
-    if (existing && existing.parentElement)
-        existing.parentElement.removeChild(existing);
+    closeMappingEditor();
     var first = mappingRecord(mappingWorkspaceState.draft[ids[0]]);
-    var overlay = document.createElement("div");
+    var overlay = document.createElement("dialog");
     overlay.id = "mapping-editor";
-    overlay.className = "tf-mapping-editor";
+    overlay.className = "2xl:drawer drawer-end tf-mapping-editor";
     overlay.setAttribute("role", "dialog");
     overlay.setAttribute("aria-modal", "true");
     overlay.setAttribute("aria-labelledby", "mapping-editor-title");
     var panel = document.createElement("div");
-    panel.className = "tf-mapping-editor-panel";
+    panel.className = "drawer-body tf-mapping-editor-panel";
     var title = document.createElement("h2");
     title.id = "mapping-editor-title";
     title.textContent = ids.length == 1 ? "Edit " + (mappingString(first["x-name"]) || ids[0]) : "Edit " + ids.length + " channels";
@@ -693,11 +713,34 @@ function openMappingEditor(ids, invoker) {
     basic.appendChild(mappingEditorCheckbox("Active", "x-active", first["x-active"] === true));
     basic.appendChild(mappingEditorInput(ids.length == 1 ? "Channel number" : "Starting channel number", ids.length == 1 ? "x-channelID" : "x-channels-start", ids.length == 1 ? mappingString(first["x-channelID"]) : ""));
     basic.appendChild(mappingEditorInput("Name", "x-name", mappingString(first["x-name"])));
-    basic.appendChild(mappingEditorSelect("XMLTV source", "x-xmltv-file", ["-"].concat(Object.keys(mappingWorkspaceState.xmltvMap)), mappingString(first["x-xmltv-file"])));
-    var mappingInput = mappingEditorInput("XMLTV channel", "x-mapping", mappingString(first["x-mapping"]));
-    var mappingControl = mappingInput.querySelector("input");
-    mappingControl.setAttribute("list", "mapping-program-options");
+    basic.appendChild(mappingEditorSelect("XMLTV source", "x-xmltv-file", ["-", "Threadfin Dummy"].concat(Object.keys(mappingWorkspaceState.xmltvMap).filter(function (file) { return file != "-" && file != "Threadfin Dummy"; })), mappingString(first["x-xmltv-file"])));
+    var mappingInput = mappingEditorEPGCombobox(mappingString(first["x-xmltv-file"]), mappingString(first["x-mapping"]));
     basic.appendChild(mappingInput);
+    var mappingControl;
+    var sourceControl = basic.querySelector('[name="x-xmltv-file"]');
+    sourceControl.addEventListener("change", function () {
+        sourceControl.setAttribute("data-changed", "true");
+        var previous = mappingControl ? mappingControl.value : "-";
+        if (mappingEPGCombobox)
+            mappingEPGCombobox.dispose();
+        var next = mappingEditorEPGCombobox(sourceControl.value, previous, false);
+        basic.removeChild(mappingInput);
+        basic.appendChild(next);
+        mappingInput = next;
+        initializeEPGCombobox(true);
+        ppvField.hidden = mappingControl.value != "PPV";
+    });
+    function initializeEPGCombobox(changed = false) {
+        var toggle = mappingInput.querySelector(".combobox-toggle");
+        mappingEPGCombobox = new Combobox(toggle, { name: "x-mapping", search: true, searchNormalize: true });
+        mappingControl = mappingInput.querySelector('[name="x-mapping"]');
+        if (changed)
+            mappingControl.setAttribute("data-changed", "true");
+        toggle.addEventListener("change.bs.combobox", function () {
+            mappingControl.setAttribute("data-changed", "true");
+            ppvField.hidden = mappingControl.value != "PPV";
+        });
+    }
     form.appendChild(basic);
     var advanced = document.createElement("details");
     advanced.className = "tf-mapping-editor-advanced";
@@ -706,7 +749,6 @@ function openMappingEditor(ids, invoker) {
     advanced.appendChild(summary);
     var ppvField = mappingEditorInput("PPV extra", "x-ppv-extra", mappingString(first["x-ppv-extra"]));
     ppvField.hidden = mappingString(first["x-mapping"]) != "PPV";
-    mappingControl.addEventListener("input", function () { ppvField.hidden = mappingControl.value != "PPV"; });
     [
         mappingEditorInput("Description", "x-description", mappingString(first["x-description"])), mappingEditorCheckbox("Update channel name", "x-update-channel-name", first["x-update-channel-name"] === true),
         mappingEditorInput("Logo", "tvg-logo", mappingString(first["tvg-logo"])), mappingEditorCheckbox("Update channel logo", "x-update-channel-icon", first["x-update-channel-icon"] === true),
@@ -716,13 +758,6 @@ function openMappingEditor(ids, invoker) {
         mappingEditorCheckbox("Hidden from outputs", "x-hide-channel", first["x-hide-channel"] === true),
     ].forEach(function (field) { advanced.appendChild(field); });
     form.appendChild(advanced);
-    var programOptions = document.createElement("datalist");
-    programOptions.id = "mapping-program-options";
-    var programs = new Set(["-"]);
-    Object.keys(mappingWorkspaceState.xmltvMap).forEach(function (file) { Object.keys(mappingRecord(mappingWorkspaceState.xmltvMap[file])).forEach(function (program) { programs.add(program); }); });
-    mappingDummyPrograms.forEach(function (program) { programs.add(program); });
-    programs.forEach(function (program) { var option = document.createElement("option"); option.value = program; programOptions.appendChild(option); });
-    form.appendChild(programOptions);
     var probe = mappingButton("Probe channel", function () { requestMappingProbe(mappingString(first.url)); });
     probe.type = "button";
     form.appendChild(probe);
@@ -750,14 +785,34 @@ function openMappingEditor(ids, invoker) {
     panel.appendChild(form);
     overlay.appendChild(panel);
     mappingOverlayHost().appendChild(overlay);
-    bindMappingDialogKeyboard(overlay, function () { closeMappingEditor(invoker); });
+    initializeEPGCombobox();
+    overlay.addEventListener("hidden.bs.drawer", function () {
+        if (window.matchMedia("(min-width: 1536px)").matches)
+            return;
+        closeMappingEditor(invoker);
+    });
+    mappingEditorDrawer = new Drawer(overlay);
+    mappingEditorBreakpoint = window.matchMedia("(min-width: 1536px)");
+    mappingEditorResize = function (event) {
+        overlay.setAttribute("aria-modal", String(!event.matches));
+        if (!event.matches && mappingEditorDrawer)
+            mappingEditorDrawer.show();
+    };
+    mappingEditorBreakpoint.addEventListener("change", mappingEditorResize);
     var firstField = form.querySelector("input, select");
-    if (firstField)
-        firstField.focus();
+    if (window.matchMedia("(min-width: 1536px)").matches) {
+        overlay.setAttribute("aria-modal", "false");
+        if (firstField)
+            firstField.focus();
+    }
+    else {
+        mappingEditorDrawer.show().then(function () { if (firstField)
+            firstField.focus(); });
+    }
 }
 function mappingEditorInput(label, name, value, list) {
     var wrapper = document.createElement("label");
-    wrapper.className = "tf-mapping-editor-field";
+    wrapper.className = "form-field tf-mapping-editor-field";
     wrapper.setAttribute("data-label", label.toLocaleLowerCase());
     wrapper.textContent = label;
     var input = document.createElement("input");
@@ -772,7 +827,7 @@ function mappingEditorInput(label, name, value, list) {
 }
 function mappingEditorCheckbox(label, name, checked) {
     var wrapper = document.createElement("label");
-    wrapper.className = "tf-mapping-editor-field tf-mapping-editor-checkbox";
+    wrapper.className = "form-field tf-mapping-editor-field tf-mapping-editor-checkbox";
     wrapper.setAttribute("data-label", label.toLocaleLowerCase());
     var input = document.createElement("input");
     input.type = "checkbox";
@@ -785,12 +840,13 @@ function mappingEditorCheckbox(label, name, checked) {
 }
 function mappingEditorSelect(label, name, values, selected) {
     var wrapper = document.createElement("label");
-    wrapper.className = "tf-mapping-editor-field";
+    wrapper.className = "form-field tf-mapping-editor-field";
     wrapper.setAttribute("data-label", label.toLocaleLowerCase());
     wrapper.textContent = label;
     var select = document.createElement("select");
     select.name = name;
-    values.forEach(function (value) { var option = document.createElement("option"); option.value = value; option.textContent = mappingProviderLabel("x-xmltv-file", value); select.appendChild(option); });
+    var choices = values.indexOf(selected) == -1 && selected ? values.concat([selected]) : values;
+    choices.forEach(function (value) { var option = document.createElement("option"); option.value = value; option.textContent = mappingProviderLabel("x-xmltv-file", value) + (values.indexOf(value) == -1 ? " (unavailable)" : ""); select.appendChild(option); });
     select.value = selected;
     select.addEventListener("change", function () { select.setAttribute("data-changed", "true"); });
     wrapper.appendChild(select);
@@ -835,9 +891,69 @@ function applyMappingEditor(ids, form, invoker) {
         save.focus();
 }
 function closeMappingEditor(invoker) {
+    if (mappingEditorBreakpoint && mappingEditorResize)
+        mappingEditorBreakpoint.removeEventListener("change", mappingEditorResize);
+    mappingEditorBreakpoint = undefined;
+    mappingEditorResize = undefined;
+    if (mappingEPGCombobox) {
+        mappingEPGCombobox.dispose();
+        mappingEPGCombobox = undefined;
+    }
+    if (mappingEditorDrawer) {
+        mappingEditorDrawer.dispose();
+        mappingEditorDrawer = undefined;
+    }
     var editor = document.getElementById("mapping-editor");
     if (editor && editor.parentElement)
         editor.parentElement.removeChild(editor);
     if (invoker && document.contains(invoker))
         invoker.focus();
+}
+function mappingEditorEPGCombobox(source, current, preserveUnavailable = true) {
+    var wrapper = document.createElement("div");
+    wrapper.className = "form-field tf-mapping-editor-field";
+    wrapper.setAttribute("data-label", "xmltv channel");
+    var label = document.createElement("label");
+    label.id = "mapping-epg-label";
+    label.textContent = "XMLTV channel";
+    var toggle = document.createElement("button");
+    toggle.type = "button";
+    toggle.className = "form-control combobox-toggle";
+    toggle.setAttribute("data-bs-toggle", "combobox");
+    toggle.setAttribute("aria-labelledby", label.id);
+    var value = document.createElement("span");
+    value.className = "combobox-value";
+    toggle.appendChild(value);
+    var menu = document.createElement("div");
+    menu.className = "menu";
+    var search = document.createElement("input");
+    search.type = "search";
+    search.className = "combobox-search-input";
+    search.placeholder = "Search channel name or ID";
+    search.setAttribute("aria-label", "Search EPG channels");
+    menu.appendChild(search);
+    var programs = mappingRecord(mappingWorkspaceState.xmltvMap[source]);
+    var choices = ["-"].concat(source == "Threadfin Dummy" ? mappingDummyPrograms : Object.keys(programs));
+    var unavailable = !!current && choices.indexOf(current) == -1;
+    if (preserveUnavailable && unavailable)
+        choices.push(current);
+    var selected = choices.indexOf(current) != -1 ? current : "-";
+    choices.forEach(function (id) {
+        var option = document.createElement("button");
+        option.type = "button";
+        option.className = "menu-item" + (selected == id ? " selected" : "");
+        option.setAttribute("data-bs-value", id);
+        option.setAttribute("aria-selected", String(selected == id));
+        var name = mappingString(mappingRecord(programs[id])["display-name"]);
+        option.textContent = (name && name != id ? name + " · " + id : id) + (unavailable && id == current ? " (unavailable)" : "");
+        menu.appendChild(option);
+    });
+    var noResults = document.createElement("p");
+    noResults.className = "combobox-no-results d-none";
+    noResults.textContent = "No matching EPG channels";
+    menu.appendChild(noResults);
+    wrapper.appendChild(label);
+    wrapper.appendChild(toggle);
+    wrapper.appendChild(menu);
+    return wrapper;
 }

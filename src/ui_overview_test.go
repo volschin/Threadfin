@@ -303,21 +303,7 @@ func TestOverviewStateClassifiesXEPGMappingAttention(t *testing.T) {
 }
 
 func TestOverviewModulesLoadInDependencyOrder(t *testing.T) {
-	content, err := os.ReadFile(filepath.Join("..", "html", "index.html"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	html := string(content)
-	stateIndex := strings.Index(html, `src="js/app_state_ts.js"`)
-	overviewIndex := strings.Index(html, `src="js/overview_ts.js"`)
-	navigationIndex := strings.Index(html, `src="js/navigation_ts.js"`)
-	baseIndex := strings.Index(html, `src="js/base_ts.js"`)
-	if stateIndex < 0 || overviewIndex < 0 || navigationIndex < 0 || baseIndex < 0 {
-		t.Fatalf("Overview dependency scripts are missing: app-state=%d overview=%d navigation=%d base=%d", stateIndex, overviewIndex, navigationIndex, baseIndex)
-	}
-	if !(stateIndex < overviewIndex && overviewIndex < navigationIndex && navigationIndex < baseIndex) {
-		t.Fatalf("Overview script order is app-state=%d overview=%d navigation=%d base=%d", stateIndex, overviewIndex, navigationIndex, baseIndex)
-	}
+	assertUIBundleControllers(t, "index.html", "app", "app_state", "overview", "navigation", "base")
 }
 
 func TestOverviewIsInitialDestinationOnlyWithoutValidCurrentOrHistoryState(t *testing.T) {
@@ -477,7 +463,7 @@ const fs = require("fs");
 const vm = require("vm");
 const source = fs.readFileSync(process.argv[2], "utf8");
 const fixture = JSON.parse(fs.readFileSync(process.argv[3], "utf8"));
-const context = {};
+const context = {Drawer: {getInstance() {return null;}},};
 vm.createContext(context);
 vm.runInContext(source, context);
 const result = vm.runInContext("selectOverviewState", context)(fixture);
@@ -622,7 +608,7 @@ class TestClipboard {
   on() {}
 }
 
-const context = {
+const context = {Drawer: {getInstance() {return null;}},
   console: { log() {}, warn() {} },
   document,
   navigator: { clipboard: { writeText() { return Promise.resolve(); } } },

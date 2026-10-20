@@ -302,20 +302,19 @@ function openPopUp(dataType, element) {
             content.createHeadline("{{.playlist.playlistType.title}}");
             // Type
             var text = ["M3U", "HDHomeRun"];
-            var values = ["javascript: openPopUp('m3u')", "javascript: openPopUp('hdhr')"];
+            var values = ["m3u", "hdhr"];
             var select = content.createSelect(text, values, "", "type");
             select.setAttribute("id", "type");
-            select.setAttribute("onchange", 'javascript: changeButtonAction(this, "next", "onclick")'); // changeButtonAction
             content.appendRow("{{.playlist.type.title}}", select);
             // Interaktion
             content.createInteraction();
             // Abbrechen
             var input = content.createInput("button", "cancel", "{{.button.cancel}}");
-            input.setAttribute("onclick", 'javascript: showElement("popup", false);');
+            addRuntimeEventListener(input, "click", () => showElement("popup", false));
             content.addInteraction(input);
             // Weiter
             var input = content.createInput("button", "next", "{{.button.next}}");
-            input.setAttribute("onclick", 'javascript: openPopUp("m3u")');
+            addRuntimeEventListener(input, "click", () => openPopUp(document.querySelector("#popup select[name=type]").value, undefined));
             input.setAttribute("id", 'next');
             content.addInteraction(input);
             break;
@@ -354,7 +353,6 @@ function openPopUp(dataType, element) {
             }
             var dbKey = "tuner";
             var select = content.createSelect(text, values, data[dbKey], dbKey);
-            select.setAttribute("onfocus", "javascript: return;");
             content.appendRow("{{.playlist.tuner.title}}", select);
             content.description("{{.playlist.tuner.description}}", true);
             var dbKey = "http_proxy.ip";
@@ -388,12 +386,12 @@ function openPopUp(dataType, element) {
             }
             else {
                 var input = content.createInput("button", "back", "{{.button.back}}");
-                input.setAttribute("onclick", 'javascript: openPopUp("playlist")');
+                addRuntimeEventListener(input, "click", () => openPopUp("playlist", undefined));
                 content.addInteraction(input);
             }
             // Abbrechen
             var input = content.createInput("button", "cancel", "{{.button.cancel}}");
-            input.setAttribute("onclick", 'javascript: showElement("popup", false);');
+            addRuntimeEventListener(input, "click", () => showElement("popup", false));
             content.addInteraction(input);
             // Aktualisieren
             if (data["id.provider"] != "-") {
@@ -441,7 +439,6 @@ function openPopUp(dataType, element) {
             }
             var dbKey = "tuner";
             var select = content.createSelect(text, values, data[dbKey], dbKey);
-            select.setAttribute("onfocus", "javascript: return;");
             content.appendRow("{{.playlist.tuner.title}}", select);
             content.description("{{.playlist.tuner.description}}", true);
             var dbKey = "http_proxy.ip";
@@ -465,12 +462,12 @@ function openPopUp(dataType, element) {
             }
             else {
                 var input = content.createInput("button", "back", "{{.button.back}}");
-                input.setAttribute("onclick", 'javascript: openPopUp("playlist")');
+                addRuntimeEventListener(input, "click", () => openPopUp("playlist", undefined));
                 content.addInteraction(input);
             }
             // Abbrechen
             var input = content.createInput("button", "cancel", "{{.button.cancel}}");
-            input.setAttribute("onclick", 'javascript: showElement("popup", false);');
+            addRuntimeEventListener(input, "click", () => showElement("popup", false));
             content.addInteraction(input);
             // Aktualisieren
             if (data["id.provider"] != "-") {
@@ -488,20 +485,19 @@ function openPopUp(dataType, element) {
             // Type
             var dbKey = "type";
             var text = ["M3U: " + "{{.filter.type.groupTitle}}", "Threadfin: " + "{{.filter.type.customFilter}}"];
-            var values = ["javascript: openPopUp('group-title')", "javascript: openPopUp('custom-filter')"];
-            var select = content.createSelect(text, values, "javascript: openPopUp('group-title')", dbKey);
+            var values = ["group-title", "custom-filter"];
+            var select = content.createSelect(text, values, "group-title", dbKey);
             select.setAttribute("id", id);
-            select.setAttribute("onchange", 'javascript: changeButtonAction(this, "next", "onclick");'); // changeButtonAction
             content.appendRow("{{.filter.type.title}}", select);
             // Interaktion
             content.createInteraction();
             // Abbrechen
             var input = content.createInput("button", "cancel", "{{.button.cancel}}");
-            input.setAttribute("onclick", 'javascript: showElement("popup", false);');
+            addRuntimeEventListener(input, "click", () => showElement("popup", false));
             content.addInteraction(input);
             // Weiter
             var input = content.createInput("button", "next", "{{.button.next}}");
-            input.setAttribute("onclick", 'javascript: openPopUp("group-title")');
+            addRuntimeEventListener(input, "click", () => openPopUp(document.querySelector("#popup select[name=type]").value, undefined));
             input.setAttribute("id", 'next');
             content.addInteraction(input);
             break;
@@ -515,7 +511,7 @@ function openPopUp(dataType, element) {
                     content.createHeadline("{{.filter.group}}");
                     break;
             }
-            // Name      
+            // Name
             var dbKey = "name";
             var input = content.createInput("text", dbKey, data[dbKey]);
             input.setAttribute("placeholder", "{{.filter.name.placeholder}}");
@@ -551,7 +547,7 @@ function openPopUp(dataType, element) {
                     var text = groupsM3U["text"];
                     var values = groupsM3U["value"];
                     var select = content.createSelect(text, values, data[dbKey], dbKey);
-                    select.setAttribute("onchange", "javascript: this.className = 'changed'");
+                    addRuntimeEventListener(select, "change", (event) => { event.currentTarget.className = "changed"; });
                     content.appendRow("{{.filter.filterGroup.title}}", select);
                     content.description("{{.filter.filterGroup.description}}", true);
                     var dbKey = "liveEvent";
@@ -577,7 +573,7 @@ function openPopUp(dataType, element) {
                 default:
                     break;
             }
-            // Name      
+            // Name
             var dbKey = "startingNumber";
             if (data[dbKey] !== undefined) {
                 var input = content.createInput("text", dbKey, data[dbKey]);
@@ -602,7 +598,7 @@ function openPopUp(dataType, element) {
                 }
             }
             var select = content.createSelect(text, values, data[dbKey], dbKey);
-            select.setAttribute("onchange", "javascript: this.className = 'changed'");
+            addRuntimeEventListener(select, "change", (event) => { event.currentTarget.className = "changed"; });
             content.appendRow("{{.filter.category.title}}", select);
             // Interaktion
             content.createInteraction();
@@ -613,7 +609,7 @@ function openPopUp(dataType, element) {
             content.addInteraction(input);
             // Abbrechen
             var input = content.createInput("button", "cancel", "{{.button.cancel}}");
-            input.setAttribute("onclick", 'javascript: showElement("popup", false);');
+            addRuntimeEventListener(input, "click", () => showElement("popup", false));
             content.addInteraction(input);
             // Speichern
             var input = content.createInput("button", "save", "{{.button.save}}");
@@ -658,7 +654,7 @@ function openPopUp(dataType, element) {
             }
             // Abbrechen
             var input = content.createInput("button", "cancel", "{{.button.cancel}}");
-            input.setAttribute("onclick", 'javascript: showElement("popup", false);');
+            addRuntimeEventListener(input, "click", () => showElement("popup", false));
             content.addInteraction(input);
             // Aktualisieren
             if (data["id.provider"] != "-") {
@@ -673,17 +669,17 @@ function openPopUp(dataType, element) {
             break;
         case "users":
             content.createHeadline("{{.mainMenu.item.users}}");
-            // Benutzername 
+            // Benutzername
             var dbKey = "username";
             var input = content.createInput("text", dbKey, data[dbKey]);
             input.setAttribute("placeholder", "{{.users.username.placeholder}}");
             content.appendRow("{{.users.username.title}}", input);
-            // Neues Passwort 
+            // Neues Passwort
             var dbKey = "password";
             var input = content.createInput("password", dbKey, "");
             input.setAttribute("placeholder", "{{.users.password.placeholder}}");
             content.appendRow("{{.users.password.title}}", input);
-            // Bestätigung 
+            // Bestätigung
             var dbKey = "confirm";
             var input = content.createInput("password", dbKey, "");
             input.setAttribute("placeholder", "{{.users.confirm.placeholder}}");
@@ -693,7 +689,7 @@ function openPopUp(dataType, element) {
             var input = content.createCheckbox(dbKey);
             input.checked = data[dbKey];
             if (data["defaultUser"] == true) {
-                input.setAttribute("onclick", "javascript: return false");
+                addRuntimeEventListener(input, "click", (event) => event.preventDefault());
             }
             content.appendRow("{{.users.web.title}}", input);
             // Berechtigung PMS
@@ -732,7 +728,7 @@ function openPopUp(dataType, element) {
             }
             // Abbrechen
             var input = content.createInput("button", "cancel", "{{.button.cancel}}");
-            input.setAttribute("onclick", 'javascript: showElement("popup", false);');
+            addRuntimeEventListener(input, "click", () => showElement("popup", false));
             content.addInteraction(input);
             // Speichern
             var input = content.createInput("button", "save", "{{.button.save}}");
@@ -753,18 +749,18 @@ function openPopUp(dataType, element) {
                 addRuntimeEventListener(input, "change", () => changeChannelNumbers(channels.toString()));
                 content.appendRow("{{.mapping.channelGroupStart.title}}", input);
             }
-            // Aktiv 
+            // Aktiv
             var dbKey = "x-active";
             var input = content.createCheckbox(dbKey);
             input.checked = data[dbKey];
             input.id = "active";
-            //input.setAttribute("onchange", "javascript: this.className = 'changed'")
+            //addRuntimeEventListener(input, "change", (event: Event) => { (event.currentTarget as HTMLElement).className = "changed" })
             addRuntimeEventListener(input, "change", () => toggleChannelStatus(id));
             content.appendRow("{{.mapping.active.title}}", input);
-            // Kanalname 
+            // Kanalname
             var dbKey = "x-name";
             var input = content.createInput("text", dbKey, data[dbKey]);
-            input.setAttribute("onchange", "javascript: this.className = 'changed'");
+            addRuntimeEventListener(input, "change", (event) => { event.currentTarget.className = "changed"; });
             if (BULK_EDIT == true) {
                 input.style.border = "solid 1px red";
                 input.setAttribute("readonly", "true");
@@ -781,26 +777,26 @@ function openPopUp(dataType, element) {
             mappingEPG.textContent = "(" + data["x-epg"] + ")";
             mappingDescription.appendChild(mappingEPG);
             content.descriptionElement(mappingDescription);
-            // Beschreibung 
+            // Beschreibung
             var dbKey = "x-description";
             var input = content.createInput("text", dbKey, data[dbKey]);
             input.setAttribute("placeholder", "{{.mapping.description.placeholder}}");
-            input.setAttribute("onchange", "javascript: this.className = 'changed'");
+            addRuntimeEventListener(input, "change", (event) => { event.currentTarget.className = "changed"; });
             content.appendRow("{{.mapping.description.title}}", input);
             // Aktualisierung des Kanalnamens
             if (data.hasOwnProperty("_uuid.key")) {
                 if (data["_uuid.key"] != "") {
                     var dbKey = "x-update-channel-name";
                     var input = content.createCheckbox(dbKey);
-                    input.setAttribute("onchange", "javascript: this.className = 'changed'");
+                    addRuntimeEventListener(input, "change", (event) => { event.currentTarget.className = "changed"; });
                     input.checked = data[dbKey];
                     content.appendRow("{{.mapping.updateChannelName.title}}", input);
                 }
             }
-            // Logo URL (Kanal) 
+            // Logo URL (Kanal)
             var dbKey = "tvg-logo";
             var input = content.createInput("text", dbKey, data[dbKey]);
-            input.setAttribute("onchange", "javascript: this.className = 'changed'");
+            addRuntimeEventListener(input, "change", (event) => { event.currentTarget.className = "changed"; });
             input.setAttribute("id", "channel-icon");
             content.appendRow("{{.mapping.channelLogo.title}}", input);
             // Aktualisierung des Kanallogos
@@ -829,12 +825,12 @@ function openPopUp(dataType, element) {
                 }
             }
             var select = content.createSelect(text, values, data[dbKey], dbKey);
-            select.setAttribute("onchange", "javascript: this.className = 'changed'");
+            addRuntimeEventListener(select, "change", (event) => { event.currentTarget.className = "changed"; });
             content.appendRow("{{.mapping.epgCategory.title}}", select);
             // M3U Gruppentitel
             var dbKey = "x-group-title";
             var input = content.createInput("text", dbKey, data[dbKey]);
-            input.setAttribute("onchange", "javascript: this.className = 'changed'");
+            addRuntimeEventListener(input, "change", (event) => { event.currentTarget.className = "changed"; });
             content.appendRow("{{.mapping.m3uGroupTitle.title}}", input);
             if (data["group-title"] != undefined) {
                 content.description(data["group-title"]);
@@ -873,7 +869,7 @@ function openPopUp(dataType, element) {
             if (currentXmlTvId == "PPV") {
                 var dbKey = "x-ppv-extra";
                 var input = content.createInput("text", dbKey, data[dbKey]);
-                input.setAttribute("onchange", "javascript: this.className = 'changed'");
+                addRuntimeEventListener(input, "change", (event) => { event.currentTarget.className = "changed"; });
                 input.setAttribute("id", "ppv-extra");
                 content.appendRow("{{.mapping.ppvextra.title}}", input);
             }
@@ -927,11 +923,11 @@ function openPopUp(dataType, element) {
             content.addInteraction(input);
             // Logo hochladen
             var input = content.createInput("button", "cancel", "{{.button.uploadLogo}}");
-            input.setAttribute("onclick", 'javascript: uploadLogo();');
+            addRuntimeEventListener(input, "click", () => uploadLogo());
             content.addInteraction(input);
             // Abbrechen
             var input = content.createInput("button", "cancel", "{{.button.cancel}}");
-            input.setAttribute("onclick", 'javascript: showElement("popup", false);');
+            addRuntimeEventListener(input, "click", () => showElement("popup", false));
             content.addInteraction(input);
             // Fertig
             var ids = new Array();
@@ -1197,7 +1193,7 @@ function checkPPV(title, element) {
         input.setAttribute("type", "text");
         input.setAttribute("name", dbKey);
         // input.setAttribute("value", value)
-        input.setAttribute("onchange", "javascript: this.className = 'changed'");
+        addRuntimeEventListener(input, "change", (event) => { event.currentTarget.className = "changed"; });
         input.setAttribute("id", "ppv-extra");
         var tr = document.createElement("TR");
         // Bezeichnung

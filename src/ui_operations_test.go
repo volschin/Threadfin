@@ -130,11 +130,7 @@ func TestOperationsMarkupKeepsLegacyIDsAndResponsiveOverflow(t *testing.T) {
 			t.Errorf("Activity does not retain compatibility ID %q", id)
 		}
 	}
-	for _, script := range []string{`src="js/connections_ts.js"`, `src="js/activity_ts.js"`} {
-		if !strings.Contains(index, script) {
-			t.Errorf("operations module is not loaded: %s", script)
-		}
-	}
+	assertUIBundleControllers(t, "index.html", "app", "connections", "activity")
 	if strings.Contains(strings.ToLower(index), "gzip") {
 		t.Fatal("operations markup invents an XMLTV GZIP response field")
 	}
@@ -334,7 +330,7 @@ function walk(root, predicate, matches = []) {
 }
 
 const fixture = JSON.parse(fs.readFileSync(process.argv[5], "utf8"));
-const context = {
+const context = {Drawer: {getInstance() {return null;}},
   document,
   navigator: { clipboard: { writeText() { return Promise.resolve(); } } },
   ClipboardJS: undefined,
@@ -501,7 +497,7 @@ TestWebSocket.OPEN = 1;
 TestWebSocket.CLOSING = 2;
 TestWebSocket.CLOSED = 3;
 
-const context = {
+const context = {Drawer: {getInstance() {return null;}},
   console: { log() {}, warn() {} },
   document,
   navigator: { clipboard: { writeText(value) { copiedValue = value; return Promise.resolve(); } } },

@@ -5,3 +5,5 @@ threadfin.exe
 .idea/**
 .worktrees/
 /.pgo-pilot/
+
+node_modules/

@@ -5,40 +5,32 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Threadfin</title>
-  <!-- font-awesome -->
-  <link
-    rel="stylesheet"
-    href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/7.3.1/css/all.min.css"
-  />
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-sRIl4kxILFvY47J16cr9ZwB07vP4J8+LH7qKQnuqkuIAvNWLzeN8tE5YBujZqJLB" crossorigin="anonymous">
-  <link rel="stylesheet" href="css/screen.css" type="text/css">
-  <link rel="stylesheet" href="css/base.css" type="text/css">
-  <link rel="stylesheet" href="css/app-shell.css" type="text/css">
+  <link rel="stylesheet" href="css/vendor/fontawesome.min.css">
+  <link rel="stylesheet" href="css/vendor/bootstrap.min.css">
+  <link rel="stylesheet" href="css/app.css">
   <link rel="icon" href="img/threadfin.ico">
 
 </head>
 
-<body onload="javascript: PageReady();">
+<body>
 
-  <div id="loading" class="modal fade">
-    <div class="modal-dialog loader"></div>
-  </div>
+  <div id="loading" class="tf-loading" role="status" aria-live="polite" hidden>Working…</div>
 
-  <div id="popup" class="modal fade">
-    <div class="modal-dialog modal-xl">
-      <div class="modal-content">
-        <div class="modal-header" id="popup_header"></div>
-        <div class="modal-body">
+  <dialog id="popup" class="dialog dialog-xl" aria-label="Threadfin editor">
+    <div class="dialog-content">
+      <div class="tf-dialog-content">
+        <div class="dialog-header" id="popup_header"></div>
+        <div class="dialog-body">
           <div class="container-fluid">
             <div class="row">
               <div id="popup-custom"></div>
             </div>
           </div>
         </div>
-        <div class="modal-footer" id="popup_footer"></div>
+        <div class="dialog-footer" id="popup_footer"></div>
       </div>
     </div>
-  </div>
+  </dialog>
 
   <div class="tf-app">
     <aside class="tf-sidebar">
@@ -47,13 +39,15 @@
           <span id="logo"></span>
         </a>
         <button id="sidebar-rail-toggle" class="tf-sidebar-toggle" type="button" aria-expanded="true" aria-label="Collapse navigation" title="Collapse navigation">
-          <i class="fas fa-angle-double-left tf-sidebar-toggle-icon" aria-hidden="true"></i>
+          <span class="tf-sidebar-toggle-icon" aria-hidden="true">‹</span>
         </button>
-        <button class="tf-nav-toggle navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#main-menu" aria-controls="main-menu" aria-expanded="false" aria-label="Toggle primary navigation">
-          <span class="navbar-toggler-icon"></span>
+        <button class="tf-nav-toggle navbar-toggler" type="button" data-bs-toggle="drawer" data-bs-target="#navigation-drawer" aria-controls="navigation-drawer" aria-expanded="false" aria-label="Toggle primary navigation">
+          <span aria-hidden="true">☰</span>
         </button>
       </div>
-      <nav id="main-menu" class="navbar tf-navigation collapse" aria-label="Primary" data-bs-theme="dark"></nav>
+      <dialog id="navigation-drawer" class="lg:drawer drawer-start tf-navigation-drawer" aria-label="Primary navigation">
+        <nav id="main-menu" class="navbar tf-navigation" aria-label="Primary"></nav>
+      </dialog>
     </aside>
 
     <main id="main-content" tabindex="-1">
@@ -93,25 +87,7 @@
     </main>
   </div>
 
-  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/js/bootstrap.bundle.min.js" integrity="sha384-FKyoEForCGlyvwx9Hj09JcYn3nv7wiPVlz7YYwJrWVcXK/BmnVDxM+D2scQbITxI" crossorigin="anonymous"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/clipboard.js/2.0.11/clipboard.min.js"></script>
-  <script language="javascript" type="text/javascript" src="js/network_ts.js"></script>
-  <script language="javascript" type="text/javascript" src="js/mapping_state_ts.js"></script>
-  <script language="javascript" type="text/javascript" src="js/filter_ts.js"></script>
-  <script language="javascript" type="text/javascript" src="js/menu_ts.js"></script>
-  <script language="javascript" type="text/javascript" src="js/users_page_ts.js"></script>
-  <script language="javascript" type="text/javascript" src="js/mapping_ts.js"></script>
-  <script language="javascript" type="text/javascript" src="js/sources_ts.js"></script>
-  <script language="javascript" type="text/javascript" src="js/app_state_ts.js"></script>
-  <script language="javascript" type="text/javascript" src="js/overview_ts.js"></script>
-  <script language="javascript" type="text/javascript" src="js/connections_ts.js"></script>
-  <script language="javascript" type="text/javascript" src="js/activity_ts.js"></script>
-  <script language="javascript" type="text/javascript" src="js/navigation_ts.js"></script>
-  <script language="javascript" type="text/javascript" src="js/settings_ts.js"></script>
-  <script language="javascript" type="text/javascript" src="js/settings_page_ts.js"></script>
-  <script language="javascript" type="text/javascript" src="js/logs_ts.js"></script>
-  <script language="javascript" type="text/javascript" src="js/log_page_ts.js"></script>
-  <script language="javascript" type="text/javascript" src="js/base_ts.js"></script>
+  <script type="module" src="js/app.js"></script>
 </body>
 
 </html>
