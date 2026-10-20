@@ -217,6 +217,30 @@ func TestUIAdminSettingsGeneratedCategoriesTypesAndPreview(t *testing.T) {
 	}
 }
 
+func TestUIAdminSettingsValidationRejectsLossyNumericAndInvalidScheduleInput(t *testing.T) {
+	output := runUIAdminNodeFixture(t, "settings-validation", `
+const fs = require("fs"), vm = require("vm");
+const context = {}; vm.createContext(context);
+vm.runInContext(fs.readFileSync(process.argv[2], "utf8"), context);
+const cases = [["update", "2460", false], ["update", "120", false], ["update", "0000, 2359,,1200", true], ["update", "", true], ["httpsPort", "8443junk", false], ["httpsPort", "1.5", false], ["httpsPort", "", false], ["httpsPort", "8443", true], ["httpsPort", "1e3", true], ["buffer.timeout", "1.5", true], ["buffer.timeout", "NaN", false]];
+const scientific = context.serializeSettingsChanges([{tagName:"INPUT", type:"number", name:"httpsPort", value:"1e3", className:"form-control changed"}]);
+if (scientific.httpsPort !== 1000) throw Error("Native numeric exponent was truncated during serialization");
+process.stdout.write(JSON.stringify(cases.map(([name,value,valid]) => ({name,value,valid,accepted:context.settingsInputError(name,value)===""}))));
+`, "settings_page_ts.js")
+	var cases []struct {
+		Name, Value     string
+		Valid, Accepted bool
+	}
+	if err := json.Unmarshal(output, &cases); err != nil {
+		t.Fatal(err)
+	}
+	for _, item := range cases {
+		if item.Valid != item.Accepted {
+			t.Errorf("%s=%q accepted=%t, want %t", item.Name, item.Value, item.Accepted, item.Valid)
+		}
+	}
+}
+
 func TestUIAdminSettingsGeneratedTabsSupportKeyboardActivationAndFocus(t *testing.T) {
 	output := runUIAdminNodeFixture(t, "settings-tabs", settingsTabsNodeScript, "settings_page_ts.js")
 	var got []struct {
@@ -968,10 +992,10 @@ const settingsLabelsNodeScript = `
 const fs = require("fs");
 const vm = require("vm");
 class Label { constructor(text) { this.id = ""; this.textContent = text; } }
-class Row { constructor(label) { this.label = label; } querySelector(selector) { return selector === "td:first-child" ? this.label : null; } }
+class Row { constructor(label) { this.label = label; } querySelector(selector) { return selector === "label" ? this.label : null; } }
 class Control {
   constructor(name, type, label) { this.name = name; this.type = type; this.id = ""; this.attributes = {}; this.row = new Row(label); }
-  closest(selector) { return selector === "tr" ? this.row : null; }
+  closest(selector) { return selector === ".tf-form-field" ? this.row : null; }
   setAttribute(name, value) { this.attributes[name] = String(value); }
   getAttribute(name) { return this.attributes[name] || ""; }
 }

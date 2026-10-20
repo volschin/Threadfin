@@ -1424,43 +1424,16 @@
   display: none;
 }
 
-.tf-app .tf-settings-table,
 .tf-app .tf-users-table {
   width: 100%;
   border-collapse: collapse;
 }
 
-.tf-app .tf-settings-table :is(th, td),
 .tf-app .tf-users-table :is(th, td) {
   padding: 0.65rem 0.75rem;
   text-align: left;
   vertical-align: middle;
   border-top: 1px solid var(--tf-panel-steel);
-}
-
-.tf-app .tf-settings-table tr[data-setting-key] td:first-child {
-  width: min(22rem, 38%);
-  color: var(--tf-text);
-  font-weight: 700;
-}
-
-.tf-app .tf-settings-table :is(input[type="text"], select) {
-  width: 100%;
-  min-height: 2.5rem;
-  padding: 0.45rem 0.625rem;
-  color: var(--tf-text);
-  background: var(--tf-signal-black);
-  border: 1px solid var(--tf-panel-steel);
-  border-radius: 0.375rem;
-}
-
-.tf-app .tf-settings-table .tf-field-help {
-  margin: 0;
-  color: var(--tf-text-muted);
-  font: inherit;
-  line-height: 1.45;
-  letter-spacing: normal;
-  white-space: pre-wrap;
 }
 
 .tf-app .tf-settings-epg-preview,
@@ -1782,22 +1755,6 @@
   .tf-auth-page :is(input, button) {
     min-height: 44px;
     min-inline-size: 44px;
-  }
-
-  .tf-app .tf-settings-table,
-  .tf-app .tf-settings-table tbody,
-  .tf-app .tf-settings-table tr,
-  .tf-app .tf-settings-table td {
-    display: block;
-    width: 100%;
-  }
-
-  .tf-app .tf-settings-table tr[data-setting-key] td:first-child {
-    width: 100%;
-  }
-
-  .tf-app .tf-settings-table tr:not([data-setting-key]) td:first-child {
-    display: none;
   }
 
   .tf-app .tf-users .tf-admin-table-scroll {

@@ -13,403 +13,225 @@ class SettingsCategory {
         return element;
     }
     createSettings(settingsKey) {
-        var setting = document.createElement("TR");
         var content = new PopupContent();
         var data = SERVER["settings"][settingsKey];
         switch (settingsKey) {
             // Texteingaben
             case "update":
-                var tdLeft = document.createElement("TD");
-                tdLeft.innerHTML = "{{.settings.update.title}}" + ":";
-                var tdRight = document.createElement("TD");
+                var title = "{{.settings.update.title}}" + ":";
                 var input = content.createInput("text", "update", data.toString());
                 input.setAttribute("placeholder", "{{.settings.update.placeholder}}");
-                addRuntimeEventListener(input, "change", (event) => { event.currentTarget.className = "changed"; });
-                tdRight.appendChild(input);
-                setting.appendChild(tdLeft);
-                setting.appendChild(tdRight);
+                addRuntimeEventListener(input, "change", (event) => { event.currentTarget.classList.add("changed"); });
                 break;
             case "backup.path":
-                var tdLeft = document.createElement("TD");
-                tdLeft.innerHTML = "{{.settings.backupPath.title}}" + ":";
-                var tdRight = document.createElement("TD");
+                var title = "{{.settings.backupPath.title}}" + ":";
                 var input = content.createInput("text", "backup.path", data);
                 input.setAttribute("placeholder", "{{.settings.backupPath.placeholder}}");
-                addRuntimeEventListener(input, "change", (event) => { event.currentTarget.className = "changed"; });
-                tdRight.appendChild(input);
-                setting.appendChild(tdLeft);
-                setting.appendChild(tdRight);
+                addRuntimeEventListener(input, "change", (event) => { event.currentTarget.classList.add("changed"); });
                 break;
             case "temp.path":
-                var tdLeft = document.createElement("TD");
-                tdLeft.innerHTML = "{{.settings.tempPath.title}}" + ":";
-                var tdRight = document.createElement("TD");
+                var title = "{{.settings.tempPath.title}}" + ":";
                 var input = content.createInput("text", "temp.path", data);
                 input.setAttribute("placeholder", "{{.settings.tmpPath.placeholder}}");
-                addRuntimeEventListener(input, "change", (event) => { event.currentTarget.className = "changed"; });
-                tdRight.appendChild(input);
-                setting.appendChild(tdLeft);
-                setting.appendChild(tdRight);
+                addRuntimeEventListener(input, "change", (event) => { event.currentTarget.classList.add("changed"); });
                 break;
             case "user.agent":
-                var tdLeft = document.createElement("TD");
-                tdLeft.innerHTML = "{{.settings.userAgent.title}}" + ":";
-                var tdRight = document.createElement("TD");
+                var title = "{{.settings.userAgent.title}}" + ":";
                 var input = content.createInput("text", "user.agent", data);
                 input.setAttribute("placeholder", "{{.settings.userAgent.placeholder}}");
-                addRuntimeEventListener(input, "change", (event) => { event.currentTarget.className = "changed"; });
-                tdRight.appendChild(input);
-                setting.appendChild(tdLeft);
-                setting.appendChild(tdRight);
+                addRuntimeEventListener(input, "change", (event) => { event.currentTarget.classList.add("changed"); });
                 break;
             case "buffer.timeout":
-                var tdLeft = document.createElement("TD");
-                tdLeft.innerHTML = "{{.settings.bufferTimeout.title}}" + ":";
-                var tdRight = document.createElement("TD");
+                var title = "{{.settings.bufferTimeout.title}}" + ":";
                 var input = content.createInput("text", "buffer.timeout", data);
                 input.setAttribute("placeholder", "{{.settings.bufferTimeout.placeholder}}");
-                addRuntimeEventListener(input, "change", (event) => { event.currentTarget.className = "changed"; });
-                tdRight.appendChild(input);
-                setting.appendChild(tdLeft);
-                setting.appendChild(tdRight);
+                addRuntimeEventListener(input, "change", (event) => { event.currentTarget.classList.add("changed"); });
                 break;
             case "ffmpeg.path":
-                var tdLeft = document.createElement("TD");
-                tdLeft.innerHTML = "{{.settings.ffmpegPath.title}}" + ":";
-                var tdRight = document.createElement("TD");
+                var title = "{{.settings.ffmpegPath.title}}" + ":";
                 var input = content.createInput("text", "ffmpeg.path", data);
                 input.setAttribute("placeholder", "{{.settings.ffmpegPath.placeholder}}");
-                addRuntimeEventListener(input, "change", (event) => { event.currentTarget.className = "changed"; });
-                tdRight.appendChild(input);
-                setting.appendChild(tdLeft);
-                setting.appendChild(tdRight);
+                addRuntimeEventListener(input, "change", (event) => { event.currentTarget.classList.add("changed"); });
                 break;
             case "ffmpeg.options":
-                var tdLeft = document.createElement("TD");
-                tdLeft.innerHTML = "{{.settings.ffmpegOptions.title}}" + ":";
-                var tdRight = document.createElement("TD");
+                var title = "{{.settings.ffmpegOptions.title}}" + ":";
                 var input = content.createInput("text", "ffmpeg.options", data);
                 input.setAttribute("placeholder", "{{.settings.ffmpegOptions.placeholder}}");
-                addRuntimeEventListener(input, "change", (event) => { event.currentTarget.className = "changed"; });
-                tdRight.appendChild(input);
-                setting.appendChild(tdLeft);
-                setting.appendChild(tdRight);
+                addRuntimeEventListener(input, "change", (event) => { event.currentTarget.classList.add("changed"); });
                 break;
             case "ffmpeg.forceHttp":
-                var tdLeft = document.createElement("TD");
-                tdLeft.innerHTML = "{{.settings.ffmpegForceHttp.title}}" + ":";
-                var tdRight = document.createElement("TD");
+                var title = "{{.settings.ffmpegForceHttp.title}}" + ":";
                 var input = content.createCheckbox(settingsKey);
                 input.checked = data;
-                addRuntimeEventListener(input, "change", (event) => { event.currentTarget.className = "changed"; });
-                tdRight.appendChild(input);
-                setting.appendChild(tdLeft);
-                setting.appendChild(tdRight);
+                addRuntimeEventListener(input, "change", (event) => { event.currentTarget.classList.add("changed"); });
                 break;
             case "vlc.path":
-                var tdLeft = document.createElement("TD");
-                tdLeft.innerHTML = "{{.settings.vlcPath.title}}" + ":";
-                var tdRight = document.createElement("TD");
+                var title = "{{.settings.vlcPath.title}}" + ":";
                 var input = content.createInput("text", "vlc.path", data);
                 input.setAttribute("placeholder", "{{.settings.vlcPath.placeholder}}");
-                addRuntimeEventListener(input, "change", (event) => { event.currentTarget.className = "changed"; });
-                tdRight.appendChild(input);
-                setting.appendChild(tdLeft);
-                setting.appendChild(tdRight);
+                addRuntimeEventListener(input, "change", (event) => { event.currentTarget.classList.add("changed"); });
                 break;
             case "vlc.options":
-                var tdLeft = document.createElement("TD");
-                tdLeft.innerHTML = "{{.settings.vlcOptions.title}}" + ":";
-                var tdRight = document.createElement("TD");
+                var title = "{{.settings.vlcOptions.title}}" + ":";
                 var input = content.createInput("text", "vlc.options", data);
                 input.setAttribute("placeholder", "{{.settings.vlcOptions.placeholder}}");
-                addRuntimeEventListener(input, "change", (event) => { event.currentTarget.className = "changed"; });
-                tdRight.appendChild(input);
-                setting.appendChild(tdLeft);
-                setting.appendChild(tdRight);
+                addRuntimeEventListener(input, "change", (event) => { event.currentTarget.classList.add("changed"); });
                 break;
             // Checkboxen
             case "authentication.web":
-                var tdLeft = document.createElement("TD");
-                tdLeft.innerHTML = "{{.settings.authenticationWEB.title}}" + ":";
-                var tdRight = document.createElement("TD");
+                var title = "{{.settings.authenticationWEB.title}}" + ":";
                 var input = content.createCheckbox(settingsKey);
                 input.checked = data;
-                addRuntimeEventListener(input, "change", (event) => { event.currentTarget.className = "changed"; });
-                tdRight.appendChild(input);
-                setting.appendChild(tdLeft);
-                setting.appendChild(tdRight);
+                addRuntimeEventListener(input, "change", (event) => { event.currentTarget.classList.add("changed"); });
                 break;
             case "authentication.pms":
-                var tdLeft = document.createElement("TD");
-                tdLeft.innerHTML = "{{.settings.authenticationPMS.title}}" + ":";
-                var tdRight = document.createElement("TD");
+                var title = "{{.settings.authenticationPMS.title}}" + ":";
                 var input = content.createCheckbox(settingsKey);
                 input.checked = data;
-                addRuntimeEventListener(input, "change", (event) => { event.currentTarget.className = "changed"; });
-                tdRight.appendChild(input);
-                setting.appendChild(tdLeft);
-                setting.appendChild(tdRight);
+                addRuntimeEventListener(input, "change", (event) => { event.currentTarget.classList.add("changed"); });
                 break;
             case "authentication.m3u":
-                var tdLeft = document.createElement("TD");
-                tdLeft.innerHTML = "{{.settings.authenticationM3U.title}}" + ":";
-                var tdRight = document.createElement("TD");
+                var title = "{{.settings.authenticationM3U.title}}" + ":";
                 var input = content.createCheckbox(settingsKey);
                 input.checked = data;
-                addRuntimeEventListener(input, "change", (event) => { event.currentTarget.className = "changed"; });
-                tdRight.appendChild(input);
-                setting.appendChild(tdLeft);
-                setting.appendChild(tdRight);
+                addRuntimeEventListener(input, "change", (event) => { event.currentTarget.classList.add("changed"); });
                 break;
             case "authentication.xml":
-                var tdLeft = document.createElement("TD");
-                tdLeft.innerHTML = "{{.settings.authenticationXML.title}}" + ":";
-                var tdRight = document.createElement("TD");
+                var title = "{{.settings.authenticationXML.title}}" + ":";
                 var input = content.createCheckbox(settingsKey);
                 input.checked = data;
-                addRuntimeEventListener(input, "change", (event) => { event.currentTarget.className = "changed"; });
-                tdRight.appendChild(input);
-                setting.appendChild(tdLeft);
-                setting.appendChild(tdRight);
+                addRuntimeEventListener(input, "change", (event) => { event.currentTarget.classList.add("changed"); });
                 break;
             case "authentication.api":
-                var tdLeft = document.createElement("TD");
-                tdLeft.innerHTML = "{{.settings.authenticationAPI.title}}" + ":";
-                var tdRight = document.createElement("TD");
+                var title = "{{.settings.authenticationAPI.title}}" + ":";
                 var input = content.createCheckbox(settingsKey);
                 input.checked = data;
-                addRuntimeEventListener(input, "change", (event) => { event.currentTarget.className = "changed"; });
-                tdRight.appendChild(input);
-                setting.appendChild(tdLeft);
-                setting.appendChild(tdRight);
+                addRuntimeEventListener(input, "change", (event) => { event.currentTarget.classList.add("changed"); });
                 break;
             case "files.update":
-                var tdLeft = document.createElement("TD");
-                tdLeft.innerHTML = "{{.settings.filesUpdate.title}}" + ":";
-                var tdRight = document.createElement("TD");
+                var title = "{{.settings.filesUpdate.title}}" + ":";
                 var input = content.createCheckbox(settingsKey);
                 input.checked = data;
-                addRuntimeEventListener(input, "change", (event) => { event.currentTarget.className = "changed"; });
-                tdRight.appendChild(input);
-                setting.appendChild(tdLeft);
-                setting.appendChild(tdRight);
+                addRuntimeEventListener(input, "change", (event) => { event.currentTarget.classList.add("changed"); });
                 break;
             case "cache.images":
-                var tdLeft = document.createElement("TD");
-                tdLeft.innerHTML = "{{.settings.cacheImages.title}}" + ":";
-                var tdRight = document.createElement("TD");
+                var title = "{{.settings.cacheImages.title}}" + ":";
                 var input = content.createCheckbox(settingsKey);
                 input.checked = data;
-                addRuntimeEventListener(input, "change", (event) => { event.currentTarget.className = "changed"; });
-                tdRight.appendChild(input);
-                setting.appendChild(tdLeft);
-                setting.appendChild(tdRight);
+                addRuntimeEventListener(input, "change", (event) => { event.currentTarget.classList.add("changed"); });
                 break;
             case "xepg.replace.missing.images":
-                var tdLeft = document.createElement("TD");
-                tdLeft.innerHTML = "{{.settings.replaceEmptyImages.title}}" + ":";
-                var tdRight = document.createElement("TD");
+                var title = "{{.settings.replaceEmptyImages.title}}" + ":";
                 var input = content.createCheckbox(settingsKey);
                 input.checked = data;
-                addRuntimeEventListener(input, "change", (event) => { event.currentTarget.className = "changed"; });
-                tdRight.appendChild(input);
-                setting.appendChild(tdLeft);
-                setting.appendChild(tdRight);
+                addRuntimeEventListener(input, "change", (event) => { event.currentTarget.classList.add("changed"); });
                 break;
             case "xepg.replace.channel.title":
-                var tdLeft = document.createElement("TD");
-                tdLeft.innerHTML = "{{.settings.replaceChannelTitle.title}}" + ":";
-                var tdRight = document.createElement("TD");
+                var title = "{{.settings.replaceChannelTitle.title}}" + ":";
                 var input = content.createCheckbox(settingsKey);
                 input.checked = data;
-                addRuntimeEventListener(input, "change", (event) => { event.currentTarget.className = "changed"; });
-                tdRight.appendChild(input);
-                setting.appendChild(tdLeft);
-                setting.appendChild(tdRight);
+                addRuntimeEventListener(input, "change", (event) => { event.currentTarget.classList.add("changed"); });
                 break;
             case "storeBufferInRAM":
-                var tdLeft = document.createElement("TD");
-                tdLeft.innerHTML = "{{.settings.storeBufferInRAM.title}}" + ":";
-                var tdRight = document.createElement("TD");
+                var title = "{{.settings.storeBufferInRAM.title}}" + ":";
                 var input = content.createCheckbox(settingsKey);
                 input.checked = data;
-                addRuntimeEventListener(input, "change", (event) => { event.currentTarget.className = "changed"; });
-                tdRight.appendChild(input);
-                setting.appendChild(tdLeft);
-                setting.appendChild(tdRight);
+                addRuntimeEventListener(input, "change", (event) => { event.currentTarget.classList.add("changed"); });
                 break;
             case "forceHttps":
-                var tdLeft = document.createElement("TD");
-                tdLeft.innerHTML = "{{.settings.forceHttps.title}}" + ":";
-                var tdRight = document.createElement("TD");
+                var title = "{{.settings.forceHttps.title}}" + ":";
                 var input = content.createCheckbox(settingsKey);
                 input.checked = data;
-                addRuntimeEventListener(input, "change", (event) => { event.currentTarget.className = "changed"; });
-                tdRight.appendChild(input);
-                setting.appendChild(tdLeft);
-                setting.appendChild(tdRight);
+                addRuntimeEventListener(input, "change", (event) => { event.currentTarget.classList.add("changed"); });
                 break;
             case "excludeStreamHttps":
-                var tdLeft = document.createElement("TD");
-                tdLeft.innerHTML = "{{.settings.excludeStreamHttps.title}}" + ":";
-                var tdRight = document.createElement("TD");
+                var title = "{{.settings.excludeStreamHttps.title}}" + ":";
                 var input = content.createCheckbox(settingsKey);
                 input.checked = data;
-                addRuntimeEventListener(input, "change", (event) => { event.currentTarget.className = "changed"; });
-                tdRight.appendChild(input);
-                setting.appendChild(tdLeft);
-                setting.appendChild(tdRight);
+                addRuntimeEventListener(input, "change", (event) => { event.currentTarget.classList.add("changed"); });
                 break;
             case "httpsPort":
-                var tdLeft = document.createElement("TD");
-                tdLeft.innerHTML = "{{.settings.httpsPort.title}}" + ":";
-                var tdRight = document.createElement("TD");
+                var title = "{{.settings.httpsPort.title}}" + ":";
                 var input = content.createInput("text", "httpsPort", data.toString());
                 input.setAttribute("placeholder", "{{.settings.httpsPort.placeholder}}");
-                addRuntimeEventListener(input, "change", (event) => { event.currentTarget.className = "changed"; });
-                tdRight.appendChild(input);
-                setting.appendChild(tdLeft);
-                setting.appendChild(tdRight);
+                addRuntimeEventListener(input, "change", (event) => { event.currentTarget.classList.add("changed"); });
                 break;
             case "httpsThreadfinDomain":
-                var tdLeft = document.createElement("TD");
-                tdLeft.innerHTML = "{{.settings.httpsThreadfinDomain.title}}" + ":";
-                var tdRight = document.createElement("TD");
+                var title = "{{.settings.httpsThreadfinDomain.title}}" + ":";
                 var input = content.createInput("text", "httpsThreadfinDomain", data.toString());
                 input.setAttribute("placeholder", "{{.settings.httpsThreadfinDomain.placeholder}}");
-                addRuntimeEventListener(input, "change", (event) => { event.currentTarget.className = "changed"; });
-                tdRight.appendChild(input);
-                setting.appendChild(tdLeft);
-                setting.appendChild(tdRight);
+                addRuntimeEventListener(input, "change", (event) => { event.currentTarget.classList.add("changed"); });
                 break;
             case "bindIpAddress":
-                var tdLeft = document.createElement("TD");
-                tdLeft.innerHTML = "{{.settings.bindIpAddress.title}}" + ":";
-                var tdRight = document.createElement("TD");
+                var title = "{{.settings.bindIpAddress.title}}" + ":";
                 var input = content.createInput("text", "bindIpAddress", data.toString());
                 input.setAttribute("placeholder", "{{.settings.bindIpAddress.placeholder}}");
-                addRuntimeEventListener(input, "change", (event) => { event.currentTarget.className = "changed"; });
-                tdRight.appendChild(input);
-                setting.appendChild(tdLeft);
-                setting.appendChild(tdRight);
+                addRuntimeEventListener(input, "change", (event) => { event.currentTarget.classList.add("changed"); });
                 break;
             case "httpThreadfinDomain":
-                var tdLeft = document.createElement("TD");
-                tdLeft.innerHTML = "{{.settings.httpThreadfinDomain.title}}" + ":";
-                var tdRight = document.createElement("TD");
+                var title = "{{.settings.httpThreadfinDomain.title}}" + ":";
                 var input = content.createInput("text", "httpThreadfinDomain", data.toString());
                 input.setAttribute("placeholder", "{{.settings.httpThreadfinDomain.placeholder}}");
-                addRuntimeEventListener(input, "change", (event) => { event.currentTarget.className = "changed"; });
-                tdRight.appendChild(input);
-                setting.appendChild(tdLeft);
-                setting.appendChild(tdRight);
+                addRuntimeEventListener(input, "change", (event) => { event.currentTarget.classList.add("changed"); });
                 break;
             case "enableNonAscii":
-                var tdLeft = document.createElement("TD");
-                tdLeft.innerHTML = "{{.settings.enableNonAscii.title}}" + ":";
-                var tdRight = document.createElement("TD");
+                var title = "{{.settings.enableNonAscii.title}}" + ":";
                 var input = content.createCheckbox(settingsKey);
                 input.checked = data;
-                addRuntimeEventListener(input, "change", (event) => { event.currentTarget.className = "changed"; });
-                tdRight.appendChild(input);
-                setting.appendChild(tdLeft);
-                setting.appendChild(tdRight);
+                addRuntimeEventListener(input, "change", (event) => { event.currentTarget.classList.add("changed"); });
                 break;
             case "epgCategories":
-                var tdLeft = document.createElement("TD");
-                tdLeft.innerHTML = "{{.settings.epgCategories.title}}" + ":";
-                var tdRight = document.createElement("TD");
+                var title = "{{.settings.epgCategories.title}}" + ":";
                 var input = content.createInput("text", "epgCategories", data.toString());
                 input.setAttribute("placeholder", "{{.settings.epgCategories.placeholder}}");
-                addRuntimeEventListener(input, "change", (event) => { event.currentTarget.className = "changed"; });
-                tdRight.appendChild(input);
-                setting.appendChild(tdLeft);
-                setting.appendChild(tdRight);
+                addRuntimeEventListener(input, "change", (event) => { event.currentTarget.classList.add("changed"); });
                 break;
             case "epgCategoriesColors":
-                var tdLeft = document.createElement("TD");
-                tdLeft.innerHTML = "{{.settings.epgCategoriesColors.title}}" + ":";
-                var tdRight = document.createElement("TD");
+                var title = "{{.settings.epgCategoriesColors.title}}" + ":";
                 var input = content.createInput("text", "epgCategoriesColors", data.toString());
                 input.setAttribute("placeholder", "{{.settings.epgCategoriesColors.placeholder}}");
-                addRuntimeEventListener(input, "change", (event) => { event.currentTarget.className = "changed"; });
-                tdRight.appendChild(input);
-                setting.appendChild(tdLeft);
-                setting.appendChild(tdRight);
+                addRuntimeEventListener(input, "change", (event) => { event.currentTarget.classList.add("changed"); });
                 break;
             case "ThreadfinAutoUpdate":
-                var tdLeft = document.createElement("TD");
-                tdLeft.innerHTML = "{{.settings.ThreadfinAutoUpdate.title}}" + ":";
-                var tdRight = document.createElement("TD");
+                var title = "{{.settings.ThreadfinAutoUpdate.title}}" + ":";
                 var input = content.createCheckbox(settingsKey);
                 input.checked = data;
-                addRuntimeEventListener(input, "change", (event) => { event.currentTarget.className = "changed"; });
-                tdRight.appendChild(input);
-                setting.appendChild(tdLeft);
-                setting.appendChild(tdRight);
+                addRuntimeEventListener(input, "change", (event) => { event.currentTarget.classList.add("changed"); });
                 break;
             case "ssdp":
-                var tdLeft = document.createElement("TD");
-                tdLeft.innerHTML = "{{.settings.ssdp.title}}" + ":";
-                var tdRight = document.createElement("TD");
+                var title = "{{.settings.ssdp.title}}" + ":";
                 var input = content.createCheckbox(settingsKey);
                 input.checked = data;
-                addRuntimeEventListener(input, "change", (event) => { event.currentTarget.className = "changed"; });
-                tdRight.appendChild(input);
-                setting.appendChild(tdLeft);
-                setting.appendChild(tdRight);
+                addRuntimeEventListener(input, "change", (event) => { event.currentTarget.classList.add("changed"); });
                 break;
             case "dummy":
-                var tdLeft = document.createElement("TD");
-                tdLeft.innerHTML = "{{.settings.dummy.title}}" + ":";
-                var tdRight = document.createElement("TD");
+                var title = "{{.settings.dummy.title}}" + ":";
                 var input = content.createCheckbox(settingsKey);
                 input.checked = data;
-                addRuntimeEventListener(input, "change", (event) => { event.currentTarget.className = "changed"; });
-                tdRight.appendChild(input);
-                setting.appendChild(tdLeft);
-                setting.appendChild(tdRight);
+                addRuntimeEventListener(input, "change", (event) => { event.currentTarget.classList.add("changed"); });
                 break;
             case "dummyChannel":
-                var tdLeft = document.createElement("TD");
-                tdLeft.innerHTML = "{{.settings.dummyChannel.title}}" + ":";
-                var tdRight = document.createElement("TD");
+                var title = "{{.settings.dummyChannel.title}}" + ":";
                 var text = ["PPV", "30 Minutes", "60 Minutes", "90 Minutes", "120 Minutes", "180 Minutes", "240 Minutes", "360 Minutes"];
                 var values = ["PPV", "30_Minutes", "60_Minutes", "90_Minutes", "120_Minutes", "180_Minutes", "240_Minutes", "360_Minutes"];
                 var select = content.createSelect(text, values, data, settingsKey);
-                addRuntimeEventListener(select, "change", (event) => { event.currentTarget.className = "changed"; });
-                tdRight.appendChild(select);
-                setting.appendChild(tdLeft);
-                setting.appendChild(tdRight);
+                addRuntimeEventListener(select, "change", (event) => { event.currentTarget.classList.add("changed"); });
                 break;
             case "ignoreFilters":
-                var tdLeft = document.createElement("TD");
-                tdLeft.innerHTML = "{{.settings.ignoreFilters.title}}" + ":";
-                var tdRight = document.createElement("TD");
+                var title = "{{.settings.ignoreFilters.title}}" + ":";
                 var input = content.createCheckbox(settingsKey);
                 input.checked = data;
-                addRuntimeEventListener(input, "change", (event) => { event.currentTarget.className = "changed"; });
-                tdRight.appendChild(input);
-                setting.appendChild(tdLeft);
-                setting.appendChild(tdRight);
+                addRuntimeEventListener(input, "change", (event) => { event.currentTarget.classList.add("changed"); });
                 break;
             case "api":
-                var tdLeft = document.createElement("TD");
-                tdLeft.innerHTML = "{{.settings.api.title}}" + ":";
-                var tdRight = document.createElement("TD");
+                var title = "{{.settings.api.title}}" + ":";
                 var input = content.createCheckbox(settingsKey);
                 input.checked = data;
-                addRuntimeEventListener(input, "change", (event) => { event.currentTarget.className = "changed"; });
-                tdRight.appendChild(input);
-                setting.appendChild(tdLeft);
-                setting.appendChild(tdRight);
+                addRuntimeEventListener(input, "change", (event) => { event.currentTarget.classList.add("changed"); });
                 break;
             // Select
             case "tuner":
-                var tdLeft = document.createElement("TD");
-                tdLeft.innerHTML = "{{.settings.tuner.title}}" + ":";
-                var tdRight = document.createElement("TD");
+                var title = "{{.settings.tuner.title}}" + ":";
                 var text = new Array();
                 var values = new Array();
                 for (var i = 1; i <= 100; i++) {
@@ -417,75 +239,50 @@ class SettingsCategory {
                     values.push(i);
                 }
                 var select = content.createSelect(text, values, data, settingsKey);
-                addRuntimeEventListener(select, "change", (event) => { event.currentTarget.className = "changed"; });
-                tdRight.appendChild(select);
-                setting.appendChild(tdLeft);
-                setting.appendChild(tdRight);
+                addRuntimeEventListener(select, "change", (event) => { event.currentTarget.classList.add("changed"); });
                 break;
             case "epgSource":
-                var tdLeft = document.createElement("TD");
-                tdLeft.innerHTML = "{{.settings.epgSource.title}}" + ":";
-                var tdRight = document.createElement("TD");
+                var title = "{{.settings.epgSource.title}}" + ":";
                 var text = ["PMS", "XEPG"];
                 var values = ["PMS", "XEPG"];
                 var select = content.createSelect(text, values, data, settingsKey);
-                addRuntimeEventListener(select, "change", (event) => { event.currentTarget.className = "changed"; });
-                tdRight.appendChild(select);
-                setting.appendChild(tdLeft);
-                setting.appendChild(tdRight);
+                addRuntimeEventListener(select, "change", (event) => { event.currentTarget.classList.add("changed"); });
                 break;
             case "backup.keep":
-                var tdLeft = document.createElement("TD");
-                tdLeft.innerHTML = "{{.settings.backupKeep.title}}" + ":";
-                var tdRight = document.createElement("TD");
+                var title = "{{.settings.backupKeep.title}}" + ":";
                 var text = ["5", "10", "20", "30", "40", "50"];
                 var values = ["5", "10", "20", "30", "40", "50"];
                 var select = content.createSelect(text, values, data, settingsKey);
-                addRuntimeEventListener(select, "change", (event) => { event.currentTarget.className = "changed"; });
-                tdRight.appendChild(select);
-                setting.appendChild(tdLeft);
-                setting.appendChild(tdRight);
+                addRuntimeEventListener(select, "change", (event) => { event.currentTarget.classList.add("changed"); });
                 break;
             case "buffer.size.kb":
-                var tdLeft = document.createElement("TD");
-                tdLeft.innerHTML = "{{.settings.bufferSize.title}}" + ":";
-                var tdRight = document.createElement("TD");
+                var title = "{{.settings.bufferSize.title}}" + ":";
                 var text = ["0.5 MB", "1 MB", "2 MB", "3 MB", "4 MB", "5 MB", "6 MB", "7 MB", "8 MB"];
                 var values = ["512", "1024", "2048", "3072", "4096", "5120", "6144", "7168", "8192"];
                 var select = content.createSelect(text, values, data, settingsKey);
-                addRuntimeEventListener(select, "change", (event) => { event.currentTarget.className = "changed"; });
-                tdRight.appendChild(select);
-                setting.appendChild(tdLeft);
-                setting.appendChild(tdRight);
+                addRuntimeEventListener(select, "change", (event) => { event.currentTarget.classList.add("changed"); });
                 break;
             case "buffer":
-                var tdLeft = document.createElement("TD");
-                tdLeft.innerHTML = "{{.settings.streamBuffering.title}}" + ":";
-                var tdRight = document.createElement("TD");
+                var title = "{{.settings.streamBuffering.title}}" + ":";
                 var text = ["{{.settings.streamBuffering.info_false}}", "FFmpeg: ({{.settings.streamBuffering.info_ffmpeg}})", "VLC: ({{.settings.streamBuffering.info_vlc}})"];
                 var values = ["-", "ffmpeg", "vlc"];
                 var select = content.createSelect(text, values, data, settingsKey);
-                addRuntimeEventListener(select, "change", (event) => { event.currentTarget.className = "changed"; });
-                tdRight.appendChild(select);
-                setting.appendChild(tdLeft);
-                setting.appendChild(tdRight);
+                addRuntimeEventListener(select, "change", (event) => { event.currentTarget.classList.add("changed"); });
                 break;
             case "udpxy":
-                var tdLeft = document.createElement("TD");
-                tdLeft.innerHTML = "{{.settings.udpxy.title}}" + ":";
-                var tdRight = document.createElement("TD");
+                ;
+                var title = "{{.settings.udpxy.title}}" + ":";
                 var input = content.createInput("text", "udpxy", data);
                 input.setAttribute("placeholder", "{{.settings.udpxy.placeholder}}");
-                addRuntimeEventListener(input, "change", (event) => { event.currentTarget.className = "changed"; });
-                tdRight.appendChild(input);
-                setting.appendChild(tdLeft);
-                setting.appendChild(tdRight);
+                addRuntimeEventListener(input, "change", (event) => { event.currentTarget.classList.add("changed"); });
                 break;
         }
-        return setting;
+        var control = input || select;
+        if (!control)
+            return document.createElement("div");
+        return createUIFormField(title, control, "settings-field-" + settingsKey.replace(/[^A-Za-z0-9_-]+/g, "-"));
     }
     createDescription(settingsKey) {
-        var description = document.createElement("TR");
         var text;
         switch (settingsKey) {
             case "authentication.web":
@@ -608,16 +405,10 @@ class SettingsCategory {
                 text = "";
                 break;
         }
-        var tdLeft = document.createElement("TD");
-        tdLeft.innerHTML = "";
-        var tdRight = document.createElement("TD");
         var help = document.createElement("div");
         help.className = "tf-field-help";
         help.innerHTML = text;
-        tdRight.appendChild(help);
-        description.appendChild(tdLeft);
-        description.appendChild(tdRight);
-        return description;
+        return help;
     }
 }
 class SettingsCategoryItem extends SettingsCategory {
@@ -632,7 +423,8 @@ class SettingsCategoryItem extends SettingsCategory {
         var doc = document.getElementById(this.DocumentID);
         doc.appendChild(headline);
         // Tabelle für die Kategorie erstellen
-        var table = document.createElement("TABLE");
+        var table = document.createElement("div");
+        table.className = "tf-form-fields";
         var keys = settingsKeys.split(",");
         keys.forEach(settingsKey => {
             switch (settingsKey) {
@@ -647,7 +439,7 @@ class SettingsCategoryItem extends SettingsCategory {
                     var item = this.createSettings(settingsKey);
                     var description = this.createDescription(settingsKey);
                     table.appendChild(item);
-                    table.appendChild(description);
+                    appendUIFormHelp(item, description);
                     break;
             }
         });
@@ -662,12 +454,20 @@ function showSettings() {
     }
 }
 function saveSettings() {
-    var cmd = "saveSettings";
-    var div = document.getElementById("content_settings");
-    var controls = Array.prototype.slice.call(div.querySelectorAll("input, select"));
-    var newSettings = serializeSettingsChanges(controls);
-    var data = new Object();
-    data["settings"] = newSettings;
-    var server = new Server(cmd);
-    server.request(data);
+    if (settingsFeedback.state == "progress")
+        return;
+    var root = document.querySelector(".tf-settings");
+    if (!root || !validateSettingsForm(root))
+        return;
+    var controls = Array.prototype.slice.call(root.querySelectorAll("input, select"));
+    var changes = serializeSettingsChanges(controls);
+    if (!Object.keys(changes).length) {
+        settingsFeedback = { state: "idle", message: "No settings changed." };
+        renderSettingsFeedback();
+        return;
+    }
+    settingsFeedback = { state: "progress", message: "Saving settings…" };
+    renderSettingsFeedback();
+    var server = new Server("saveSettings");
+    server.request({ settings: changes });
 }

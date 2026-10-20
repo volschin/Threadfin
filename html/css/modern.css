@@ -135,3 +135,91 @@ input:is([name="file.source"], [name="http_proxy.ip"], [name="http_proxy.port"],
 }
 
 .tf-mapping-editor-field :is(input, select, .combobox-toggle) { font-weight: 400; }
+
+/* Native field groups shared by source dialogs and Settings. */
+.tf-form-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1.5rem;
+  min-inline-size: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.tf-form-field { min-inline-size: 0; align-content: start; }
+.tf-form-field > label { margin: 0; color: var(--tf-text); font-weight: 650; line-height: 1.5; }
+.tf-form-field > :is(input, select, textarea) {
+  min-height: 44px;
+  min-inline-size: 0;
+  width: 100%;
+  margin: 0;
+  border: 1px solid var(--bs-border-color);
+  padding: .625rem .75rem;
+  font-size: 1rem;
+  font-weight: 400;
+  scroll-margin-block: 5rem 8rem;
+}
+.tf-form-field:has(> .check) { grid-template-columns: 44px minmax(0, 1fr); align-items: start; }
+.tf-form-field:has(> .check) > label { grid-column: 2; grid-row: 1; align-self: center; cursor: pointer; }
+.tf-form-field > .check { grid-column: 1; grid-row: 1; width: 44px; height: 44px; padding: .5rem; background-image: none; }
+.tf-form-field > .check::before { content: none; }
+.tf-form-field :is(.tf-field-help, .tf-source-field-help) { padding: 0; font-size: .9rem; line-height: 1.5; }
+.tf-form-field :is(.tf-field-error, .tf-source-field-error) { margin: 0; padding: 0; color: var(--tf-fault-red); font-size: .9rem; }
+.tf-form-field [aria-invalid="true"] { border-color: var(--tf-fault-red); }
+.tf-form-field:has([name="file.source"], [name="ffmpeg.path"], [name="ffmpeg.options"], [name="vlc.path"], [name="vlc.options"], [name="backup.path"], [name="temp.path"], [name="epgCategories"], [name="epgCategoriesColors"], .tf-settings-epg-preview) { grid-column: 1 / -1; }
+.tf-form-advanced { min-inline-size: 0; border-block-start: 1px solid var(--bs-border-color); padding-block-start: .75rem; }
+.tf-form-advanced > summary { min-height: 44px; padding-block: .5rem; color: var(--tf-text); cursor: pointer; font-weight: 650; }
+.tf-form-advanced[open] > summary { margin-bottom: 1rem; }
+.tf-source-popup { display: grid; gap: 1.25rem; container-type: inline-size; }
+.tf-source-popup h3 { margin: 0; }
+.tf-source-popup #popup-interaction {
+  position: sticky;
+  bottom: -1.25rem;
+  z-index: 3;
+  display: flex;
+  flex-wrap: wrap;
+  gap: .75rem;
+  width: 100%;
+  margin: 0;
+  padding: 1rem 0;
+  background: var(--bs-bg-1);
+  border-block-start: 1px solid var(--bs-border-color);
+}
+.tf-source-popup #popup-interaction input { flex: 1 1 auto; width: auto; min-width: 0; margin: 0; padding: .625rem .875rem; }
+.tf-source-popup input[name="save"] { color: var(--bs-bg-body); background: var(--tf-cyan); font-weight: 650; }
+.tf-source-popup input[name="delete"] { color: var(--tf-fault-red); border: 1px solid currentColor; }
+#popup:has(.tf-source-popup) :is(.dialog-content, .tf-dialog-content) { display: flex; flex-direction: column; min-height: 0; max-height: inherit; }
+#popup:has(.tf-source-popup) .dialog-content { max-height: calc(100dvh - 3.5rem); }
+#popup:has(.tf-source-popup) .dialog-body { min-height: 0; scroll-padding-block: 1rem 6rem; }
+#popup:has(.tf-source-popup) :is(.dialog-header, .dialog-footer):empty { display: none; }
+.tf-settings-panel { container-type: inline-size; }
+.tf-settings-save-bar {
+  position: sticky;
+  bottom: 1rem;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 1rem;
+  padding: 1rem;
+  background: var(--bs-bg-1);
+  border: 1px solid var(--bs-border-color);
+  border-radius: .75rem;
+  box-shadow: var(--bs-box-shadow);
+}
+.tf-settings-save-bar p { margin: 0; padding: 0; }
+.tf-settings-save-bar [data-state="error"] { color: var(--tf-fault-red); }
+.tf-settings-save-bar [data-state="success"] { color: var(--tf-on-air-green); }
+.tf-settings-save-bar button { min-height: 44px; margin-inline-start: auto; }
+@container (width < 40rem) {
+  .tf-form-fields { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* Settings are a form workspace; the legacy table scroll container would
+   otherwise capture sticky positioning below the actual viewport. */
+.tf-app #content:has(> .tf-settings) { overflow: visible; }
+/* Keep primary actions and source fields at the project touch target in every
+   viewport; legacy rem-based ID rules would otherwise shrink them below 44px. */
+#popup .tf-source-popup :is(input, select, button),
+.tf-app .tf-settings-save-bar button { min-height: 44px; }

@@ -414,6 +414,7 @@ class Element {
     return true;
   }
   getElementsByClassName(name) { return walk(this).filter(item => item !== this && item.className.split(/\s+/).includes(name)); }
+  querySelector(selector) { return this.querySelectorAll(selector)[0] || null; }
   querySelectorAll(selector) {
     const names = selector.split(",").map(value => value.trim().toUpperCase());
     return walk(this).filter(item => item !== this && names.includes(item.tagName));

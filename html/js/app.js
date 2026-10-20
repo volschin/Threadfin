@@ -5593,6 +5593,9 @@ function completeThreadfinRequestResponse(request, response) {
   if (command == "saveWizard" && typeof completeConfigurationWizardRequest == "function") {
     completeConfigurationWizardRequest(response);
   }
+  if (command == "saveSettings" && typeof completeSettingsRequest == "function") {
+    completeSettingsRequest(response);
+  }
   if (typeof completeMappingRequest == "function") {
     completeMappingRequest(command, data, response);
   }
@@ -5611,6 +5614,9 @@ function completeThreadfinRequestFailure(request, message, failureKind) {
   if (command == "saveWizard" && typeof completeConfigurationWizardRequest == "function") {
     completeConfigurationWizardRequest(response);
   }
+  if (command == "saveSettings" && typeof completeSettingsRequest == "function") {
+    completeSettingsRequest(response, true);
+  }
   if (typeof completeMappingRequest == "function") {
     completeMappingRequest(command, data, response, failureKind);
   }
@@ -5618,6 +5624,8 @@ function completeThreadfinRequestFailure(request, message, failureKind) {
 function applyThreadfinResponse(command, data, response) {
   var responseIsObject = response && typeof response == "object" && !Array.isArray(response);
   if (!responseIsObject || response["status"] !== true) {
+    if (command == "saveSettings" && typeof completeSettingsRequest == "function")
+      return;
     if (command == "saveEpgMapping") {
       if (responseIsObject && response["xepg"] && response["xepg"]["epgMapping"] && SERVER["xepg"]) {
         SERVER["xepg"]["epgMapping"] = response["xepg"]["epgMapping"];
@@ -6651,21 +6659,65 @@ var PopupWindow = class {
     this.doc.appendChild(div);
   }
 };
+function createUIFormField(title, control, id) {
+  var field = document.createElement("div");
+  field.className = "form-field tf-form-field";
+  if (!control.id)
+    control.id = id;
+  var label = document.createElement("label");
+  label.className = "form-label";
+  label.id = control.id + "-label";
+  label.htmlFor = control.id;
+  label.textContent = title.replace(/:\s*$/, "");
+  control.setAttribute("aria-labelledby", label.id);
+  control.classList.add(control.type == "checkbox" ? "check" : "form-control");
+  field.appendChild(label);
+  field.appendChild(control);
+  return field;
+}
+function appendUIFormHelp(field, help) {
+  var control = field.querySelector("input, select, textarea");
+  if (!control)
+    return;
+  help.id = control.id + "-help";
+  help.classList.add("tf-field-help");
+  control.setAttribute("aria-describedby", help.id);
+  field.appendChild(help);
+}
 var PopupContent = class extends PopupWindow {
-  constructor() {
-    super(...arguments);
-    this.table = document.createElement("TABLE");
+  constructor(formLayout = false) {
+    super();
+    this.table = document.createElement("div");
     this.rowIndex = 0;
+    this.formLayout = formLayout;
+  }
+  beginAdvanced(title = "Advanced \xB7 proxy and request headers") {
+    var details = document.createElement("details");
+    details.className = "tf-form-advanced";
+    var summary = document.createElement("summary");
+    summary.textContent = title;
+    details.appendChild(summary);
+    this.table = document.createElement("div");
+    this.table.className = "tf-form-fields";
+    details.appendChild(this.table);
+    this.doc.appendChild(details);
   }
   createHeadline(headline) {
     this.doc.innerHTML = "";
     var element = document.createElement("H3");
     element.textContent = headline.toUpperCase();
     this.doc.appendChild(element);
-    this.table = document.createElement("TABLE");
+    this.table = document.createElement(this.formLayout ? "div" : "table");
+    if (this.formLayout)
+      this.table.className = "tf-form-fields";
     this.doc.appendChild(this.table);
   }
   appendRow(title, element) {
+    if (this.formLayout) {
+      this.lastField = createUIFormField(title, element, "popup-field-" + this.rowIndex++ + "-0");
+      this.table.appendChild(this.lastField);
+      return;
+    }
     var tr = document.createElement("TR");
     var titleCell = null;
     var rowIndex = this.rowIndex++;
@@ -6752,6 +6804,10 @@ var PopupContent = class extends PopupWindow {
     this.descriptionElement(span);
   }
   descriptionElement(element) {
+    if (this.formLayout && this.lastField) {
+      appendUIFormHelp(this.lastField, element);
+      return;
+    }
     var tr = document.createElement("TR");
     var td = document.createElement("TD");
     tr.appendChild(td);
@@ -6810,7 +6866,7 @@ function openPopUp(dataType, element) {
       data = getLocalData(dataType, id);
       break;
   }
-  var content = new PopupContent();
+  var content = new PopupContent(dataType == "playlist" || dataType == "m3u" || dataType == "hdhr" || dataType == "xmltv");
   switch (dataType) {
     case "playlist":
       content.createHeadline("{{.playlist.playlistType.title}}");
@@ -6861,6 +6917,7 @@ function openPopUp(dataType, element) {
       var select = content.createSelect(text, values, data[dbKey], dbKey);
       content.appendRow("{{.playlist.tuner.title}}", select);
       content.description("{{.playlist.tuner.description}}", true);
+      content.beginAdvanced();
       var dbKey = "http_proxy.ip";
       var input = content.createInput("text", dbKey, data[dbKey]);
       input.setAttribute("placeholder", "{{.playlist.http_proxy_ip.placeholder}}");
@@ -6937,6 +6994,7 @@ function openPopUp(dataType, element) {
       var select = content.createSelect(text, values, data[dbKey], dbKey);
       content.appendRow("{{.playlist.tuner.title}}", select);
       content.description("{{.playlist.tuner.description}}", true);
+      content.beginAdvanced("Advanced \xB7 HTTP proxy");
       var dbKey = "http_proxy.ip";
       var input = content.createInput("text", dbKey, data[dbKey]);
       input.setAttribute("placeholder", "{{.playlist.http_proxy_ip.placeholder}}");
@@ -7106,6 +7164,7 @@ function openPopUp(dataType, element) {
       var input = content.createInput("text", dbKey, data[dbKey]);
       input.setAttribute("placeholder", "{{.xmltv.fileXMLTV.placeholder}}");
       content.appendRow("{{.xmltv.fileXMLTV.title}}", input);
+      content.beginAdvanced("Advanced \xB7 HTTP proxy");
       var dbKey = "http_proxy.ip";
       var input = content.createInput("text", dbKey, data[dbKey]);
       input.setAttribute("placeholder", "{{.xmltv.http_proxy_ip.placeholder}}");
@@ -7679,8 +7738,10 @@ function savePopupData(dataType, id, remove, option) {
   }
   console.log("Save popup data");
   var div = document.getElementById("popup-custom");
-  var inputs = div.getElementsByTagName("TABLE")[0].getElementsByTagName("INPUT");
-  var selects = div.getElementsByTagName("TABLE")[0].getElementsByTagName("SELECT");
+  var sourceForm = dataType == "m3u" || dataType == "hdhr" || dataType == "xmltv";
+  var fields = sourceForm ? div : div.getElementsByTagName("TABLE")[0];
+  var inputs = fields.getElementsByTagName("INPUT");
+  var selects = fields.getElementsByTagName("SELECT");
   var input = new Object();
   var confirmMsg;
   for (let i = 0; i < selects.length; i++) {
@@ -9582,8 +9643,8 @@ function enhanceSourcePopup(dataType) {
   }
   var fields = popup.querySelectorAll("input, select");
   Array.prototype.forEach.call(fields, function(field) {
-    var row = field.closest("tr");
-    var title2 = row ? row.querySelector("td:first-child") : void 0;
+    var row = field.closest(".tf-form-field");
+    var title2 = row ? row.querySelector("label") : void 0;
     if (title2 && title2.textContent) {
       field.setAttribute("aria-label", title2.textContent.replace(/:\s*$/, ""));
     }
@@ -9594,7 +9655,7 @@ function enhanceSourcePopup(dataType) {
     help.id = "source-location-help";
     help.className = "tf-source-field-help";
     help.textContent = dataType == "hdhr" ? "{{.sources.forms.hdhrHelp}}" : "{{.sources.forms.locationHelp}}";
-    sourceInput.setAttribute("aria-describedby", help.id + " source-file-source-error");
+    sourceInput.setAttribute("aria-describedby", help.id);
     sourceInput.parentElement.appendChild(help);
   }
   ;
@@ -9604,6 +9665,7 @@ function enhanceSourcePopup(dataType) {
       return;
     }
     field.setAttribute("aria-required", "true");
+    field.setAttribute("aria-describedby", [field.getAttribute("aria-describedby"), "source-" + fieldName.replace(".", "-") + "-error"].filter(Boolean).join(" "));
     var error = document.createElement("p");
     error.id = "source-" + fieldName.replace(".", "-") + "-error";
     error.className = "tf-source-field-error";
@@ -10890,473 +10952,295 @@ var SettingsCategory = class {
     return element;
   }
   createSettings(settingsKey) {
-    var setting = document.createElement("TR");
     var content = new PopupContent();
     var data = SERVER["settings"][settingsKey];
     switch (settingsKey) {
       // Texteingaben
       case "update":
-        var tdLeft = document.createElement("TD");
-        tdLeft.innerHTML = "{{.settings.update.title}}:";
-        var tdRight = document.createElement("TD");
+        var title = "{{.settings.update.title}}:";
         var input = content.createInput("text", "update", data.toString());
         input.setAttribute("placeholder", "{{.settings.update.placeholder}}");
         addRuntimeEventListener(input, "change", (event) => {
-          event.currentTarget.className = "changed";
+          event.currentTarget.classList.add("changed");
         });
-        tdRight.appendChild(input);
-        setting.appendChild(tdLeft);
-        setting.appendChild(tdRight);
         break;
       case "backup.path":
-        var tdLeft = document.createElement("TD");
-        tdLeft.innerHTML = "{{.settings.backupPath.title}}:";
-        var tdRight = document.createElement("TD");
+        var title = "{{.settings.backupPath.title}}:";
         var input = content.createInput("text", "backup.path", data);
         input.setAttribute("placeholder", "{{.settings.backupPath.placeholder}}");
         addRuntimeEventListener(input, "change", (event) => {
-          event.currentTarget.className = "changed";
+          event.currentTarget.classList.add("changed");
         });
-        tdRight.appendChild(input);
-        setting.appendChild(tdLeft);
-        setting.appendChild(tdRight);
         break;
       case "temp.path":
-        var tdLeft = document.createElement("TD");
-        tdLeft.innerHTML = "{{.settings.tempPath.title}}:";
-        var tdRight = document.createElement("TD");
+        var title = "{{.settings.tempPath.title}}:";
         var input = content.createInput("text", "temp.path", data);
         input.setAttribute("placeholder", "{{.settings.tmpPath.placeholder}}");
         addRuntimeEventListener(input, "change", (event) => {
-          event.currentTarget.className = "changed";
+          event.currentTarget.classList.add("changed");
         });
-        tdRight.appendChild(input);
-        setting.appendChild(tdLeft);
-        setting.appendChild(tdRight);
         break;
       case "user.agent":
-        var tdLeft = document.createElement("TD");
-        tdLeft.innerHTML = "{{.settings.userAgent.title}}:";
-        var tdRight = document.createElement("TD");
+        var title = "{{.settings.userAgent.title}}:";
         var input = content.createInput("text", "user.agent", data);
         input.setAttribute("placeholder", "{{.settings.userAgent.placeholder}}");
         addRuntimeEventListener(input, "change", (event) => {
-          event.currentTarget.className = "changed";
+          event.currentTarget.classList.add("changed");
         });
-        tdRight.appendChild(input);
-        setting.appendChild(tdLeft);
-        setting.appendChild(tdRight);
         break;
       case "buffer.timeout":
-        var tdLeft = document.createElement("TD");
-        tdLeft.innerHTML = "{{.settings.bufferTimeout.title}}:";
-        var tdRight = document.createElement("TD");
+        var title = "{{.settings.bufferTimeout.title}}:";
         var input = content.createInput("text", "buffer.timeout", data);
         input.setAttribute("placeholder", "{{.settings.bufferTimeout.placeholder}}");
         addRuntimeEventListener(input, "change", (event) => {
-          event.currentTarget.className = "changed";
+          event.currentTarget.classList.add("changed");
         });
-        tdRight.appendChild(input);
-        setting.appendChild(tdLeft);
-        setting.appendChild(tdRight);
         break;
       case "ffmpeg.path":
-        var tdLeft = document.createElement("TD");
-        tdLeft.innerHTML = "{{.settings.ffmpegPath.title}}:";
-        var tdRight = document.createElement("TD");
+        var title = "{{.settings.ffmpegPath.title}}:";
         var input = content.createInput("text", "ffmpeg.path", data);
         input.setAttribute("placeholder", "{{.settings.ffmpegPath.placeholder}}");
         addRuntimeEventListener(input, "change", (event) => {
-          event.currentTarget.className = "changed";
+          event.currentTarget.classList.add("changed");
         });
-        tdRight.appendChild(input);
-        setting.appendChild(tdLeft);
-        setting.appendChild(tdRight);
         break;
       case "ffmpeg.options":
-        var tdLeft = document.createElement("TD");
-        tdLeft.innerHTML = "{{.settings.ffmpegOptions.title}}:";
-        var tdRight = document.createElement("TD");
+        var title = "{{.settings.ffmpegOptions.title}}:";
         var input = content.createInput("text", "ffmpeg.options", data);
         input.setAttribute("placeholder", "{{.settings.ffmpegOptions.placeholder}}");
         addRuntimeEventListener(input, "change", (event) => {
-          event.currentTarget.className = "changed";
+          event.currentTarget.classList.add("changed");
         });
-        tdRight.appendChild(input);
-        setting.appendChild(tdLeft);
-        setting.appendChild(tdRight);
         break;
       case "ffmpeg.forceHttp":
-        var tdLeft = document.createElement("TD");
-        tdLeft.innerHTML = "{{.settings.ffmpegForceHttp.title}}:";
-        var tdRight = document.createElement("TD");
+        var title = "{{.settings.ffmpegForceHttp.title}}:";
         var input = content.createCheckbox(settingsKey);
         input.checked = data;
         addRuntimeEventListener(input, "change", (event) => {
-          event.currentTarget.className = "changed";
+          event.currentTarget.classList.add("changed");
         });
-        tdRight.appendChild(input);
-        setting.appendChild(tdLeft);
-        setting.appendChild(tdRight);
         break;
       case "vlc.path":
-        var tdLeft = document.createElement("TD");
-        tdLeft.innerHTML = "{{.settings.vlcPath.title}}:";
-        var tdRight = document.createElement("TD");
+        var title = "{{.settings.vlcPath.title}}:";
         var input = content.createInput("text", "vlc.path", data);
         input.setAttribute("placeholder", "{{.settings.vlcPath.placeholder}}");
         addRuntimeEventListener(input, "change", (event) => {
-          event.currentTarget.className = "changed";
+          event.currentTarget.classList.add("changed");
         });
-        tdRight.appendChild(input);
-        setting.appendChild(tdLeft);
-        setting.appendChild(tdRight);
         break;
       case "vlc.options":
-        var tdLeft = document.createElement("TD");
-        tdLeft.innerHTML = "{{.settings.vlcOptions.title}}:";
-        var tdRight = document.createElement("TD");
+        var title = "{{.settings.vlcOptions.title}}:";
         var input = content.createInput("text", "vlc.options", data);
         input.setAttribute("placeholder", "{{.settings.vlcOptions.placeholder}}");
         addRuntimeEventListener(input, "change", (event) => {
-          event.currentTarget.className = "changed";
+          event.currentTarget.classList.add("changed");
         });
-        tdRight.appendChild(input);
-        setting.appendChild(tdLeft);
-        setting.appendChild(tdRight);
         break;
       // Checkboxen
       case "authentication.web":
-        var tdLeft = document.createElement("TD");
-        tdLeft.innerHTML = "{{.settings.authenticationWEB.title}}:";
-        var tdRight = document.createElement("TD");
+        var title = "{{.settings.authenticationWEB.title}}:";
         var input = content.createCheckbox(settingsKey);
         input.checked = data;
         addRuntimeEventListener(input, "change", (event) => {
-          event.currentTarget.className = "changed";
+          event.currentTarget.classList.add("changed");
         });
-        tdRight.appendChild(input);
-        setting.appendChild(tdLeft);
-        setting.appendChild(tdRight);
         break;
       case "authentication.pms":
-        var tdLeft = document.createElement("TD");
-        tdLeft.innerHTML = "{{.settings.authenticationPMS.title}}:";
-        var tdRight = document.createElement("TD");
+        var title = "{{.settings.authenticationPMS.title}}:";
         var input = content.createCheckbox(settingsKey);
         input.checked = data;
         addRuntimeEventListener(input, "change", (event) => {
-          event.currentTarget.className = "changed";
+          event.currentTarget.classList.add("changed");
         });
-        tdRight.appendChild(input);
-        setting.appendChild(tdLeft);
-        setting.appendChild(tdRight);
         break;
       case "authentication.m3u":
-        var tdLeft = document.createElement("TD");
-        tdLeft.innerHTML = "{{.settings.authenticationM3U.title}}:";
-        var tdRight = document.createElement("TD");
+        var title = "{{.settings.authenticationM3U.title}}:";
         var input = content.createCheckbox(settingsKey);
         input.checked = data;
         addRuntimeEventListener(input, "change", (event) => {
-          event.currentTarget.className = "changed";
+          event.currentTarget.classList.add("changed");
         });
-        tdRight.appendChild(input);
-        setting.appendChild(tdLeft);
-        setting.appendChild(tdRight);
         break;
       case "authentication.xml":
-        var tdLeft = document.createElement("TD");
-        tdLeft.innerHTML = "{{.settings.authenticationXML.title}}:";
-        var tdRight = document.createElement("TD");
+        var title = "{{.settings.authenticationXML.title}}:";
         var input = content.createCheckbox(settingsKey);
         input.checked = data;
         addRuntimeEventListener(input, "change", (event) => {
-          event.currentTarget.className = "changed";
+          event.currentTarget.classList.add("changed");
         });
-        tdRight.appendChild(input);
-        setting.appendChild(tdLeft);
-        setting.appendChild(tdRight);
         break;
       case "authentication.api":
-        var tdLeft = document.createElement("TD");
-        tdLeft.innerHTML = "{{.settings.authenticationAPI.title}}:";
-        var tdRight = document.createElement("TD");
+        var title = "{{.settings.authenticationAPI.title}}:";
         var input = content.createCheckbox(settingsKey);
         input.checked = data;
         addRuntimeEventListener(input, "change", (event) => {
-          event.currentTarget.className = "changed";
+          event.currentTarget.classList.add("changed");
         });
-        tdRight.appendChild(input);
-        setting.appendChild(tdLeft);
-        setting.appendChild(tdRight);
         break;
       case "files.update":
-        var tdLeft = document.createElement("TD");
-        tdLeft.innerHTML = "{{.settings.filesUpdate.title}}:";
-        var tdRight = document.createElement("TD");
+        var title = "{{.settings.filesUpdate.title}}:";
         var input = content.createCheckbox(settingsKey);
         input.checked = data;
         addRuntimeEventListener(input, "change", (event) => {
-          event.currentTarget.className = "changed";
+          event.currentTarget.classList.add("changed");
         });
-        tdRight.appendChild(input);
-        setting.appendChild(tdLeft);
-        setting.appendChild(tdRight);
         break;
       case "cache.images":
-        var tdLeft = document.createElement("TD");
-        tdLeft.innerHTML = "{{.settings.cacheImages.title}}:";
-        var tdRight = document.createElement("TD");
+        var title = "{{.settings.cacheImages.title}}:";
         var input = content.createCheckbox(settingsKey);
         input.checked = data;
         addRuntimeEventListener(input, "change", (event) => {
-          event.currentTarget.className = "changed";
+          event.currentTarget.classList.add("changed");
         });
-        tdRight.appendChild(input);
-        setting.appendChild(tdLeft);
-        setting.appendChild(tdRight);
         break;
       case "xepg.replace.missing.images":
-        var tdLeft = document.createElement("TD");
-        tdLeft.innerHTML = "{{.settings.replaceEmptyImages.title}}:";
-        var tdRight = document.createElement("TD");
+        var title = "{{.settings.replaceEmptyImages.title}}:";
         var input = content.createCheckbox(settingsKey);
         input.checked = data;
         addRuntimeEventListener(input, "change", (event) => {
-          event.currentTarget.className = "changed";
+          event.currentTarget.classList.add("changed");
         });
-        tdRight.appendChild(input);
-        setting.appendChild(tdLeft);
-        setting.appendChild(tdRight);
         break;
       case "xepg.replace.channel.title":
-        var tdLeft = document.createElement("TD");
-        tdLeft.innerHTML = "{{.settings.replaceChannelTitle.title}}:";
-        var tdRight = document.createElement("TD");
+        var title = "{{.settings.replaceChannelTitle.title}}:";
         var input = content.createCheckbox(settingsKey);
         input.checked = data;
         addRuntimeEventListener(input, "change", (event) => {
-          event.currentTarget.className = "changed";
+          event.currentTarget.classList.add("changed");
         });
-        tdRight.appendChild(input);
-        setting.appendChild(tdLeft);
-        setting.appendChild(tdRight);
         break;
       case "storeBufferInRAM":
-        var tdLeft = document.createElement("TD");
-        tdLeft.innerHTML = "{{.settings.storeBufferInRAM.title}}:";
-        var tdRight = document.createElement("TD");
+        var title = "{{.settings.storeBufferInRAM.title}}:";
         var input = content.createCheckbox(settingsKey);
         input.checked = data;
         addRuntimeEventListener(input, "change", (event) => {
-          event.currentTarget.className = "changed";
+          event.currentTarget.classList.add("changed");
         });
-        tdRight.appendChild(input);
-        setting.appendChild(tdLeft);
-        setting.appendChild(tdRight);
         break;
       case "forceHttps":
-        var tdLeft = document.createElement("TD");
-        tdLeft.innerHTML = "{{.settings.forceHttps.title}}:";
-        var tdRight = document.createElement("TD");
+        var title = "{{.settings.forceHttps.title}}:";
         var input = content.createCheckbox(settingsKey);
         input.checked = data;
         addRuntimeEventListener(input, "change", (event) => {
-          event.currentTarget.className = "changed";
+          event.currentTarget.classList.add("changed");
         });
-        tdRight.appendChild(input);
-        setting.appendChild(tdLeft);
-        setting.appendChild(tdRight);
         break;
       case "excludeStreamHttps":
-        var tdLeft = document.createElement("TD");
-        tdLeft.innerHTML = "{{.settings.excludeStreamHttps.title}}:";
-        var tdRight = document.createElement("TD");
+        var title = "{{.settings.excludeStreamHttps.title}}:";
         var input = content.createCheckbox(settingsKey);
         input.checked = data;
         addRuntimeEventListener(input, "change", (event) => {
-          event.currentTarget.className = "changed";
+          event.currentTarget.classList.add("changed");
         });
-        tdRight.appendChild(input);
-        setting.appendChild(tdLeft);
-        setting.appendChild(tdRight);
         break;
       case "httpsPort":
-        var tdLeft = document.createElement("TD");
-        tdLeft.innerHTML = "{{.settings.httpsPort.title}}:";
-        var tdRight = document.createElement("TD");
+        var title = "{{.settings.httpsPort.title}}:";
         var input = content.createInput("text", "httpsPort", data.toString());
         input.setAttribute("placeholder", "{{.settings.httpsPort.placeholder}}");
         addRuntimeEventListener(input, "change", (event) => {
-          event.currentTarget.className = "changed";
+          event.currentTarget.classList.add("changed");
         });
-        tdRight.appendChild(input);
-        setting.appendChild(tdLeft);
-        setting.appendChild(tdRight);
         break;
       case "httpsThreadfinDomain":
-        var tdLeft = document.createElement("TD");
-        tdLeft.innerHTML = "{{.settings.httpsThreadfinDomain.title}}:";
-        var tdRight = document.createElement("TD");
+        var title = "{{.settings.httpsThreadfinDomain.title}}:";
         var input = content.createInput("text", "httpsThreadfinDomain", data.toString());
         input.setAttribute("placeholder", "{{.settings.httpsThreadfinDomain.placeholder}}");
         addRuntimeEventListener(input, "change", (event) => {
-          event.currentTarget.className = "changed";
+          event.currentTarget.classList.add("changed");
         });
-        tdRight.appendChild(input);
-        setting.appendChild(tdLeft);
-        setting.appendChild(tdRight);
         break;
       case "bindIpAddress":
-        var tdLeft = document.createElement("TD");
-        tdLeft.innerHTML = "{{.settings.bindIpAddress.title}}:";
-        var tdRight = document.createElement("TD");
+        var title = "{{.settings.bindIpAddress.title}}:";
         var input = content.createInput("text", "bindIpAddress", data.toString());
         input.setAttribute("placeholder", "{{.settings.bindIpAddress.placeholder}}");
         addRuntimeEventListener(input, "change", (event) => {
-          event.currentTarget.className = "changed";
+          event.currentTarget.classList.add("changed");
         });
-        tdRight.appendChild(input);
-        setting.appendChild(tdLeft);
-        setting.appendChild(tdRight);
         break;
       case "httpThreadfinDomain":
-        var tdLeft = document.createElement("TD");
-        tdLeft.innerHTML = "{{.settings.httpThreadfinDomain.title}}:";
-        var tdRight = document.createElement("TD");
+        var title = "{{.settings.httpThreadfinDomain.title}}:";
         var input = content.createInput("text", "httpThreadfinDomain", data.toString());
         input.setAttribute("placeholder", "{{.settings.httpThreadfinDomain.placeholder}}");
         addRuntimeEventListener(input, "change", (event) => {
-          event.currentTarget.className = "changed";
+          event.currentTarget.classList.add("changed");
         });
-        tdRight.appendChild(input);
-        setting.appendChild(tdLeft);
-        setting.appendChild(tdRight);
         break;
       case "enableNonAscii":
-        var tdLeft = document.createElement("TD");
-        tdLeft.innerHTML = "{{.settings.enableNonAscii.title}}:";
-        var tdRight = document.createElement("TD");
+        var title = "{{.settings.enableNonAscii.title}}:";
         var input = content.createCheckbox(settingsKey);
         input.checked = data;
         addRuntimeEventListener(input, "change", (event) => {
-          event.currentTarget.className = "changed";
+          event.currentTarget.classList.add("changed");
         });
-        tdRight.appendChild(input);
-        setting.appendChild(tdLeft);
-        setting.appendChild(tdRight);
         break;
       case "epgCategories":
-        var tdLeft = document.createElement("TD");
-        tdLeft.innerHTML = "{{.settings.epgCategories.title}}:";
-        var tdRight = document.createElement("TD");
+        var title = "{{.settings.epgCategories.title}}:";
         var input = content.createInput("text", "epgCategories", data.toString());
         input.setAttribute("placeholder", "{{.settings.epgCategories.placeholder}}");
         addRuntimeEventListener(input, "change", (event) => {
-          event.currentTarget.className = "changed";
+          event.currentTarget.classList.add("changed");
         });
-        tdRight.appendChild(input);
-        setting.appendChild(tdLeft);
-        setting.appendChild(tdRight);
         break;
       case "epgCategoriesColors":
-        var tdLeft = document.createElement("TD");
-        tdLeft.innerHTML = "{{.settings.epgCategoriesColors.title}}:";
-        var tdRight = document.createElement("TD");
+        var title = "{{.settings.epgCategoriesColors.title}}:";
         var input = content.createInput("text", "epgCategoriesColors", data.toString());
         input.setAttribute("placeholder", "{{.settings.epgCategoriesColors.placeholder}}");
         addRuntimeEventListener(input, "change", (event) => {
-          event.currentTarget.className = "changed";
+          event.currentTarget.classList.add("changed");
         });
-        tdRight.appendChild(input);
-        setting.appendChild(tdLeft);
-        setting.appendChild(tdRight);
         break;
       case "ThreadfinAutoUpdate":
-        var tdLeft = document.createElement("TD");
-        tdLeft.innerHTML = "{{.settings.ThreadfinAutoUpdate.title}}:";
-        var tdRight = document.createElement("TD");
+        var title = "{{.settings.ThreadfinAutoUpdate.title}}:";
         var input = content.createCheckbox(settingsKey);
         input.checked = data;
         addRuntimeEventListener(input, "change", (event) => {
-          event.currentTarget.className = "changed";
+          event.currentTarget.classList.add("changed");
         });
-        tdRight.appendChild(input);
-        setting.appendChild(tdLeft);
-        setting.appendChild(tdRight);
         break;
       case "ssdp":
-        var tdLeft = document.createElement("TD");
-        tdLeft.innerHTML = "{{.settings.ssdp.title}}:";
-        var tdRight = document.createElement("TD");
+        var title = "{{.settings.ssdp.title}}:";
         var input = content.createCheckbox(settingsKey);
         input.checked = data;
         addRuntimeEventListener(input, "change", (event) => {
-          event.currentTarget.className = "changed";
+          event.currentTarget.classList.add("changed");
         });
-        tdRight.appendChild(input);
-        setting.appendChild(tdLeft);
-        setting.appendChild(tdRight);
         break;
       case "dummy":
-        var tdLeft = document.createElement("TD");
-        tdLeft.innerHTML = "{{.settings.dummy.title}}:";
-        var tdRight = document.createElement("TD");
+        var title = "{{.settings.dummy.title}}:";
         var input = content.createCheckbox(settingsKey);
         input.checked = data;
         addRuntimeEventListener(input, "change", (event) => {
-          event.currentTarget.className = "changed";
+          event.currentTarget.classList.add("changed");
         });
-        tdRight.appendChild(input);
-        setting.appendChild(tdLeft);
-        setting.appendChild(tdRight);
         break;
       case "dummyChannel":
-        var tdLeft = document.createElement("TD");
-        tdLeft.innerHTML = "{{.settings.dummyChannel.title}}:";
-        var tdRight = document.createElement("TD");
+        var title = "{{.settings.dummyChannel.title}}:";
         var text = ["PPV", "30 Minutes", "60 Minutes", "90 Minutes", "120 Minutes", "180 Minutes", "240 Minutes", "360 Minutes"];
         var values = ["PPV", "30_Minutes", "60_Minutes", "90_Minutes", "120_Minutes", "180_Minutes", "240_Minutes", "360_Minutes"];
         var select = content.createSelect(text, values, data, settingsKey);
         addRuntimeEventListener(select, "change", (event) => {
-          event.currentTarget.className = "changed";
+          event.currentTarget.classList.add("changed");
         });
-        tdRight.appendChild(select);
-        setting.appendChild(tdLeft);
-        setting.appendChild(tdRight);
         break;
       case "ignoreFilters":
-        var tdLeft = document.createElement("TD");
-        tdLeft.innerHTML = "{{.settings.ignoreFilters.title}}:";
-        var tdRight = document.createElement("TD");
+        var title = "{{.settings.ignoreFilters.title}}:";
         var input = content.createCheckbox(settingsKey);
         input.checked = data;
         addRuntimeEventListener(input, "change", (event) => {
-          event.currentTarget.className = "changed";
+          event.currentTarget.classList.add("changed");
         });
-        tdRight.appendChild(input);
-        setting.appendChild(tdLeft);
-        setting.appendChild(tdRight);
         break;
       case "api":
-        var tdLeft = document.createElement("TD");
-        tdLeft.innerHTML = "{{.settings.api.title}}:";
-        var tdRight = document.createElement("TD");
+        var title = "{{.settings.api.title}}:";
         var input = content.createCheckbox(settingsKey);
         input.checked = data;
         addRuntimeEventListener(input, "change", (event) => {
-          event.currentTarget.className = "changed";
+          event.currentTarget.classList.add("changed");
         });
-        tdRight.appendChild(input);
-        setting.appendChild(tdLeft);
-        setting.appendChild(tdRight);
         break;
       // Select
       case "tuner":
-        var tdLeft = document.createElement("TD");
-        tdLeft.innerHTML = "{{.settings.tuner.title}}:";
-        var tdRight = document.createElement("TD");
+        var title = "{{.settings.tuner.title}}:";
         var text = new Array();
         var values = new Array();
         for (var i = 1; i <= 100; i++) {
@@ -11365,86 +11249,61 @@ var SettingsCategory = class {
         }
         var select = content.createSelect(text, values, data, settingsKey);
         addRuntimeEventListener(select, "change", (event) => {
-          event.currentTarget.className = "changed";
+          event.currentTarget.classList.add("changed");
         });
-        tdRight.appendChild(select);
-        setting.appendChild(tdLeft);
-        setting.appendChild(tdRight);
         break;
       case "epgSource":
-        var tdLeft = document.createElement("TD");
-        tdLeft.innerHTML = "{{.settings.epgSource.title}}:";
-        var tdRight = document.createElement("TD");
+        var title = "{{.settings.epgSource.title}}:";
         var text = ["PMS", "XEPG"];
         var values = ["PMS", "XEPG"];
         var select = content.createSelect(text, values, data, settingsKey);
         addRuntimeEventListener(select, "change", (event) => {
-          event.currentTarget.className = "changed";
+          event.currentTarget.classList.add("changed");
         });
-        tdRight.appendChild(select);
-        setting.appendChild(tdLeft);
-        setting.appendChild(tdRight);
         break;
       case "backup.keep":
-        var tdLeft = document.createElement("TD");
-        tdLeft.innerHTML = "{{.settings.backupKeep.title}}:";
-        var tdRight = document.createElement("TD");
+        var title = "{{.settings.backupKeep.title}}:";
         var text = ["5", "10", "20", "30", "40", "50"];
         var values = ["5", "10", "20", "30", "40", "50"];
         var select = content.createSelect(text, values, data, settingsKey);
         addRuntimeEventListener(select, "change", (event) => {
-          event.currentTarget.className = "changed";
+          event.currentTarget.classList.add("changed");
         });
-        tdRight.appendChild(select);
-        setting.appendChild(tdLeft);
-        setting.appendChild(tdRight);
         break;
       case "buffer.size.kb":
-        var tdLeft = document.createElement("TD");
-        tdLeft.innerHTML = "{{.settings.bufferSize.title}}:";
-        var tdRight = document.createElement("TD");
+        var title = "{{.settings.bufferSize.title}}:";
         var text = ["0.5 MB", "1 MB", "2 MB", "3 MB", "4 MB", "5 MB", "6 MB", "7 MB", "8 MB"];
         var values = ["512", "1024", "2048", "3072", "4096", "5120", "6144", "7168", "8192"];
         var select = content.createSelect(text, values, data, settingsKey);
         addRuntimeEventListener(select, "change", (event) => {
-          event.currentTarget.className = "changed";
+          event.currentTarget.classList.add("changed");
         });
-        tdRight.appendChild(select);
-        setting.appendChild(tdLeft);
-        setting.appendChild(tdRight);
         break;
       case "buffer":
-        var tdLeft = document.createElement("TD");
-        tdLeft.innerHTML = "{{.settings.streamBuffering.title}}:";
-        var tdRight = document.createElement("TD");
+        var title = "{{.settings.streamBuffering.title}}:";
         var text = ["{{.settings.streamBuffering.info_false}}", "FFmpeg: ({{.settings.streamBuffering.info_ffmpeg}})", "VLC: ({{.settings.streamBuffering.info_vlc}})"];
         var values = ["-", "ffmpeg", "vlc"];
         var select = content.createSelect(text, values, data, settingsKey);
         addRuntimeEventListener(select, "change", (event) => {
-          event.currentTarget.className = "changed";
+          event.currentTarget.classList.add("changed");
         });
-        tdRight.appendChild(select);
-        setting.appendChild(tdLeft);
-        setting.appendChild(tdRight);
         break;
       case "udpxy":
-        var tdLeft = document.createElement("TD");
-        tdLeft.innerHTML = "{{.settings.udpxy.title}}:";
-        var tdRight = document.createElement("TD");
+        ;
+        var title = "{{.settings.udpxy.title}}:";
         var input = content.createInput("text", "udpxy", data);
         input.setAttribute("placeholder", "{{.settings.udpxy.placeholder}}");
         addRuntimeEventListener(input, "change", (event) => {
-          event.currentTarget.className = "changed";
+          event.currentTarget.classList.add("changed");
         });
-        tdRight.appendChild(input);
-        setting.appendChild(tdLeft);
-        setting.appendChild(tdRight);
         break;
     }
-    return setting;
+    var control = input || select;
+    if (!control)
+      return document.createElement("div");
+    return createUIFormField(title, control, "settings-field-" + settingsKey.replace(/[^A-Za-z0-9_-]+/g, "-"));
   }
   createDescription(settingsKey) {
-    var description = document.createElement("TR");
     var text;
     switch (settingsKey) {
       case "authentication.web":
@@ -11567,16 +11426,10 @@ var SettingsCategory = class {
         text = "";
         break;
     }
-    var tdLeft = document.createElement("TD");
-    tdLeft.innerHTML = "";
-    var tdRight = document.createElement("TD");
     var help = document.createElement("div");
     help.className = "tf-field-help";
     help.innerHTML = text;
-    tdRight.appendChild(help);
-    description.appendChild(tdLeft);
-    description.appendChild(tdRight);
-    return description;
+    return help;
   }
 };
 var SettingsCategoryItem = class extends SettingsCategory {
@@ -11590,7 +11443,8 @@ var SettingsCategoryItem = class extends SettingsCategory {
     var settingsKeys = this.settingsKeys;
     var doc = document.getElementById(this.DocumentID);
     doc.appendChild(headline);
-    var table = document.createElement("TABLE");
+    var table = document.createElement("div");
+    table.className = "tf-form-fields";
     var keys = settingsKeys.split(",");
     keys.forEach((settingsKey) => {
       switch (settingsKey) {
@@ -11605,7 +11459,7 @@ var SettingsCategoryItem = class extends SettingsCategory {
           var item = this.createSettings(settingsKey);
           var description = this.createDescription(settingsKey);
           table.appendChild(item);
-          table.appendChild(description);
+          appendUIFormHelp(item, description);
           break;
       }
     });
@@ -11614,14 +11468,22 @@ var SettingsCategoryItem = class extends SettingsCategory {
   }
 };
 function saveSettings() {
-  var cmd = "saveSettings";
-  var div = document.getElementById("content_settings");
-  var controls = Array.prototype.slice.call(div.querySelectorAll("input, select"));
-  var newSettings = serializeSettingsChanges(controls);
-  var data = new Object();
-  data["settings"] = newSettings;
-  var server = new Server(cmd);
-  server.request(data);
+  if (settingsFeedback.state == "progress")
+    return;
+  var root = document.querySelector(".tf-settings");
+  if (!root || !validateSettingsForm(root))
+    return;
+  var controls = Array.prototype.slice.call(root.querySelectorAll("input, select"));
+  var changes = serializeSettingsChanges(controls);
+  if (!Object.keys(changes).length) {
+    settingsFeedback = { state: "idle", message: "No settings changed." };
+    renderSettingsFeedback();
+    return;
+  }
+  settingsFeedback = { state: "progress", message: "Saving settings\u2026" };
+  renderSettingsFeedback();
+  var server = new Server("saveSettings");
+  server.request({ settings: changes });
 }
 var SETTINGS_SECTIONS = [
   {
@@ -11646,6 +11508,14 @@ var SETTINGS_SECTIONS = [
     settings: ["authentication.web", "authentication.pms", "authentication.m3u", "authentication.xml", "authentication.api"]
   }
 ];
+var settingsActiveSection = "general";
+var settingsAdvancedOpen = {};
+var settingsFeedback = { state: "idle", message: "" };
+var SETTINGS_ADVANCED_KEYS = {
+  general: ["epgCategories", "epgCategoriesColors", "dummy", "dummyChannel", "ignoreFilters", "api"],
+  files: ["bindIpAddress", "httpThreadfinDomain", "forceHttps", "excludeStreamHttps", "httpsPort", "httpsThreadfinDomain", "enableNonAscii"],
+  streaming: ["udpxy", "user.agent", "ffmpeg.options", "ffmpeg.forceHttp", "vlc.path", "vlc.options"]
+};
 var SETTINGS_NUMERIC_KEYS = {
   "tuner": true,
   "backup.keep": true,
@@ -11671,7 +11541,7 @@ function serializeSettingsChanges(controls) {
       return;
     }
     if (SETTINGS_NUMERIC_KEYS[name]) {
-      changes[name] = name == "buffer.timeout" ? parseFloat(value) : parseInt(value, 10);
+      changes[name] = Number(value);
       return;
     }
     changes[name] = value;
@@ -11690,6 +11560,7 @@ function renderEPGSourcePreview(value, target) {
   }
 }
 function activateSettingsSection(sectionKey, focusActiveTab) {
+  settingsActiveSection = sectionKey;
   var root = document.querySelector(".tf-settings");
   if (!root) {
     return;
@@ -11755,15 +11626,18 @@ function labelSettingsControls(root) {
     if (String(control.type || "").toLowerCase() == "hidden") {
       continue;
     }
-    var row = control.closest("tr");
-    var labelCell = row ? row.querySelector("td:first-child") : null;
+    var field = control.closest(".tf-form-field");
+    var labelCell = field ? field.querySelector("label") : null;
     if (!labelCell || !labelCell.textContent) {
       continue;
     }
     var key = String(control.name || "setting").replace(/[^A-Za-z0-9_-]+/g, "-");
-    labelCell.id = "settings-field-label-" + key + "-" + index;
-    control.id = "settings-field-" + key + "-" + index;
+    if (!labelCell.id)
+      labelCell.id = "settings-field-label-" + key + "-" + index;
+    if (!control.id)
+      control.id = "settings-field-" + key + "-" + index;
     control.setAttribute("aria-labelledby", labelCell.id);
+    labelCell.htmlFor = control.id;
   }
 }
 function renderSettingsPage(doc) {
@@ -11779,13 +11653,7 @@ function renderSettingsPage(doc) {
   purpose.textContent = "Configure Threadfin ingestion, files, streaming, backups, and access without changing unrelated settings.";
   headingGroup.appendChild(heading);
   headingGroup.appendChild(purpose);
-  var save = document.createElement("button");
-  save.type = "button";
-  save.className = "tf-primary-action";
-  save.textContent = "Save settings";
-  save.addEventListener("click", saveSettings);
   header.appendChild(headingGroup);
-  header.appendChild(save);
   root.appendChild(header);
   var nav = document.createElement("div");
   nav.className = "tf-settings-nav";
@@ -11799,8 +11667,8 @@ function renderSettingsPage(doc) {
     button.id = "settings-tab-" + definition.key;
     button.setAttribute("data-settings-tab", definition.key);
     button.setAttribute("aria-controls", "settings-panel-" + definition.key);
-    button.setAttribute("aria-selected", index == 0 ? "true" : "false");
-    button.setAttribute("tabindex", index == 0 ? "0" : "-1");
+    button.setAttribute("aria-selected", definition.key == settingsActiveSection ? "true" : "false");
+    button.setAttribute("tabindex", definition.key == settingsActiveSection ? "0" : "-1");
     button.addEventListener("click", () => activateSettingsSection(definition.key));
     button.addEventListener("keydown", (event) => handleSettingsTabKeydown(event, index));
     nav.appendChild(button);
@@ -11816,7 +11684,7 @@ function renderSettingsPage(doc) {
     panel.setAttribute("role", "tabpanel");
     panel.setAttribute("aria-labelledby", "settings-tab-" + definition.key);
     panel.setAttribute("data-settings-panel", definition.key);
-    panel.hidden = index != 0;
+    panel.hidden = definition.key != settingsActiveSection;
     var panelHeading = document.createElement("h2");
     panelHeading.textContent = definition.label;
     panel.appendChild(panelHeading);
@@ -11825,27 +11693,61 @@ function renderSettingsPage(doc) {
       gating.className = "tf-settings-auth-gating";
       panel.appendChild(gating);
     }
-    var table = document.createElement("table");
-    table.className = "tf-settings-table";
+    panelHeading.id = "settings-heading-" + definition.key;
+    var fields = document.createElement("fieldset");
+    fields.className = "tf-form-fields";
+    fields.setAttribute("aria-labelledby", panelHeading.id);
+    panel.appendChild(fields);
+    var advancedKeys = SETTINGS_ADVANCED_KEYS[definition.key] || [];
+    var advancedFields;
+    if (advancedKeys.length) {
+      var advanced = document.createElement("details");
+      advanced.className = "tf-form-advanced";
+      advanced.open = settingsAdvancedOpen[definition.key] === true;
+      var summary = document.createElement("summary");
+      summary.textContent = "Advanced " + definition.label.toLowerCase() + " settings";
+      advanced.appendChild(summary);
+      advancedFields = document.createElement("fieldset");
+      advancedFields.className = "tf-form-fields";
+      advancedFields.setAttribute("aria-label", summary.textContent);
+      advanced.appendChild(advancedFields);
+      advanced.addEventListener("toggle", () => {
+        settingsAdvancedOpen[definition.key] = advanced.open;
+      });
+      panel.appendChild(advanced);
+    }
     var renderer = new SettingsCategory();
     definition.settings.forEach((settingsKey) => {
-      var setting = renderer.createSettings(settingsKey);
-      setting.setAttribute("data-setting-key", settingsKey);
-      table.appendChild(setting);
-      table.appendChild(renderer.createDescription(settingsKey));
-    });
-    panel.appendChild(table);
-    if (definition.key == "general") {
-      var preview = document.createElement("p");
-      preview.className = "tf-settings-epg-preview";
-      preview.setAttribute("aria-live", "polite");
-      panel.insertBefore(preview, table.nextSibling);
-      var epgSource = table.querySelector('[name="epgSource"]');
-      if (epgSource) {
-        renderEPGSourcePreview(epgSource.value, preview);
-        epgSource.addEventListener("change", () => renderEPGSourcePreview(epgSource.value, preview));
+      var field = renderer.createSettings(settingsKey);
+      field.setAttribute("data-setting-key", settingsKey);
+      var help = renderer.createDescription(settingsKey);
+      if (help.textContent.trim())
+        appendUIFormHelp(field, help);
+      var control = field.querySelector("input, select");
+      var error = document.createElement("p");
+      error.id = control.id + "-error";
+      error.className = "tf-field-error";
+      error.hidden = true;
+      control.setAttribute("aria-describedby", [control.getAttribute("aria-describedby"), error.id].filter(Boolean).join(" "));
+      field.appendChild(error);
+      if (control.tagName == "INPUT" && SETTINGS_NUMERIC_KEYS[settingsKey]) {
+        control.type = "number";
+        control.step = settingsKey == "buffer.timeout" ? "any" : "1";
+        control.inputMode = settingsKey == "buffer.timeout" ? "decimal" : "numeric";
+        control.required = true;
       }
-    }
+      control.addEventListener("input", () => clearSettingsFieldError(field, control));
+      control.addEventListener("change", () => clearSettingsFieldError(field, control));
+      (advancedKeys.indexOf(settingsKey) >= 0 ? advancedFields : fields).appendChild(field);
+      if (settingsKey == "epgSource") {
+        var preview = document.createElement("p");
+        preview.className = "tf-settings-epg-preview";
+        preview.setAttribute("aria-live", "polite");
+        field.appendChild(preview);
+        renderEPGSourcePreview(control.value, preview);
+        control.addEventListener("change", () => renderEPGSourcePreview(control.value, preview));
+      }
+    });
     if (definition.key == "backup") {
       var backupActions = document.createElement("div");
       backupActions.className = "tf-backup-actions";
@@ -11865,6 +11767,20 @@ function renderSettingsPage(doc) {
     settingsHost.appendChild(panel);
   });
   root.appendChild(settingsHost);
+  var footer = document.createElement("footer");
+  footer.className = "tf-settings-save-bar";
+  var status = document.createElement("p");
+  status.id = "settings-form-status";
+  status.setAttribute("role", "status");
+  status.setAttribute("aria-live", "polite");
+  var save = document.createElement("button");
+  save.type = "button";
+  save.className = "tf-primary-action";
+  save.textContent = "Save settings";
+  save.addEventListener("click", saveSettings);
+  footer.appendChild(status);
+  footer.appendChild(save);
+  root.appendChild(footer);
   doc.appendChild(root);
   labelSettingsControls(root);
   var authWeb = root.querySelector('[name="authentication.web"]');
@@ -11872,6 +11788,73 @@ function renderSettingsPage(doc) {
     authWeb.addEventListener("change", () => syncSettingsAuthenticationGating(root));
   }
   syncSettingsAuthenticationGating(root);
+  renderSettingsFeedback();
+}
+function clearSettingsFieldError(field, control) {
+  control.removeAttribute("aria-invalid");
+  var error = field.querySelector(".tf-field-error");
+  if (error) {
+    error.textContent = "";
+    error.hidden = true;
+  }
+  settingsFeedback = { state: "idle", message: "Unsaved changes." };
+  renderSettingsFeedback();
+}
+function settingsInputError(name, value) {
+  if (name == "update") {
+    var times = value.split(",").map((time) => time.replace(/ /g, "")).filter(Boolean);
+    if (times.some((time) => !/^(?:[01]\d|2[0-3])[0-5]\d$/.test(time))) {
+      return "Use 24-hour times as HHMM, separated by commas (for example 0000,1200).";
+    }
+  }
+  if (SETTINGS_NUMERIC_KEYS[name] && (!value.trim() || !Number.isFinite(Number(value)) || name != "buffer.timeout" && !Number.isInteger(Number(value)))) {
+    return name == "buffer.timeout" ? "Enter a valid number." : "Enter a whole number.";
+  }
+  return "";
+}
+function validateSettingsForm(root) {
+  var controls = root.querySelectorAll("input.changed, select.changed");
+  for (var index = 0; index < controls.length; index++) {
+    var control = controls[index];
+    if (control.type == "checkbox" || control.disabled)
+      continue;
+    var message = settingsInputError(control.name, control.value);
+    if (!message && !control.checkValidity())
+      message = control.validationMessage;
+    if (!message)
+      continue;
+    var field = control.closest(".tf-form-field");
+    var error = field.querySelector(".tf-field-error");
+    error.textContent = message;
+    error.hidden = false;
+    control.setAttribute("aria-invalid", "true");
+    var panel = control.closest("[data-settings-panel]");
+    activateSettingsSection(panel.getAttribute("data-settings-panel"));
+    var details = control.closest("details");
+    if (details)
+      details.open = true;
+    control.focus();
+    return false;
+  }
+  return true;
+}
+function renderSettingsFeedback() {
+  var root = document.querySelector(".tf-settings");
+  if (!root)
+    return;
+  var status = root.querySelector("#settings-form-status");
+  status.textContent = settingsFeedback.message;
+  status.setAttribute("data-state", settingsFeedback.state);
+  var pending = settingsFeedback.state == "progress";
+  root.setAttribute("aria-busy", pending ? "true" : "false");
+  root.querySelector(".tf-settings-save-bar button").disabled = pending;
+  Array.prototype.forEach.call(root.querySelectorAll("fieldset"), (group) => {
+    group.disabled = pending;
+  });
+}
+function completeSettingsRequest(response, transportFailure = false) {
+  settingsFeedback = response && response.status === true ? { state: "success", message: "Settings saved." } : { state: "error", message: transportFailure ? "Save result unclear. Reload Settings to check the saved values before retrying." : response && response.err ? String(response.err) : "Settings could not be saved. Your inputs are still available." };
+  renderSettingsFeedback();
 }
 function showLogs(bottom) {
   var logs = SERVER["log"] && Array.isArray(SERVER["log"]["log"]) ? SERVER["log"]["log"] : [];

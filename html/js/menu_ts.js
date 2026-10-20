@@ -133,11 +133,49 @@ class PopupWindow {
         this.doc.appendChild(div);
     }
 }
+// Shared Bootstrap field markup; the existing controllers still own values and saves.
+function createUIFormField(title, control, id) {
+    var field = document.createElement("div");
+    field.className = "form-field tf-form-field";
+    if (!control.id)
+        control.id = id;
+    var label = document.createElement("label");
+    label.className = "form-label";
+    label.id = control.id + "-label";
+    label.htmlFor = control.id;
+    label.textContent = title.replace(/:\s*$/, "");
+    control.setAttribute("aria-labelledby", label.id);
+    control.classList.add(control.type == "checkbox" ? "check" : "form-control");
+    field.appendChild(label);
+    field.appendChild(control);
+    return field;
+}
+function appendUIFormHelp(field, help) {
+    var control = field.querySelector("input, select, textarea");
+    if (!control)
+        return;
+    help.id = control.id + "-help";
+    help.classList.add("tf-field-help");
+    control.setAttribute("aria-describedby", help.id);
+    field.appendChild(help);
+}
 class PopupContent extends PopupWindow {
-    constructor() {
-        super(...arguments);
-        this.table = document.createElement("TABLE");
+    constructor(formLayout = false) {
+        super();
+        this.table = document.createElement("div");
         this.rowIndex = 0;
+        this.formLayout = formLayout;
+    }
+    beginAdvanced(title = "Advanced · proxy and request headers") {
+        var details = document.createElement("details");
+        details.className = "tf-form-advanced";
+        var summary = document.createElement("summary");
+        summary.textContent = title;
+        details.appendChild(summary);
+        this.table = document.createElement("div");
+        this.table.className = "tf-form-fields";
+        details.appendChild(this.table);
+        this.doc.appendChild(details);
     }
     createHeadline(headline) {
         this.doc.innerHTML = "";
@@ -145,10 +183,17 @@ class PopupContent extends PopupWindow {
         element.textContent = headline.toUpperCase();
         this.doc.appendChild(element);
         // Tabelle erstellen
-        this.table = document.createElement("TABLE");
+        this.table = document.createElement(this.formLayout ? "div" : "table");
+        if (this.formLayout)
+            this.table.className = "tf-form-fields";
         this.doc.appendChild(this.table);
     }
     appendRow(title, element) {
+        if (this.formLayout) {
+            this.lastField = createUIFormField(title, element, "popup-field-" + this.rowIndex++ + "-0");
+            this.table.appendChild(this.lastField);
+            return;
+        }
         var tr = document.createElement("TR");
         var titleCell = null;
         var rowIndex = this.rowIndex++;
@@ -239,6 +284,10 @@ class PopupContent extends PopupWindow {
         this.descriptionElement(span);
     }
     descriptionElement(element) {
+        if (this.formLayout && this.lastField) {
+            appendUIFormHelp(this.lastField, element);
+            return;
+        }
         var tr = document.createElement("TR");
         var td = document.createElement("TD");
         tr.appendChild(td);
@@ -297,7 +346,7 @@ function openPopUp(dataType, element) {
             data = getLocalData(dataType, id);
             break;
     }
-    var content = new PopupContent();
+    var content = new PopupContent(dataType == "playlist" || dataType == "m3u" || dataType == "hdhr" || dataType == "xmltv");
     switch (dataType) {
         case "playlist":
             content.createHeadline("{{.playlist.playlistType.title}}");
@@ -356,6 +405,7 @@ function openPopUp(dataType, element) {
             var select = content.createSelect(text, values, data[dbKey], dbKey);
             content.appendRow("{{.playlist.tuner.title}}", select);
             content.description("{{.playlist.tuner.description}}", true);
+            content.beginAdvanced();
             var dbKey = "http_proxy.ip";
             var input = content.createInput("text", dbKey, data[dbKey]);
             input.setAttribute("placeholder", "{{.playlist.http_proxy_ip.placeholder}}");
@@ -442,6 +492,7 @@ function openPopUp(dataType, element) {
             var select = content.createSelect(text, values, data[dbKey], dbKey);
             content.appendRow("{{.playlist.tuner.title}}", select);
             content.description("{{.playlist.tuner.description}}", true);
+            content.beginAdvanced("Advanced · HTTP proxy");
             var dbKey = "http_proxy.ip";
             var input = content.createInput("text", dbKey, data[dbKey]);
             input.setAttribute("placeholder", "{{.playlist.http_proxy_ip.placeholder}}");
@@ -634,6 +685,7 @@ function openPopUp(dataType, element) {
             var input = content.createInput("text", dbKey, data[dbKey]);
             input.setAttribute("placeholder", "{{.xmltv.fileXMLTV.placeholder}}");
             content.appendRow("{{.xmltv.fileXMLTV.title}}", input);
+            content.beginAdvanced("Advanced · HTTP proxy");
             var dbKey = "http_proxy.ip";
             var input = content.createInput("text", dbKey, data[dbKey]);
             input.setAttribute("placeholder", "{{.xmltv.http_proxy_ip.placeholder}}");
@@ -1279,8 +1331,10 @@ function savePopupData(dataType, id, remove, option) {
     }
     console.log("Save popup data");
     var div = document.getElementById("popup-custom");
-    var inputs = div.getElementsByTagName("TABLE")[0].getElementsByTagName("INPUT");
-    var selects = div.getElementsByTagName("TABLE")[0].getElementsByTagName("SELECT");
+    var sourceForm = dataType == "m3u" || dataType == "hdhr" || dataType == "xmltv";
+    var fields = sourceForm ? div : div.getElementsByTagName("TABLE")[0];
+    var inputs = fields.getElementsByTagName("INPUT");
+    var selects = fields.getElementsByTagName("SELECT");
     var input = new Object();
     var confirmMsg;
     for (let i = 0; i < selects.length; i++) {

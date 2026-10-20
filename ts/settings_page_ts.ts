@@ -28,6 +28,15 @@ var SETTINGS_SECTIONS: SettingsSectionDefinition[] = [
   },
 ]
 
+var settingsActiveSection = "general"
+var settingsAdvancedOpen: { [key: string]: boolean } = {}
+var settingsFeedback = { state: "idle", message: "" }
+var SETTINGS_ADVANCED_KEYS: { [key: string]: string[] } = {
+  general: ["epgCategories", "epgCategoriesColors", "dummy", "dummyChannel", "ignoreFilters", "api"],
+  files: ["bindIpAddress", "httpThreadfinDomain", "forceHttps", "excludeStreamHttps", "httpsPort", "httpsThreadfinDomain", "enableNonAscii"],
+  streaming: ["udpxy", "user.agent", "ffmpeg.options", "ffmpeg.forceHttp", "vlc.path", "vlc.options"],
+}
+
 var SETTINGS_NUMERIC_KEYS: { [key: string]: boolean } = {
   "tuner": true,
   "backup.keep": true,
@@ -56,7 +65,7 @@ function serializeSettingsChanges(controls: any[]): { [key: string]: any } {
       return
     }
     if (SETTINGS_NUMERIC_KEYS[name]) {
-      changes[name] = name == "buffer.timeout" ? parseFloat(value) : parseInt(value, 10)
+      changes[name] = Number(value)
       return
     }
     changes[name] = value
@@ -78,6 +87,7 @@ function renderEPGSourcePreview(value: string, target: any): void {
 }
 
 function activateSettingsSection(sectionKey: string, focusActiveTab?: boolean): void {
+  settingsActiveSection = sectionKey
   var root = document.querySelector(".tf-settings") as HTMLElement
   if (!root) {
     return
@@ -147,15 +157,16 @@ function labelSettingsControls(root: HTMLElement): void {
     if (String(control.type || "").toLowerCase() == "hidden") {
       continue
     }
-    var row = control.closest("tr")
-    var labelCell = row ? row.querySelector("td:first-child") as HTMLElement : null
+    var field = control.closest(".tf-form-field")
+    var labelCell = field ? field.querySelector("label") as HTMLLabelElement : null
     if (!labelCell || !labelCell.textContent) {
       continue
     }
     var key = String(control.name || "setting").replace(/[^A-Za-z0-9_-]+/g, "-")
-    labelCell.id = "settings-field-label-" + key + "-" + index
-    control.id = "settings-field-" + key + "-" + index
+    if (!labelCell.id) labelCell.id = "settings-field-label-" + key + "-" + index
+    if (!control.id) control.id = "settings-field-" + key + "-" + index
     control.setAttribute("aria-labelledby", labelCell.id)
+    labelCell.htmlFor = control.id
   }
 }
 
@@ -173,13 +184,7 @@ function renderSettingsPage(doc: HTMLElement): void {
   purpose.textContent = "Configure Threadfin ingestion, files, streaming, backups, and access without changing unrelated settings."
   headingGroup.appendChild(heading)
   headingGroup.appendChild(purpose)
-  var save = document.createElement("button")
-  save.type = "button"
-  save.className = "tf-primary-action"
-  save.textContent = "Save settings"
-  save.addEventListener("click", saveSettings)
   header.appendChild(headingGroup)
-  header.appendChild(save)
   root.appendChild(header)
 
   var nav = document.createElement("div")
@@ -194,8 +199,8 @@ function renderSettingsPage(doc: HTMLElement): void {
     button.id = "settings-tab-" + definition.key
     button.setAttribute("data-settings-tab", definition.key)
     button.setAttribute("aria-controls", "settings-panel-" + definition.key)
-    button.setAttribute("aria-selected", index == 0 ? "true" : "false")
-    button.setAttribute("tabindex", index == 0 ? "0" : "-1")
+    button.setAttribute("aria-selected", definition.key == settingsActiveSection ? "true" : "false")
+    button.setAttribute("tabindex", definition.key == settingsActiveSection ? "0" : "-1")
     button.addEventListener("click", () => activateSettingsSection(definition.key))
     button.addEventListener("keydown", event => handleSettingsTabKeydown(event, index))
     nav.appendChild(button)
@@ -212,7 +217,7 @@ function renderSettingsPage(doc: HTMLElement): void {
     panel.setAttribute("role", "tabpanel")
     panel.setAttribute("aria-labelledby", "settings-tab-" + definition.key)
     panel.setAttribute("data-settings-panel", definition.key)
-    panel.hidden = index != 0
+    panel.hidden = definition.key != settingsActiveSection
     var panelHeading = document.createElement("h2")
     panelHeading.textContent = definition.label
     panel.appendChild(panelHeading)
@@ -223,28 +228,58 @@ function renderSettingsPage(doc: HTMLElement): void {
       panel.appendChild(gating)
     }
 
-    var table = document.createElement("table")
-    table.className = "tf-settings-table"
+    panelHeading.id = "settings-heading-" + definition.key
+    var fields = document.createElement("fieldset")
+    fields.className = "tf-form-fields"
+    fields.setAttribute("aria-labelledby", panelHeading.id)
+    panel.appendChild(fields)
+    var advancedKeys = SETTINGS_ADVANCED_KEYS[definition.key] || []
+    var advancedFields: HTMLElement
+    if (advancedKeys.length) {
+      var advanced = document.createElement("details")
+      advanced.className = "tf-form-advanced"
+      advanced.open = settingsAdvancedOpen[definition.key] === true
+      var summary = document.createElement("summary")
+      summary.textContent = "Advanced " + definition.label.toLowerCase() + " settings"
+      advanced.appendChild(summary)
+      advancedFields = document.createElement("fieldset")
+      advancedFields.className = "tf-form-fields"
+      advancedFields.setAttribute("aria-label", summary.textContent)
+      advanced.appendChild(advancedFields)
+      advanced.addEventListener("toggle", () => { settingsAdvancedOpen[definition.key] = advanced.open })
+      panel.appendChild(advanced)
+    }
     var renderer = new SettingsCategory()
     definition.settings.forEach(settingsKey => {
-      var setting = renderer.createSettings(settingsKey)
-      setting.setAttribute("data-setting-key", settingsKey)
-      table.appendChild(setting)
-      table.appendChild(renderer.createDescription(settingsKey))
-    })
-    panel.appendChild(table)
-
-    if (definition.key == "general") {
-      var preview = document.createElement("p")
-      preview.className = "tf-settings-epg-preview"
-      preview.setAttribute("aria-live", "polite")
-      panel.insertBefore(preview, table.nextSibling)
-      var epgSource = table.querySelector('[name="epgSource"]') as HTMLSelectElement
-      if (epgSource) {
-        renderEPGSourcePreview(epgSource.value, preview)
-        epgSource.addEventListener("change", () => renderEPGSourcePreview(epgSource.value, preview))
+      var field = renderer.createSettings(settingsKey) as HTMLElement
+      field.setAttribute("data-setting-key", settingsKey)
+      var help = renderer.createDescription(settingsKey) as HTMLElement
+      if (help.textContent.trim()) appendUIFormHelp(field, help)
+      var control = field.querySelector("input, select") as HTMLInputElement
+      var error = document.createElement("p")
+      error.id = control.id + "-error"
+      error.className = "tf-field-error"
+      error.hidden = true
+      control.setAttribute("aria-describedby", [control.getAttribute("aria-describedby"), error.id].filter(Boolean).join(" "))
+      field.appendChild(error)
+      if (control.tagName == "INPUT" && SETTINGS_NUMERIC_KEYS[settingsKey]) {
+        control.type = "number"
+        control.step = settingsKey == "buffer.timeout" ? "any" : "1"
+        control.inputMode = settingsKey == "buffer.timeout" ? "decimal" : "numeric"
+        control.required = true
       }
-    }
+      control.addEventListener("input", () => clearSettingsFieldError(field, control))
+      control.addEventListener("change", () => clearSettingsFieldError(field, control))
+      ;(advancedKeys.indexOf(settingsKey) >= 0 ? advancedFields : fields).appendChild(field)
+      if (settingsKey == "epgSource") {
+        var preview = document.createElement("p")
+        preview.className = "tf-settings-epg-preview"
+        preview.setAttribute("aria-live", "polite")
+        field.appendChild(preview)
+        renderEPGSourcePreview(control.value, preview)
+        control.addEventListener("change", () => renderEPGSourcePreview(control.value, preview))
+      }
+    })
 
     if (definition.key == "backup") {
       var backupActions = document.createElement("div")
@@ -265,6 +300,20 @@ function renderSettingsPage(doc: HTMLElement): void {
     settingsHost.appendChild(panel)
   })
   root.appendChild(settingsHost)
+  var footer = document.createElement("footer")
+  footer.className = "tf-settings-save-bar"
+  var status = document.createElement("p")
+  status.id = "settings-form-status"
+  status.setAttribute("role", "status")
+  status.setAttribute("aria-live", "polite")
+  var save = document.createElement("button")
+  save.type = "button"
+  save.className = "tf-primary-action"
+  save.textContent = "Save settings"
+  save.addEventListener("click", saveSettings)
+  footer.appendChild(status)
+  footer.appendChild(save)
+  root.appendChild(footer)
   doc.appendChild(root)
   labelSettingsControls(root)
 
@@ -273,4 +322,71 @@ function renderSettingsPage(doc: HTMLElement): void {
     authWeb.addEventListener("change", () => syncSettingsAuthenticationGating(root))
   }
   syncSettingsAuthenticationGating(root)
+  renderSettingsFeedback()
+}
+
+function clearSettingsFieldError(field: HTMLElement, control: HTMLElement): void {
+  control.removeAttribute("aria-invalid")
+  var error = field.querySelector(".tf-field-error") as HTMLElement
+  if (error) { error.textContent = ""; error.hidden = true }
+  settingsFeedback = { state: "idle", message: "Unsaved changes." }
+  renderSettingsFeedback()
+}
+
+function settingsInputError(name: string, value: string): string {
+  if (name == "update") {
+    var times = value.split(",").map(time => time.replace(/ /g, "")).filter(Boolean)
+    if (times.some(time => !/^(?:[01]\d|2[0-3])[0-5]\d$/.test(time))) {
+      return "Use 24-hour times as HHMM, separated by commas (for example 0000,1200)."
+    }
+  }
+  if (SETTINGS_NUMERIC_KEYS[name] && (!value.trim() || !Number.isFinite(Number(value)) ||
+      (name != "buffer.timeout" && !Number.isInteger(Number(value))))) {
+    return name == "buffer.timeout" ? "Enter a valid number." : "Enter a whole number."
+  }
+  return ""
+}
+
+function validateSettingsForm(root: HTMLElement): boolean {
+  var controls = root.querySelectorAll("input.changed, select.changed")
+  for (var index = 0; index < controls.length; index++) {
+    var control = controls[index] as HTMLInputElement
+    if (control.type == "checkbox" || control.disabled) continue
+    var message = settingsInputError(control.name, control.value)
+    if (!message && !control.checkValidity()) message = control.validationMessage
+    if (!message) continue
+    var field = control.closest(".tf-form-field") as HTMLElement
+    var error = field.querySelector(".tf-field-error") as HTMLElement
+    error.textContent = message
+    error.hidden = false
+    control.setAttribute("aria-invalid", "true")
+    var panel = control.closest("[data-settings-panel]")
+    activateSettingsSection(panel.getAttribute("data-settings-panel"))
+    var details = control.closest("details") as HTMLDetailsElement
+    if (details) details.open = true
+    control.focus()
+    return false
+  }
+  return true
+}
+
+function renderSettingsFeedback(): void {
+  var root = document.querySelector(".tf-settings") as HTMLElement
+  if (!root) return
+  var status = root.querySelector("#settings-form-status") as HTMLElement
+  status.textContent = settingsFeedback.message
+  status.setAttribute("data-state", settingsFeedback.state)
+  var pending = settingsFeedback.state == "progress"
+  root.setAttribute("aria-busy", pending ? "true" : "false")
+  ;(root.querySelector(".tf-settings-save-bar button") as HTMLButtonElement).disabled = pending
+  Array.prototype.forEach.call(root.querySelectorAll("fieldset"), (group: HTMLFieldSetElement) => { group.disabled = pending })
+}
+
+function completeSettingsRequest(response: any, transportFailure: boolean = false): void {
+  settingsFeedback = response && response.status === true
+    ? { state: "success", message: "Settings saved." }
+    : { state: "error", message: transportFailure
+        ? "Save result unclear. Reload Settings to check the saved values before retrying."
+        : response && response.err ? String(response.err) : "Settings could not be saved. Your inputs are still available." }
+  renderSettingsFeedback()
 }

@@ -159,10 +159,55 @@ class PopupWindow {
   }
 }
 
+// Shared Bootstrap field markup; the existing controllers still own values and saves.
+function createUIFormField(title: string, control: HTMLElement, id: string): HTMLElement {
+  var field = document.createElement("div")
+  field.className = "form-field tf-form-field"
+  if (!control.id) control.id = id
+  var label = document.createElement("label")
+  label.className = "form-label"
+  label.id = control.id + "-label"
+  label.htmlFor = control.id
+  label.textContent = title.replace(/:\s*$/, "")
+  control.setAttribute("aria-labelledby", label.id)
+  control.classList.add((control as HTMLInputElement).type == "checkbox" ? "check" : "form-control")
+  field.appendChild(label)
+  field.appendChild(control)
+  return field
+}
+
+function appendUIFormHelp(field: HTMLElement, help: HTMLElement): void {
+  var control = field.querySelector("input, select, textarea")
+  if (!control) return
+  help.id = control.id + "-help"
+  help.classList.add("tf-field-help")
+  control.setAttribute("aria-describedby", help.id)
+  field.appendChild(help)
+}
+
 class PopupContent extends PopupWindow {
 
-  table = document.createElement("TABLE")
+  table: HTMLElement = document.createElement("div")
   rowIndex: number = 0
+  formLayout: boolean
+  lastField: HTMLElement
+
+  constructor(formLayout: boolean = false) {
+    super()
+    this.formLayout = formLayout
+  }
+
+  beginAdvanced(title: string = "Advanced · proxy and request headers"): void {
+    var details = document.createElement("details")
+    details.className = "tf-form-advanced"
+    var summary = document.createElement("summary")
+    summary.textContent = title
+    details.appendChild(summary)
+    this.table = document.createElement("div")
+    this.table.className = "tf-form-fields"
+    details.appendChild(this.table)
+    this.doc.appendChild(details)
+  }
 
   createHeadline(headline): void {
     this.doc.innerHTML = ""
@@ -171,11 +216,17 @@ class PopupContent extends PopupWindow {
     this.doc.appendChild(element)
 
     // Tabelle erstellen
-    this.table = document.createElement("TABLE")
+    this.table = document.createElement(this.formLayout ? "div" : "table")
+    if (this.formLayout) this.table.className = "tf-form-fields"
     this.doc.appendChild(this.table)
   }
 
   appendRow(title: string, element: any): void {
+    if (this.formLayout) {
+      this.lastField = createUIFormField(title, element, "popup-field-" + this.rowIndex++ + "-0")
+      this.table.appendChild(this.lastField)
+      return
+    }
     var tr = document.createElement("TR")
     var titleCell: HTMLElement = null
     var rowIndex = this.rowIndex++
@@ -279,6 +330,10 @@ class PopupContent extends PopupWindow {
   }
 
   descriptionElement(element: HTMLElement): any {
+    if (this.formLayout && this.lastField) {
+      appendUIFormHelp(this.lastField, element)
+      return
+    }
     var tr = document.createElement("TR")
     var td = document.createElement("TD")
 
@@ -351,7 +406,7 @@ function openPopUp(dataType, element) {
       break;
   }
 
-  var content: PopupContent = new PopupContent()
+  var content: PopupContent = new PopupContent(dataType == "playlist" || dataType == "m3u" || dataType == "hdhr" || dataType == "xmltv")
 
   switch (dataType) {
     case "playlist":
@@ -422,6 +477,8 @@ function openPopUp(dataType, element) {
 
       content.appendRow("{{.playlist.tuner.title}}", select)
       content.description("{{.playlist.tuner.description}}", true)
+
+      content.beginAdvanced()
 
       var dbKey: string = "http_proxy.ip"
       var input = content.createInput("text", dbKey, data[dbKey])
@@ -523,6 +580,8 @@ function openPopUp(dataType, element) {
 
       content.appendRow("{{.playlist.tuner.title}}", select)
       content.description("{{.playlist.tuner.description}}", true)
+
+      content.beginAdvanced("Advanced · HTTP proxy")
 
       var dbKey: string = "http_proxy.ip"
       var input = content.createInput("text", dbKey, data[dbKey])
@@ -758,6 +817,8 @@ function openPopUp(dataType, element) {
       var input = content.createInput("text", dbKey, data[dbKey])
       input.setAttribute("placeholder", "{{.xmltv.fileXMLTV.placeholder}}")
       content.appendRow("{{.xmltv.fileXMLTV.title}}", input)
+
+      content.beginAdvanced("Advanced · HTTP proxy")
 
       var dbKey: string = "http_proxy.ip"
       var input = content.createInput("text", dbKey, data[dbKey])
@@ -1549,8 +1610,10 @@ function savePopupData(dataType: string, id: string, remove: Boolean, option: nu
   console.log("Save popup data")
   var div = document.getElementById("popup-custom")
 
-  var inputs = div.getElementsByTagName("TABLE")[0].getElementsByTagName("INPUT");
-  var selects = div.getElementsByTagName("TABLE")[0].getElementsByTagName("SELECT");
+  var sourceForm = dataType == "m3u" || dataType == "hdhr" || dataType == "xmltv"
+  var fields = sourceForm ? div : div.getElementsByTagName("TABLE")[0]
+  var inputs = fields.getElementsByTagName("INPUT");
+  var selects = fields.getElementsByTagName("SELECT");
 
   var input = new Object();
   var confirmMsg: string

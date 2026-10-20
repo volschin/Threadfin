@@ -1149,15 +1149,15 @@ class Element {
   appendChild(child) { child.parentElement = this; this.children.push(child); return child; }
   focus() { this.focusCount += 1; }
   addEventListener(name, listener) { this.listeners[name] = listener; }
-  closest(selector) { return selector === "tr" ? this.row : null; }
+  closest(selector) { return selector === ".tf-form-field" ? this.row : null; }
 }
 function field(tag, name, label, value) {
   const control = new Element(tag);
   control.setAttribute("name", name);
   control.value = value;
-  const labelCell = new Element("td");
+  const labelCell = new Element("label");
   labelCell.textContent = label + ":";
-  control.row = {querySelector(selector) { return selector === "td:first-child" ? labelCell : null; }};
+  control.row = {querySelector(selector) { return selector === "label" ? labelCell : null; }};
   const parent = new Element("td");
   parent.appendChild(control);
   return control;
@@ -1338,7 +1338,7 @@ const popup = {
         return child === "INPUT" ? controls.inputs : controls.selects;
       }
     }];
-    return [];
+    return name === "INPUT" ? controls.inputs : name === "SELECT" ? controls.selects : [];
   }
 };
 class CaptureServer {
