@@ -736,7 +736,7 @@ func Web(w http.ResponseWriter, r *http.Request) {
 	var lang = make(map[string]interface{})
 	var err error
 
-	var requestFile = strings.Replace(r.URL.Path, "/web", "html", -1)
+	var requestFile = "html" + strings.TrimPrefix(r.URL.Path, "/web")
 	var content, contentType, file string
 
 	var language LanguageUI

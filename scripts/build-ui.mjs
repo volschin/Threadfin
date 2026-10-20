@@ -34,4 +34,4 @@ const layers = '@layer colors, config, root, reboot, layout, content, forms, com
 const legacy = await Promise.all(['screen','base','app-shell'].map(x=>readFile(`html/css/${x}.css`,'utf8')));
 const tokens = await readFile('html/css/modern.css','utf8');
 const componentTokens = await readFile('html/css/theme.css','utf8');
-await writeFile('html/css/app.css',layers + '@layer custom {\n' + legacy.join('\n') + '\n' + tokens + '\n}\n' + componentTokens);
+await writeFile('html/css/app.css',layers + '@layer custom {\n' + legacy.join('\n').replace(/[ \t]+$/gm, '') + '\n' + tokens + '\n}\n' + componentTokens);
