@@ -24,7 +24,7 @@ FROM binary${USE_PREBUILT:+-prebuilt} AS binary-final
 ARG USE_NVIDIA
 FROM ubuntu:26.04 AS standard
 ENV OS_CODENAME=resolute
-FROM nvidia/cuda:13.3.1-base-ubuntu26.04 AS nvidia
+FROM nvidia/cuda:13.4.3-base-ubuntu26.04 AS nvidia
 ENV OS_CODENAME=resolute
 FROM standard AS final
 FROM nvidia AS final-nvidia
