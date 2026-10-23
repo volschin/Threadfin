@@ -23,7 +23,7 @@
 ## Web assets
 
 - TypeScript source lives in `ts/`; compiled browser assets live under `html/`.
-- After changing TypeScript, run `tsc -p ./ts/tsconfig.json`.
+- After changing TypeScript, run `npm run build` (uses the pinned tsrs compiler and bundles the web assets).
 - When browser assets change, regenerate `src/webUI.go` using the development-mode procedure documented in `README.md`, and include the generated file in the same change.
 
 ## Releases

@@ -152,6 +152,7 @@ go build threadfin.go
 
 4. Update web files (optional)
 
+The UI build uses the tsrs compiler version pinned in `package-lock.json`.
 If TypeScript files were changed, run:
 
 ```sh
