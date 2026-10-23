@@ -133,11 +133,49 @@ class PopupWindow {
         this.doc.appendChild(div);
     }
 }
+// Shared Bootstrap field markup; the existing controllers still own values and saves.
+function createUIFormField(title, control, id) {
+    var field = document.createElement("div");
+    field.className = "form-field tf-form-field";
+    if (!control.id)
+        control.id = id;
+    var label = document.createElement("label");
+    label.className = "form-label";
+    label.id = control.id + "-label";
+    label.htmlFor = control.id;
+    label.textContent = title.replace(/:\s*$/, "");
+    control.setAttribute("aria-labelledby", label.id);
+    control.classList.add(control.type == "checkbox" ? "check" : "form-control");
+    field.appendChild(label);
+    field.appendChild(control);
+    return field;
+}
+function appendUIFormHelp(field, help) {
+    var control = field.querySelector("input, select, textarea");
+    if (!control)
+        return;
+    help.id = control.id + "-help";
+    help.classList.add("tf-field-help");
+    control.setAttribute("aria-describedby", help.id);
+    field.appendChild(help);
+}
 class PopupContent extends PopupWindow {
-    constructor() {
-        super(...arguments);
-        this.table = document.createElement("TABLE");
+    constructor(formLayout = false) {
+        super();
+        this.table = document.createElement("div");
         this.rowIndex = 0;
+        this.formLayout = formLayout;
+    }
+    beginAdvanced(title = "Advanced · proxy and request headers") {
+        var details = document.createElement("details");
+        details.className = "tf-form-advanced";
+        var summary = document.createElement("summary");
+        summary.textContent = title;
+        details.appendChild(summary);
+        this.table = document.createElement("div");
+        this.table.className = "tf-form-fields";
+        details.appendChild(this.table);
+        this.doc.appendChild(details);
     }
     createHeadline(headline) {
         this.doc.innerHTML = "";
@@ -145,10 +183,17 @@ class PopupContent extends PopupWindow {
         element.textContent = headline.toUpperCase();
         this.doc.appendChild(element);
         // Tabelle erstellen
-        this.table = document.createElement("TABLE");
+        this.table = document.createElement(this.formLayout ? "div" : "table");
+        if (this.formLayout)
+            this.table.className = "tf-form-fields";
         this.doc.appendChild(this.table);
     }
     appendRow(title, element) {
+        if (this.formLayout) {
+            this.lastField = createUIFormField(title, element, "popup-field-" + this.rowIndex++ + "-0");
+            this.table.appendChild(this.lastField);
+            return;
+        }
         var tr = document.createElement("TR");
         var titleCell = null;
         var rowIndex = this.rowIndex++;
@@ -228,7 +273,8 @@ class PopupContent extends PopupWindow {
         return select;
     }
     description(value, repositoryTemplate = false) {
-        var span = document.createElement("PRE");
+        var span = document.createElement("div");
+        span.className = "tf-field-help";
         if (repositoryTemplate) {
             appendDescriptionText(span, value);
         }
@@ -238,6 +284,10 @@ class PopupContent extends PopupWindow {
         this.descriptionElement(span);
     }
     descriptionElement(element) {
+        if (this.formLayout && this.lastField) {
+            appendUIFormHelp(this.lastField, element);
+            return;
+        }
         var tr = document.createElement("TR");
         var td = document.createElement("TD");
         tr.appendChild(td);
@@ -296,26 +346,25 @@ function openPopUp(dataType, element) {
             data = getLocalData(dataType, id);
             break;
     }
-    var content = new PopupContent();
+    var content = new PopupContent(dataType == "playlist" || dataType == "m3u" || dataType == "hdhr" || dataType == "xmltv");
     switch (dataType) {
         case "playlist":
             content.createHeadline("{{.playlist.playlistType.title}}");
             // Type
             var text = ["M3U", "HDHomeRun"];
-            var values = ["javascript: openPopUp('m3u')", "javascript: openPopUp('hdhr')"];
+            var values = ["m3u", "hdhr"];
             var select = content.createSelect(text, values, "", "type");
             select.setAttribute("id", "type");
-            select.setAttribute("onchange", 'javascript: changeButtonAction(this, "next", "onclick")'); // changeButtonAction
             content.appendRow("{{.playlist.type.title}}", select);
             // Interaktion
             content.createInteraction();
             // Abbrechen
             var input = content.createInput("button", "cancel", "{{.button.cancel}}");
-            input.setAttribute("onclick", 'javascript: showElement("popup", false);');
+            addRuntimeEventListener(input, "click", () => showElement("popup", false));
             content.addInteraction(input);
             // Weiter
             var input = content.createInput("button", "next", "{{.button.next}}");
-            input.setAttribute("onclick", 'javascript: openPopUp("m3u")');
+            addRuntimeEventListener(input, "click", () => openPopUp(document.querySelector("#popup select[name=type]").value, undefined));
             input.setAttribute("id", 'next');
             content.addInteraction(input);
             break;
@@ -354,9 +403,9 @@ function openPopUp(dataType, element) {
             }
             var dbKey = "tuner";
             var select = content.createSelect(text, values, data[dbKey], dbKey);
-            select.setAttribute("onfocus", "javascript: return;");
             content.appendRow("{{.playlist.tuner.title}}", select);
             content.description("{{.playlist.tuner.description}}", true);
+            content.beginAdvanced();
             var dbKey = "http_proxy.ip";
             var input = content.createInput("text", dbKey, data[dbKey]);
             input.setAttribute("placeholder", "{{.playlist.http_proxy_ip.placeholder}}");
@@ -388,12 +437,12 @@ function openPopUp(dataType, element) {
             }
             else {
                 var input = content.createInput("button", "back", "{{.button.back}}");
-                input.setAttribute("onclick", 'javascript: openPopUp("playlist")');
+                addRuntimeEventListener(input, "click", () => openPopUp("playlist", undefined));
                 content.addInteraction(input);
             }
             // Abbrechen
             var input = content.createInput("button", "cancel", "{{.button.cancel}}");
-            input.setAttribute("onclick", 'javascript: showElement("popup", false);');
+            addRuntimeEventListener(input, "click", () => showElement("popup", false));
             content.addInteraction(input);
             // Aktualisieren
             if (data["id.provider"] != "-") {
@@ -441,9 +490,9 @@ function openPopUp(dataType, element) {
             }
             var dbKey = "tuner";
             var select = content.createSelect(text, values, data[dbKey], dbKey);
-            select.setAttribute("onfocus", "javascript: return;");
             content.appendRow("{{.playlist.tuner.title}}", select);
             content.description("{{.playlist.tuner.description}}", true);
+            content.beginAdvanced("Advanced · HTTP proxy");
             var dbKey = "http_proxy.ip";
             var input = content.createInput("text", dbKey, data[dbKey]);
             input.setAttribute("placeholder", "{{.playlist.http_proxy_ip.placeholder}}");
@@ -465,12 +514,12 @@ function openPopUp(dataType, element) {
             }
             else {
                 var input = content.createInput("button", "back", "{{.button.back}}");
-                input.setAttribute("onclick", 'javascript: openPopUp("playlist")');
+                addRuntimeEventListener(input, "click", () => openPopUp("playlist", undefined));
                 content.addInteraction(input);
             }
             // Abbrechen
             var input = content.createInput("button", "cancel", "{{.button.cancel}}");
-            input.setAttribute("onclick", 'javascript: showElement("popup", false);');
+            addRuntimeEventListener(input, "click", () => showElement("popup", false));
             content.addInteraction(input);
             // Aktualisieren
             if (data["id.provider"] != "-") {
@@ -488,20 +537,19 @@ function openPopUp(dataType, element) {
             // Type
             var dbKey = "type";
             var text = ["M3U: " + "{{.filter.type.groupTitle}}", "Threadfin: " + "{{.filter.type.customFilter}}"];
-            var values = ["javascript: openPopUp('group-title')", "javascript: openPopUp('custom-filter')"];
-            var select = content.createSelect(text, values, "javascript: openPopUp('group-title')", dbKey);
+            var values = ["group-title", "custom-filter"];
+            var select = content.createSelect(text, values, "group-title", dbKey);
             select.setAttribute("id", id);
-            select.setAttribute("onchange", 'javascript: changeButtonAction(this, "next", "onclick");'); // changeButtonAction
             content.appendRow("{{.filter.type.title}}", select);
             // Interaktion
             content.createInteraction();
             // Abbrechen
             var input = content.createInput("button", "cancel", "{{.button.cancel}}");
-            input.setAttribute("onclick", 'javascript: showElement("popup", false);');
+            addRuntimeEventListener(input, "click", () => showElement("popup", false));
             content.addInteraction(input);
             // Weiter
             var input = content.createInput("button", "next", "{{.button.next}}");
-            input.setAttribute("onclick", 'javascript: openPopUp("group-title")');
+            addRuntimeEventListener(input, "click", () => openPopUp(document.querySelector("#popup select[name=type]").value, undefined));
             input.setAttribute("id", 'next');
             content.addInteraction(input);
             break;
@@ -515,7 +563,7 @@ function openPopUp(dataType, element) {
                     content.createHeadline("{{.filter.group}}");
                     break;
             }
-            // Name      
+            // Name
             var dbKey = "name";
             var input = content.createInput("text", dbKey, data[dbKey]);
             input.setAttribute("placeholder", "{{.filter.name.placeholder}}");
@@ -551,7 +599,7 @@ function openPopUp(dataType, element) {
                     var text = groupsM3U["text"];
                     var values = groupsM3U["value"];
                     var select = content.createSelect(text, values, data[dbKey], dbKey);
-                    select.setAttribute("onchange", "javascript: this.className = 'changed'");
+                    addRuntimeEventListener(select, "change", (event) => { event.currentTarget.className = "changed"; });
                     content.appendRow("{{.filter.filterGroup.title}}", select);
                     content.description("{{.filter.filterGroup.description}}", true);
                     var dbKey = "liveEvent";
@@ -577,7 +625,7 @@ function openPopUp(dataType, element) {
                 default:
                     break;
             }
-            // Name      
+            // Name
             var dbKey = "startingNumber";
             if (data[dbKey] !== undefined) {
                 var input = content.createInput("text", dbKey, data[dbKey]);
@@ -602,7 +650,7 @@ function openPopUp(dataType, element) {
                 }
             }
             var select = content.createSelect(text, values, data[dbKey], dbKey);
-            select.setAttribute("onchange", "javascript: this.className = 'changed'");
+            addRuntimeEventListener(select, "change", (event) => { event.currentTarget.className = "changed"; });
             content.appendRow("{{.filter.category.title}}", select);
             // Interaktion
             content.createInteraction();
@@ -613,7 +661,7 @@ function openPopUp(dataType, element) {
             content.addInteraction(input);
             // Abbrechen
             var input = content.createInput("button", "cancel", "{{.button.cancel}}");
-            input.setAttribute("onclick", 'javascript: showElement("popup", false);');
+            addRuntimeEventListener(input, "click", () => showElement("popup", false));
             content.addInteraction(input);
             // Speichern
             var input = content.createInput("button", "save", "{{.button.save}}");
@@ -637,6 +685,7 @@ function openPopUp(dataType, element) {
             var input = content.createInput("text", dbKey, data[dbKey]);
             input.setAttribute("placeholder", "{{.xmltv.fileXMLTV.placeholder}}");
             content.appendRow("{{.xmltv.fileXMLTV.title}}", input);
+            content.beginAdvanced("Advanced · HTTP proxy");
             var dbKey = "http_proxy.ip";
             var input = content.createInput("text", dbKey, data[dbKey]);
             input.setAttribute("placeholder", "{{.xmltv.http_proxy_ip.placeholder}}");
@@ -658,7 +707,7 @@ function openPopUp(dataType, element) {
             }
             // Abbrechen
             var input = content.createInput("button", "cancel", "{{.button.cancel}}");
-            input.setAttribute("onclick", 'javascript: showElement("popup", false);');
+            addRuntimeEventListener(input, "click", () => showElement("popup", false));
             content.addInteraction(input);
             // Aktualisieren
             if (data["id.provider"] != "-") {
@@ -673,17 +722,17 @@ function openPopUp(dataType, element) {
             break;
         case "users":
             content.createHeadline("{{.mainMenu.item.users}}");
-            // Benutzername 
+            // Benutzername
             var dbKey = "username";
             var input = content.createInput("text", dbKey, data[dbKey]);
             input.setAttribute("placeholder", "{{.users.username.placeholder}}");
             content.appendRow("{{.users.username.title}}", input);
-            // Neues Passwort 
+            // Neues Passwort
             var dbKey = "password";
             var input = content.createInput("password", dbKey, "");
             input.setAttribute("placeholder", "{{.users.password.placeholder}}");
             content.appendRow("{{.users.password.title}}", input);
-            // Bestätigung 
+            // Bestätigung
             var dbKey = "confirm";
             var input = content.createInput("password", dbKey, "");
             input.setAttribute("placeholder", "{{.users.confirm.placeholder}}");
@@ -693,7 +742,7 @@ function openPopUp(dataType, element) {
             var input = content.createCheckbox(dbKey);
             input.checked = data[dbKey];
             if (data["defaultUser"] == true) {
-                input.setAttribute("onclick", "javascript: return false");
+                addRuntimeEventListener(input, "click", (event) => event.preventDefault());
             }
             content.appendRow("{{.users.web.title}}", input);
             // Berechtigung PMS
@@ -732,7 +781,7 @@ function openPopUp(dataType, element) {
             }
             // Abbrechen
             var input = content.createInput("button", "cancel", "{{.button.cancel}}");
-            input.setAttribute("onclick", 'javascript: showElement("popup", false);');
+            addRuntimeEventListener(input, "click", () => showElement("popup", false));
             content.addInteraction(input);
             // Speichern
             var input = content.createInput("button", "save", "{{.button.save}}");
@@ -753,24 +802,25 @@ function openPopUp(dataType, element) {
                 addRuntimeEventListener(input, "change", () => changeChannelNumbers(channels.toString()));
                 content.appendRow("{{.mapping.channelGroupStart.title}}", input);
             }
-            // Aktiv 
+            // Aktiv
             var dbKey = "x-active";
             var input = content.createCheckbox(dbKey);
             input.checked = data[dbKey];
             input.id = "active";
-            //input.setAttribute("onchange", "javascript: this.className = 'changed'")
+            //addRuntimeEventListener(input, "change", (event: Event) => { (event.currentTarget as HTMLElement).className = "changed" })
             addRuntimeEventListener(input, "change", () => toggleChannelStatus(id));
             content.appendRow("{{.mapping.active.title}}", input);
-            // Kanalname 
+            // Kanalname
             var dbKey = "x-name";
             var input = content.createInput("text", dbKey, data[dbKey]);
-            input.setAttribute("onchange", "javascript: this.className = 'changed'");
+            addRuntimeEventListener(input, "change", (event) => { event.currentTarget.className = "changed"; });
             if (BULK_EDIT == true) {
                 input.style.border = "solid 1px red";
                 input.setAttribute("readonly", "true");
             }
             content.appendRow("{{.mapping.channelName.title}}", input);
-            var mappingDescription = document.createElement("PRE");
+            var mappingDescription = document.createElement("div");
+            mappingDescription.className = "tf-technical-value";
             var mappingTvgID = document.createElement("SPAN");
             mappingTvgID.className = "text-danger";
             mappingTvgID.textContent = data["tvg-id"];
@@ -781,26 +831,26 @@ function openPopUp(dataType, element) {
             mappingEPG.textContent = "(" + data["x-epg"] + ")";
             mappingDescription.appendChild(mappingEPG);
             content.descriptionElement(mappingDescription);
-            // Beschreibung 
+            // Beschreibung
             var dbKey = "x-description";
             var input = content.createInput("text", dbKey, data[dbKey]);
             input.setAttribute("placeholder", "{{.mapping.description.placeholder}}");
-            input.setAttribute("onchange", "javascript: this.className = 'changed'");
+            addRuntimeEventListener(input, "change", (event) => { event.currentTarget.className = "changed"; });
             content.appendRow("{{.mapping.description.title}}", input);
             // Aktualisierung des Kanalnamens
             if (data.hasOwnProperty("_uuid.key")) {
                 if (data["_uuid.key"] != "") {
                     var dbKey = "x-update-channel-name";
                     var input = content.createCheckbox(dbKey);
-                    input.setAttribute("onchange", "javascript: this.className = 'changed'");
+                    addRuntimeEventListener(input, "change", (event) => { event.currentTarget.className = "changed"; });
                     input.checked = data[dbKey];
                     content.appendRow("{{.mapping.updateChannelName.title}}", input);
                 }
             }
-            // Logo URL (Kanal) 
+            // Logo URL (Kanal)
             var dbKey = "tvg-logo";
             var input = content.createInput("text", dbKey, data[dbKey]);
-            input.setAttribute("onchange", "javascript: this.className = 'changed'");
+            addRuntimeEventListener(input, "change", (event) => { event.currentTarget.className = "changed"; });
             input.setAttribute("id", "channel-icon");
             content.appendRow("{{.mapping.channelLogo.title}}", input);
             // Aktualisierung des Kanallogos
@@ -829,12 +879,12 @@ function openPopUp(dataType, element) {
                 }
             }
             var select = content.createSelect(text, values, data[dbKey], dbKey);
-            select.setAttribute("onchange", "javascript: this.className = 'changed'");
+            addRuntimeEventListener(select, "change", (event) => { event.currentTarget.className = "changed"; });
             content.appendRow("{{.mapping.epgCategory.title}}", select);
             // M3U Gruppentitel
             var dbKey = "x-group-title";
             var input = content.createInput("text", dbKey, data[dbKey]);
-            input.setAttribute("onchange", "javascript: this.className = 'changed'");
+            addRuntimeEventListener(input, "change", (event) => { event.currentTarget.className = "changed"; });
             content.appendRow("{{.mapping.m3uGroupTitle.title}}", input);
             if (data["group-title"] != undefined) {
                 content.description(data["group-title"]);
@@ -873,7 +923,7 @@ function openPopUp(dataType, element) {
             if (currentXmlTvId == "PPV") {
                 var dbKey = "x-ppv-extra";
                 var input = content.createInput("text", dbKey, data[dbKey]);
-                input.setAttribute("onchange", "javascript: this.className = 'changed'");
+                addRuntimeEventListener(input, "change", (event) => { event.currentTarget.className = "changed"; });
                 input.setAttribute("id", "ppv-extra");
                 content.appendRow("{{.mapping.ppvextra.title}}", input);
             }
@@ -927,11 +977,11 @@ function openPopUp(dataType, element) {
             content.addInteraction(input);
             // Logo hochladen
             var input = content.createInput("button", "cancel", "{{.button.uploadLogo}}");
-            input.setAttribute("onclick", 'javascript: uploadLogo();');
+            addRuntimeEventListener(input, "click", () => uploadLogo());
             content.addInteraction(input);
             // Abbrechen
             var input = content.createInput("button", "cancel", "{{.button.cancel}}");
-            input.setAttribute("onclick", 'javascript: showElement("popup", false);');
+            addRuntimeEventListener(input, "click", () => showElement("popup", false));
             content.addInteraction(input);
             // Fertig
             var ids = new Array();
@@ -1197,7 +1247,7 @@ function checkPPV(title, element) {
         input.setAttribute("type", "text");
         input.setAttribute("name", dbKey);
         // input.setAttribute("value", value)
-        input.setAttribute("onchange", "javascript: this.className = 'changed'");
+        addRuntimeEventListener(input, "change", (event) => { event.currentTarget.className = "changed"; });
         input.setAttribute("id", "ppv-extra");
         var tr = document.createElement("TR");
         // Bezeichnung
@@ -1281,8 +1331,10 @@ function savePopupData(dataType, id, remove, option) {
     }
     console.log("Save popup data");
     var div = document.getElementById("popup-custom");
-    var inputs = div.getElementsByTagName("TABLE")[0].getElementsByTagName("INPUT");
-    var selects = div.getElementsByTagName("TABLE")[0].getElementsByTagName("SELECT");
+    var sourceForm = dataType == "m3u" || dataType == "hdhr" || dataType == "xmltv";
+    var fields = sourceForm ? div : div.getElementsByTagName("TABLE")[0];
+    var inputs = fields.getElementsByTagName("INPUT");
+    var selects = fields.getElementsByTagName("SELECT");
     var input = new Object();
     var confirmMsg;
     for (let i = 0; i < selects.length; i++) {

@@ -11,13 +11,6 @@ import (
 	"testing"
 )
 
-const (
-	bootstrapCSSURL       = "https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css"
-	bootstrapCSSIntegrity = "sha384-sRIl4kxILFvY47J16cr9ZwB07vP4J8+LH7qKQnuqkuIAvNWLzeN8tE5YBujZqJLB"
-	bootstrapBundleURL    = "https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/js/bootstrap.bundle.min.js"
-	bootstrapJSIntegrity  = "sha384-FKyoEForCGlyvwx9Hj09JcYn3nv7wiPVlz7YYwJrWVcXK/BmnVDxM+D2scQbITxI"
-)
-
 func TestFileToBase64ReturnsOpenError(t *testing.T) {
 	_, err := fileToBase64(filepath.Join(t.TempDir(), "missing.html"))
 	if !errors.Is(err, os.ErrNotExist) {
@@ -57,27 +50,37 @@ func TestCreateMapFromFilesOrdersAssetsDeterministically(t *testing.T) {
 	}
 }
 
-func TestHTMLPagesLoadBootstrap538Stylesheet(t *testing.T) {
+func TestHTMLPagesLoadLocalBootstrap6Stylesheet(t *testing.T) {
 	for _, name := range []string{"index.html", "configuration.html", "login.html", "create-first-user.html"} {
 		t.Run(name, func(t *testing.T) {
-			doc := parseHTMLFile(t, name)
-			link := findElement(t, doc, "link", "href", bootstrapCSSURL)
-			if got := attribute(link, "integrity"); got != bootstrapCSSIntegrity {
-				t.Fatalf("Bootstrap stylesheet integrity = %q, want %q", got, bootstrapCSSIntegrity)
-			}
+			findElement(t, parseHTMLFile(t, name), "link", "href", "css/vendor/bootstrap.min.css")
+			findElement(t, parseHTMLFile(t, name), "link", "href", "css/app.css")
 		})
+	}
+	css, err := os.ReadFile(filepath.Join("..", "html", "css", "vendor", "bootstrap.min.css"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	manifest, err := os.ReadFile(filepath.Join("..", "package.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(manifest), `"bootstrap": "6.0.0-alpha.1"`) {
+		t.Fatal("Bootstrap dependency is not pinned to the qualified alpha")
+	}
+	for _, feature := range []string{".combobox-toggle", ".chip", ".drawer", "@layer"} {
+		if !strings.Contains(string(css), feature) {
+			t.Errorf("local Bootstrap stylesheet lacks native v6 feature %s", feature)
+		}
 	}
 }
 
-func TestInteractivePagesLoadBootstrap538Bundle(t *testing.T) {
-	for _, name := range []string{"index.html", "configuration.html"} {
-		t.Run(name, func(t *testing.T) {
-			doc := parseHTMLFile(t, name)
-			script := findElement(t, doc, "script", "src", bootstrapBundleURL)
-			if got := attribute(script, "integrity"); got != bootstrapJSIntegrity {
-				t.Fatalf("Bootstrap bundle integrity = %q, want %q", got, bootstrapJSIntegrity)
-			}
-		})
+func TestPagesLoadNativeESMBundles(t *testing.T) {
+	for page, bundle := range map[string]string{"index.html": "app", "configuration.html": "setup", "login.html": "auth", "create-first-user.html": "auth"} {
+		script := findElement(t, parseHTMLFile(t, page), "script", "src", "js/"+bundle+".js")
+		if attribute(script, "type") != "module" {
+			t.Errorf("%s must load native ESM", page)
+		}
 	}
 }
 
@@ -98,18 +101,21 @@ func TestAuthenticationPagesDoNotLoadUnusedThirdPartyScripts(t *testing.T) {
 	}
 }
 
-func TestNavbarsUseBootstrap53DarkTheme(t *testing.T) {
+func TestNavbarsInheritApplicationColorTheme(t *testing.T) {
 	for _, name := range []string{"index.html", "login.html"} {
-		t.Run(name, func(t *testing.T) {
-			doc := parseHTMLFile(t, name)
-			navbar := findElementWithClass(t, doc, "nav", "navbar")
-			if got := attribute(navbar, "data-bs-theme"); got != "dark" {
-				t.Errorf("navbar data-bs-theme = %q, want dark", got)
-			}
-			if hasClass(navbar, "navbar-dark") {
-				t.Error("navbar still uses deprecated navbar-dark class")
-			}
-		})
+		navbar := findElementWithClass(t, parseHTMLFile(t, name), "nav", "navbar")
+		if attribute(navbar, "data-bs-theme") != "" || hasClass(navbar, "navbar-dark") {
+			t.Errorf("%s navbar overrides the user's application theme", name)
+		}
+	}
+	theme, err := os.ReadFile(filepath.Join("..", "ts", "theme.js"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, fragment := range []string{"prefers-color-scheme: dark", "document.documentElement.dataset.bsTheme", "threadfin-theme"} {
+		if !strings.Contains(string(theme), fragment) {
+			t.Errorf("theme preference contract missing %s", fragment)
+		}
 	}
 }
 
@@ -121,7 +127,7 @@ func TestIndexHTMLProvidesSemanticApplicationShell(t *testing.T) {
 		t.Errorf("viewport content = %q, want responsive device viewport", got)
 	}
 
-	findElement(t, doc, "link", "href", "css/app-shell.css")
+	findElement(t, doc, "link", "href", "css/app.css")
 	findElementWithClass(t, doc, "div", "tf-app")
 	findElementWithClass(t, doc, "aside", "tf-sidebar")
 
@@ -144,7 +150,7 @@ func TestIndexHTMLEmbeddedAssetsMatchSource(t *testing.T) {
 	webUI = make(map[string]interface{})
 	loadHTMLMap()
 
-	for _, name := range []string{"html/index.html", "html/css/app-shell.css"} {
+	for _, name := range []string{"html/index.html", "html/configuration.html", "html/login.html", "html/create-first-user.html", "html/css/app-shell.css", "html/css/app.css", "html/css/vendor/bootstrap.min.css", "html/css/vendor/fontawesome.min.css", "html/js/app.js", "html/js/setup.js", "html/js/auth.js"} {
 		t.Run(name, func(t *testing.T) {
 			encoded, ok := webUI[name].(string)
 			if !ok {
@@ -182,7 +188,7 @@ type htmlElement struct {
 }
 
 var (
-	elementPattern   = regexp.MustCompile(`(?is)<(aside|div|link|main|meta|nav|script|section)\b([^>]*)>`)
+	elementPattern   = regexp.MustCompile(`(?is)<(aside|dialog|div|link|main|meta|nav|script|section)\b([^>]*)>`)
 	attributePattern = regexp.MustCompile(`([[:alnum:]_-]+)\s*=\s*"([^"]*)"`)
 )
 
@@ -237,4 +243,43 @@ func hasClass(element htmlElement, class string) bool {
 		}
 	}
 	return false
+}
+
+// Controllers share one lexical ESM scope. Verify the build input order and a
+// declared controller symbol in the actual shipped bundle rather than expecting
+// classic script tags that would initialize the application twice.
+func assertUIBundleControllers(t *testing.T, page, bundle string, controllers ...string) {
+	t.Helper()
+	script := findElement(t, parseHTMLFile(t, page), "script", "src", "js/"+bundle+".js")
+	if attribute(script, "type") != "module" {
+		t.Fatalf("%s does not load its ESM bundle", page)
+	}
+	build, err := os.ReadFile(filepath.Join("..", "scripts", "build-ui.mjs"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	list := regexp.MustCompile(`(?m)const ` + bundle + ` = \[(.*?)\]`).FindStringSubmatch(string(build))
+	if len(list) != 2 {
+		t.Fatalf("bundle controller list %s missing", bundle)
+	}
+	shipped, err := os.ReadFile(filepath.Join("..", "html", "js", bundle+".js"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	previous := -1
+	for _, controller := range controllers {
+		at := strings.Index(list[1], "'"+controller+"'")
+		if at <= previous {
+			t.Errorf("%s controller absent or out of order in %s", controller, bundle)
+		}
+		previous = at
+		generated, err := os.ReadFile(filepath.Join("..", "html", "js", controller+"_ts.js"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		symbol := regexp.MustCompile(`(?:function|class) ([A-Za-z_][A-Za-z_0-9]*)`).FindStringSubmatch(string(generated))
+		if len(symbol) != 2 || !strings.Contains(string(shipped), symbol[1]) {
+			t.Errorf("%s controller is absent from shipped %s bundle", controller, bundle)
+		}
+	}
 }

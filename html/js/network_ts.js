@@ -260,6 +260,9 @@ function completeThreadfinRequestResponse(request, response) {
     if (command == "saveWizard" && typeof completeConfigurationWizardRequest == "function") {
         completeConfigurationWizardRequest(response);
     }
+    if (command == "saveSettings" && typeof completeSettingsRequest == "function") {
+        completeSettingsRequest(response);
+    }
     if (typeof completeMappingRequest == "function") {
         completeMappingRequest(command, data, response);
     }
@@ -278,6 +281,9 @@ function completeThreadfinRequestFailure(request, message, failureKind) {
     if (command == "saveWizard" && typeof completeConfigurationWizardRequest == "function") {
         completeConfigurationWizardRequest(response);
     }
+    if (command == "saveSettings" && typeof completeSettingsRequest == "function") {
+        completeSettingsRequest(response, true);
+    }
     if (typeof completeMappingRequest == "function") {
         completeMappingRequest(command, data, response, failureKind);
     }
@@ -285,6 +291,8 @@ function completeThreadfinRequestFailure(request, message, failureKind) {
 function applyThreadfinResponse(command, data, response) {
     var responseIsObject = response && typeof response == "object" && !Array.isArray(response);
     if (!responseIsObject || response["status"] !== true) {
+        if (command == "saveSettings" && typeof completeSettingsRequest == "function")
+            return;
         if (command == "saveEpgMapping") {
             if (responseIsObject && response["xepg"] && response["xepg"]["epgMapping"] && SERVER["xepg"]) {
                 SERVER["xepg"]["epgMapping"] = response["xepg"]["epgMapping"];

@@ -283,13 +283,7 @@ func TestUIFilterGeneratedTransportRetainsFormState(t *testing.T) {
 }
 
 func TestUIEmbeddedAssets(t *testing.T) {
-	index, err := os.ReadFile(filepath.Join("..", "html", "index.html"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !strings.Contains(string(index), `src="js/filter_ts.js"`) {
-		t.Fatal("index does not load the Filter module")
-	}
+	assertUIBundleControllers(t, "index.html", "app", "filter")
 	styles, err := os.ReadFile(filepath.Join("..", "html", "css", "app-shell.css"))
 	if err != nil {
 		t.Fatal(err)
@@ -404,9 +398,9 @@ disconnectedInvoker.setAttribute("data-filter-focus-key", "G1:edit");
 const deletedInvoker = new Element("button");
 deletedInvoker.setAttribute("data-filter-focus-key", "G1:delete");
 context.openFilterPopup("group-title", {id: "G1"}, connectedInvoker);
-modal.listeners["hidden.bs.modal"]();
+modal.listeners["hidden.bs.dialog"]();
 context.openFilterPopup("group-title", {id: "G1"}, disconnectedInvoker);
-modal.listeners["hidden.bs.modal"]();
+modal.listeners["hidden.bs.dialog"]();
 const populated = new Element("section");
 context.renderFilterManagementPage(populated);
 context.SERVER = {settings: {filter: {}}, data: {StreamPreviewUI: {activeStreams: [], inactiveStreams: []}}};
@@ -418,7 +412,7 @@ context.completeFilterRequest("saveFilter", {filter: {G1: {delete: true}}}, {sta
 const afterDelete = new Element("section");
 context.renderFilterManagementPage(afterDelete);
 main.focus();
-modal.listeners["hidden.bs.modal"]();
+modal.listeners["hidden.bs.dialog"]();
 const addGroup = descendants(afterDelete).find(element => element.getAttribute("data-filter-focus-key") === "add-group");
 process.stdout.write(JSON.stringify({populated: text(populated), empty: text(empty), deleteFocus: addGroup ? addGroup.focusCount : 0, mainFocus: main.focusCount, invokerFocus: connectedInvoker.focusCount, replacementFocus: replacement.focusCount}));
 `

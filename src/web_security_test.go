@@ -57,6 +57,17 @@ func TestWebBrowserSecurityHeaders(t *testing.T) {
 		assertNoBrowserSecurityHeaders(t, response.Header())
 	})
 
+	t.Run("local webfont path preserves embedded asset bytes", func(t *testing.T) {
+		const asset = "html/css/webfonts/fa-solid-900.woff2"
+		font := string([]byte{'w', 'O', 'F', '2', 0, 255, 128})
+		webUI[asset] = base64.StdEncoding.EncodeToString([]byte(font))
+		response := httptest.NewRecorder()
+		Web(response, httptest.NewRequest(http.MethodGet, "/web/css/webfonts/fa-solid-900.woff2", nil))
+		if response.Code != http.StatusOK || response.Header().Get("Content-Type") != "font/woff2" || response.Body.String() != font {
+			t.Fatalf("font response status=%d type=%q bytes=%x", response.Code, response.Header().Get("Content-Type"), response.Body.Bytes())
+		}
+	})
+
 	t.Run("JSON API keeps its existing contract", func(t *testing.T) {
 		Settings.API = true
 		response := httptest.NewRecorder()

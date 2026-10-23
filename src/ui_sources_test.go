@@ -787,7 +787,7 @@ func TestSourceUIIntegrationAndWizardMarkup(t *testing.T) {
 		t.Fatal("existing source popups are missing shared guidance/field validation")
 	}
 	sources := readUITypeScript(t, "sources_ts.ts")
-	for _, contract := range []string{`modal.setAttribute("role", "dialog")`, `modal.setAttribute("aria-modal", "true")`, `modal.setAttribute("aria-labelledby", title.id)`, `modal.addEventListener("shown.bs.modal"`, `firstControl.focus()`} {
+	for _, contract := range []string{`modal.setAttribute("role", "dialog")`, `modal.setAttribute("aria-modal", "true")`, `modal.setAttribute("aria-labelledby", title.id)`, `modal.addEventListener("shown.bs.dialog"`, `firstControl.focus()`} {
 		if !strings.Contains(sources, contract) {
 			t.Errorf("source popup accessibility contract is missing %q", contract)
 		}
@@ -800,20 +800,13 @@ func TestSourceUIIntegrationAndWizardMarkup(t *testing.T) {
 		t.Fatal("successful wizard completion does not use the Overview completion route")
 	}
 
-	index, err := os.ReadFile(filepath.Join("..", "html", "index.html"))
-	if err != nil {
-		t.Fatal(err)
-	}
+	assertUIBundleControllers(t, "index.html", "app", "sources")
+	assertUIBundleControllers(t, "configuration.html", "setup", "sources")
 	configuration, err := os.ReadFile(filepath.Join("..", "html", "configuration.html"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	for name, content := range map[string]string{"index": string(index), "configuration": string(configuration)} {
-		if !strings.Contains(content, `src="js/sources_ts.js"`) {
-			t.Errorf("%s page does not load the shared source module", name)
-		}
-	}
-	for _, fragment := range []string{`class="tf-setup"`, `id="wizard-progress"`, `id="wizard-request-status"`, `href="css/app-shell.css"`} {
+	for _, fragment := range []string{`class="tf-setup"`, `id="wizard-progress"`, `id="wizard-request-status"`, `href="css/app.css"`} {
 		if !strings.Contains(string(configuration), fragment) {
 			t.Errorf("configuration wizard is missing %s", fragment)
 		}
@@ -1156,15 +1149,15 @@ class Element {
   appendChild(child) { child.parentElement = this; this.children.push(child); return child; }
   focus() { this.focusCount += 1; }
   addEventListener(name, listener) { this.listeners[name] = listener; }
-  closest(selector) { return selector === "tr" ? this.row : null; }
+  closest(selector) { return selector === ".tf-form-field" ? this.row : null; }
 }
 function field(tag, name, label, value) {
   const control = new Element(tag);
   control.setAttribute("name", name);
   control.value = value;
-  const labelCell = new Element("td");
+  const labelCell = new Element("label");
   labelCell.textContent = label + ":";
-  control.row = {querySelector(selector) { return selector === "td:first-child" ? labelCell : null; }};
+  control.row = {querySelector(selector) { return selector === "label" ? labelCell : null; }};
   const parent = new Element("td");
   parent.appendChild(control);
   return control;
@@ -1221,15 +1214,15 @@ const nonSourceLabel = modal.getAttribute("aria-labelledby") || "";
 const invoker = new Element("button");
 invoker.setAttribute("data-source-focus-key", "m3u:M1:edit");
 context.enhanceSourcePopup("playlist");
-modal.classList.add("show");
+modal.open = true;
 context.openPopUp = function(kind) { popupKind = kind; context.enhanceSourcePopup(kind); };
 const focusBeforeTransition = name.focusCount;
 context.openSourcePopup("m3u", undefined, invoker);
 const transitionFocusCount = name.focusCount - focusBeforeTransition;
-modal.listeners["hidden.bs.modal"]();
+modal.listeners["hidden.bs.dialog"]();
 invokerConnected = false;
 context.openSourcePopup("m3u", undefined, invoker);
-modal.listeners["hidden.bs.modal"]();
+modal.listeners["hidden.bs.dialog"]();
 process.stdout.write(JSON.stringify({
   valid,
   values: {name: name.value, source: source.value},
@@ -1345,7 +1338,7 @@ const popup = {
         return child === "INPUT" ? controls.inputs : controls.selects;
       }
     }];
-    return [];
+    return name === "INPUT" ? controls.inputs : name === "SELECT" ? controls.selects : [];
   }
 };
 class CaptureServer {

@@ -330,14 +330,8 @@ function dismissMobileNavigation(): void {
     return
   }
 
-  if (typeof bootstrap != "undefined" && bootstrap.Collapse) {
-    var collapse = bootstrap.Collapse.getInstance(navigation)
-    if (collapse) {
-      collapse.hide()
-    } else if (navigation.classList.contains("show")) {
-      new bootstrap.Collapse(navigation).hide()
-    }
-  }
+  var drawer = Drawer.getInstance(document.getElementById("navigation-drawer"))
+  if (drawer) drawer.hide()
   if (toggle) {
     toggle.setAttribute("aria-expanded", "false")
   }

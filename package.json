@@ -1,0 +1,15 @@
+{
+  "name": "threadfin-ui",
+  "private": true,
+  "scripts": {
+    "build": "tsrs -p ts/tsconfig.json && node scripts/build-ui.mjs"
+  },
+  "devDependencies": {
+    "@floating-ui/dom": "1.7.6",
+    "@fortawesome/fontawesome-free": "7.3.1",
+    "bootstrap": "6.0.0-alpha.1",
+    "clipboard": "2.0.11",
+    "esbuild": "0.28.2",
+    "tsrs": "0.18.0-ts7.1.0-dev.20260929"
+  }
+}

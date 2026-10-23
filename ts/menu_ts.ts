@@ -159,10 +159,55 @@ class PopupWindow {
   }
 }
 
+// Shared Bootstrap field markup; the existing controllers still own values and saves.
+function createUIFormField(title: string, control: HTMLElement, id: string): HTMLElement {
+  var field = document.createElement("div")
+  field.className = "form-field tf-form-field"
+  if (!control.id) control.id = id
+  var label = document.createElement("label")
+  label.className = "form-label"
+  label.id = control.id + "-label"
+  label.htmlFor = control.id
+  label.textContent = title.replace(/:\s*$/, "")
+  control.setAttribute("aria-labelledby", label.id)
+  control.classList.add((control as HTMLInputElement).type == "checkbox" ? "check" : "form-control")
+  field.appendChild(label)
+  field.appendChild(control)
+  return field
+}
+
+function appendUIFormHelp(field: HTMLElement, help: HTMLElement): void {
+  var control = field.querySelector("input, select, textarea")
+  if (!control) return
+  help.id = control.id + "-help"
+  help.classList.add("tf-field-help")
+  control.setAttribute("aria-describedby", help.id)
+  field.appendChild(help)
+}
+
 class PopupContent extends PopupWindow {
 
-  table = document.createElement("TABLE")
+  table: HTMLElement = document.createElement("div")
   rowIndex: number = 0
+  formLayout: boolean
+  lastField: HTMLElement
+
+  constructor(formLayout: boolean = false) {
+    super()
+    this.formLayout = formLayout
+  }
+
+  beginAdvanced(title: string = "Advanced · proxy and request headers"): void {
+    var details = document.createElement("details")
+    details.className = "tf-form-advanced"
+    var summary = document.createElement("summary")
+    summary.textContent = title
+    details.appendChild(summary)
+    this.table = document.createElement("div")
+    this.table.className = "tf-form-fields"
+    details.appendChild(this.table)
+    this.doc.appendChild(details)
+  }
 
   createHeadline(headline): void {
     this.doc.innerHTML = ""
@@ -171,11 +216,17 @@ class PopupContent extends PopupWindow {
     this.doc.appendChild(element)
 
     // Tabelle erstellen
-    this.table = document.createElement("TABLE")
+    this.table = document.createElement(this.formLayout ? "div" : "table")
+    if (this.formLayout) this.table.className = "tf-form-fields"
     this.doc.appendChild(this.table)
   }
 
   appendRow(title: string, element: any): void {
+    if (this.formLayout) {
+      this.lastField = createUIFormField(title, element, "popup-field-" + this.rowIndex++ + "-0")
+      this.table.appendChild(this.lastField)
+      return
+    }
     var tr = document.createElement("TR")
     var titleCell: HTMLElement = null
     var rowIndex = this.rowIndex++
@@ -268,7 +319,8 @@ class PopupContent extends PopupWindow {
   }
 
   description(value: string, repositoryTemplate: boolean = false): any {
-    var span = document.createElement("PRE")
+    var span = document.createElement("div")
+    span.className = "tf-field-help"
     if (repositoryTemplate) {
       appendDescriptionText(span, value)
     } else {
@@ -278,6 +330,10 @@ class PopupContent extends PopupWindow {
   }
 
   descriptionElement(element: HTMLElement): any {
+    if (this.formLayout && this.lastField) {
+      appendUIFormHelp(this.lastField, element)
+      return
+    }
     var tr = document.createElement("TR")
     var td = document.createElement("TD")
 
@@ -350,29 +406,29 @@ function openPopUp(dataType, element) {
       break;
   }
 
-  var content: PopupContent = new PopupContent()
+  var content: PopupContent = new PopupContent(dataType == "playlist" || dataType == "m3u" || dataType == "hdhr" || dataType == "xmltv")
 
   switch (dataType) {
     case "playlist":
       content.createHeadline("{{.playlist.playlistType.title}}")
       // Type
       var text: string[] = ["M3U", "HDHomeRun"]
-      var values: string[] = ["javascript: openPopUp('m3u')", "javascript: openPopUp('hdhr')"]
+      var values: string[] = ["m3u", "hdhr"]
       var select = content.createSelect(text, values, "", "type")
       select.setAttribute("id", "type")
-      select.setAttribute("onchange", 'javascript: changeButtonAction(this, "next", "onclick")') // changeButtonAction
+
       content.appendRow("{{.playlist.type.title}}", select)
 
       // Interaktion
       content.createInteraction()
       // Abbrechen
       var input = content.createInput("button", "cancel", "{{.button.cancel}}")
-      input.setAttribute("onclick", 'javascript: showElement("popup", false);')
+      addRuntimeEventListener(input, "click", () => showElement("popup", false))
       content.addInteraction(input)
 
       // Weiter
       var input = content.createInput("button", "next", "{{.button.next}}")
-      input.setAttribute("onclick", 'javascript: openPopUp("m3u")')
+      addRuntimeEventListener(input, "click", () => openPopUp((document.querySelector("#popup select[name=type]") as HTMLSelectElement).value, undefined))
       input.setAttribute("id", 'next')
       content.addInteraction(input)
       break
@@ -418,9 +474,11 @@ function openPopUp(dataType, element) {
 
       var dbKey: string = "tuner"
       var select = content.createSelect(text, values, data[dbKey], dbKey)
-      select.setAttribute("onfocus", "javascript: return;")
+
       content.appendRow("{{.playlist.tuner.title}}", select)
       content.description("{{.playlist.tuner.description}}", true)
+
+      content.beginAdvanced()
 
       var dbKey: string = "http_proxy.ip"
       var input = content.createInput("text", dbKey, data[dbKey])
@@ -456,13 +514,13 @@ function openPopUp(dataType, element) {
         content.addInteraction(input)
       } else {
         var input = content.createInput("button", "back", "{{.button.back}}")
-        input.setAttribute("onclick", 'javascript: openPopUp("playlist")')
+        addRuntimeEventListener(input, "click", () => openPopUp("playlist", undefined))
         content.addInteraction(input)
       }
 
       // Abbrechen
       var input = content.createInput("button", "cancel", "{{.button.cancel}}")
-      input.setAttribute("onclick", 'javascript: showElement("popup", false);')
+      addRuntimeEventListener(input, "click", () => showElement("popup", false))
       content.addInteraction(input)
 
       // Aktualisieren
@@ -519,9 +577,11 @@ function openPopUp(dataType, element) {
 
       var dbKey: string = "tuner"
       var select = content.createSelect(text, values, data[dbKey], dbKey)
-      select.setAttribute("onfocus", "javascript: return;")
+
       content.appendRow("{{.playlist.tuner.title}}", select)
       content.description("{{.playlist.tuner.description}}", true)
+
+      content.beginAdvanced("Advanced · HTTP proxy")
 
       var dbKey: string = "http_proxy.ip"
       var input = content.createInput("text", dbKey, data[dbKey])
@@ -545,13 +605,13 @@ function openPopUp(dataType, element) {
         content.addInteraction(input)
       } else {
         var input = content.createInput("button", "back", "{{.button.back}}")
-        input.setAttribute("onclick", 'javascript: openPopUp("playlist")')
+        addRuntimeEventListener(input, "click", () => openPopUp("playlist", undefined))
         content.addInteraction(input)
       }
 
       // Abbrechen
       var input = content.createInput("button", "cancel", "{{.button.cancel}}")
-      input.setAttribute("onclick", 'javascript: showElement("popup", false);')
+      addRuntimeEventListener(input, "click", () => showElement("popup", false))
       content.addInteraction(input)
 
       // Aktualisieren
@@ -573,22 +633,22 @@ function openPopUp(dataType, element) {
       // Type
       var dbKey: string = "type"
       var text: string[] = ["M3U: " + "{{.filter.type.groupTitle}}", "Threadfin: " + "{{.filter.type.customFilter}}"]
-      var values: string[] = ["javascript: openPopUp('group-title')", "javascript: openPopUp('custom-filter')"]
-      var select = content.createSelect(text, values, "javascript: openPopUp('group-title')", dbKey)
+      var values: string[] = ["group-title", "custom-filter"]
+      var select = content.createSelect(text, values, "group-title", dbKey)
       select.setAttribute("id", id)
-      select.setAttribute("onchange", 'javascript: changeButtonAction(this, "next", "onclick");') // changeButtonAction
+
       content.appendRow("{{.filter.type.title}}", select)
 
       // Interaktion
       content.createInteraction()
       // Abbrechen
       var input = content.createInput("button", "cancel", "{{.button.cancel}}")
-      input.setAttribute("onclick", 'javascript: showElement("popup", false);')
+      addRuntimeEventListener(input, "click", () => showElement("popup", false))
       content.addInteraction(input)
 
       // Weiter
       var input = content.createInput("button", "next", "{{.button.next}}")
-      input.setAttribute("onclick", 'javascript: openPopUp("group-title")')
+      addRuntimeEventListener(input, "click", () => openPopUp((document.querySelector("#popup select[name=type]") as HTMLSelectElement).value, undefined))
       input.setAttribute("id", 'next')
       content.addInteraction(input)
       break
@@ -606,7 +666,7 @@ function openPopUp(dataType, element) {
           break;
       }
 
-      // Name      
+      // Name
       var dbKey: string = "name"
       var input = content.createInput("text", dbKey, data[dbKey])
       input.setAttribute("placeholder", "{{.filter.name.placeholder}}")
@@ -651,7 +711,7 @@ function openPopUp(dataType, element) {
           var values: string[] = groupsM3U["value"]
 
           var select = content.createSelect(text, values, data[dbKey], dbKey)
-          select.setAttribute("onchange", "javascript: this.className = 'changed'")
+          addRuntimeEventListener(select, "change", (event: Event) => { (event.currentTarget as HTMLElement).className = "changed" })
           content.appendRow("{{.filter.filterGroup.title}}", select)
           content.description("{{.filter.filterGroup.description}}", true)
 
@@ -686,7 +746,7 @@ function openPopUp(dataType, element) {
           break;
       }
 
-      // Name      
+      // Name
       var dbKey: string = "startingNumber"
       if (data[dbKey] !== undefined) {
         var input = content.createInput("text", dbKey, data[dbKey])
@@ -703,7 +763,7 @@ function openPopUp(dataType, element) {
       var values: string[] = [""]
       var epgCategories = SERVER["settings"]["epgCategories"]
       var categories = epgCategories.split("|")
-      
+
       for (i=0; i <= categories.length; i++) {
         var cat: string = categories[i]
         if (cat) {
@@ -714,7 +774,7 @@ function openPopUp(dataType, element) {
       }
 
       var select = content.createSelect(text, values, data[dbKey], dbKey)
-      select.setAttribute("onchange", "javascript: this.className = 'changed'")
+      addRuntimeEventListener(select, "change", (event: Event) => { (event.currentTarget as HTMLElement).className = "changed" })
       content.appendRow("{{.filter.category.title}}", select)
 
       // Interaktion
@@ -728,7 +788,7 @@ function openPopUp(dataType, element) {
 
       // Abbrechen
       var input = content.createInput("button", "cancel", "{{.button.cancel}}")
-      input.setAttribute("onclick", 'javascript: showElement("popup", false);')
+      addRuntimeEventListener(input, "click", () => showElement("popup", false))
       content.addInteraction(input)
 
       // Speichern
@@ -758,6 +818,8 @@ function openPopUp(dataType, element) {
       input.setAttribute("placeholder", "{{.xmltv.fileXMLTV.placeholder}}")
       content.appendRow("{{.xmltv.fileXMLTV.title}}", input)
 
+      content.beginAdvanced("Advanced · HTTP proxy")
+
       var dbKey: string = "http_proxy.ip"
       var input = content.createInput("text", dbKey, data[dbKey])
       input.setAttribute("placeholder", "{{.xmltv.http_proxy_ip.placeholder}}")
@@ -782,7 +844,7 @@ function openPopUp(dataType, element) {
 
       // Abbrechen
       var input = content.createInput("button", "cancel", "{{.button.cancel}}")
-      input.setAttribute("onclick", 'javascript: showElement("popup", false);')
+      addRuntimeEventListener(input, "click", () => showElement("popup", false))
       content.addInteraction(input)
 
       // Aktualisieren
@@ -800,19 +862,19 @@ function openPopUp(dataType, element) {
 
     case "users":
       content.createHeadline("{{.mainMenu.item.users}}")
-      // Benutzername 
+      // Benutzername
       var dbKey: string = "username"
       var input = content.createInput("text", dbKey, data[dbKey])
       input.setAttribute("placeholder", "{{.users.username.placeholder}}")
       content.appendRow("{{.users.username.title}}", input)
 
-      // Neues Passwort 
+      // Neues Passwort
       var dbKey: string = "password"
       var input = content.createInput("password", dbKey, "")
       input.setAttribute("placeholder", "{{.users.password.placeholder}}")
       content.appendRow("{{.users.password.title}}", input)
 
-      // Bestätigung 
+      // Bestätigung
       var dbKey: string = "confirm"
       var input = content.createInput("password", dbKey, "")
       input.setAttribute("placeholder", "{{.users.confirm.placeholder}}")
@@ -823,7 +885,7 @@ function openPopUp(dataType, element) {
       var input = content.createCheckbox(dbKey)
       input.checked = data[dbKey]
       if (data["defaultUser"] == true) {
-        input.setAttribute("onclick", "javascript: return false")
+        addRuntimeEventListener(input, "click", (event: Event) => event.preventDefault())
       }
       content.appendRow("{{.users.web.title}}", input)
 
@@ -870,7 +932,7 @@ function openPopUp(dataType, element) {
 
       // Abbrechen
       var input = content.createInput("button", "cancel", "{{.button.cancel}}")
-      input.setAttribute("onclick", 'javascript: showElement("popup", false);')
+      addRuntimeEventListener(input, "click", () => showElement("popup", false))
       content.addInteraction(input)
 
       // Speichern
@@ -897,25 +959,26 @@ function openPopUp(dataType, element) {
         content.appendRow("{{.mapping.channelGroupStart.title}}", input)
       }
 
-      // Aktiv 
+      // Aktiv
       var dbKey: string = "x-active"
       var input = content.createCheckbox(dbKey)
       input.checked = data[dbKey]
       input.id = "active"
-      //input.setAttribute("onchange", "javascript: this.className = 'changed'")
+      //addRuntimeEventListener(input, "change", (event: Event) => { (event.currentTarget as HTMLElement).className = "changed" })
       addRuntimeEventListener(input, "change", () => toggleChannelStatus(id))
       content.appendRow("{{.mapping.active.title}}", input)
 
-      // Kanalname 
+      // Kanalname
       var dbKey: string = "x-name"
       var input = content.createInput("text", dbKey, data[dbKey])
-      input.setAttribute("onchange", "javascript: this.className = 'changed'")
+      addRuntimeEventListener(input, "change", (event: Event) => { (event.currentTarget as HTMLElement).className = "changed" })
       if (BULK_EDIT == true) {
         input.style.border = "solid 1px red"
         input.setAttribute("readonly", "true")
       }
       content.appendRow("{{.mapping.channelName.title}}", input)
-      var mappingDescription = document.createElement("PRE")
+      var mappingDescription = document.createElement("div")
+      mappingDescription.className = "tf-technical-value"
       var mappingTvgID = document.createElement("SPAN")
       mappingTvgID.className = "text-danger"
       mappingTvgID.textContent = data["tvg-id"]
@@ -927,11 +990,11 @@ function openPopUp(dataType, element) {
       mappingDescription.appendChild(mappingEPG)
       content.descriptionElement(mappingDescription)
 
-      // Beschreibung 
+      // Beschreibung
       var dbKey: string = "x-description"
       var input = content.createInput("text", dbKey, data[dbKey])
       input.setAttribute("placeholder", "{{.mapping.description.placeholder}}")
-      input.setAttribute("onchange", "javascript: this.className = 'changed'")
+      addRuntimeEventListener(input, "change", (event: Event) => { (event.currentTarget as HTMLElement).className = "changed" })
       content.appendRow("{{.mapping.description.title}}", input)
 
       // Aktualisierung des Kanalnamens
@@ -939,16 +1002,16 @@ function openPopUp(dataType, element) {
         if (data["_uuid.key"] != "") {
           var dbKey: string = "x-update-channel-name"
           var input = content.createCheckbox(dbKey)
-          input.setAttribute("onchange", "javascript: this.className = 'changed'")
+          addRuntimeEventListener(input, "change", (event: Event) => { (event.currentTarget as HTMLElement).className = "changed" })
           input.checked = data[dbKey]
           content.appendRow("{{.mapping.updateChannelName.title}}", input)
         }
       }
 
-      // Logo URL (Kanal) 
+      // Logo URL (Kanal)
       var dbKey: string = "tvg-logo"
       var input = content.createInput("text", dbKey, data[dbKey])
-      input.setAttribute("onchange", "javascript: this.className = 'changed'")
+      addRuntimeEventListener(input, "change", (event: Event) => { (event.currentTarget as HTMLElement).className = "changed" })
       input.setAttribute("id", "channel-icon")
       content.appendRow("{{.mapping.channelLogo.title}}", input)
 
@@ -970,7 +1033,7 @@ function openPopUp(dataType, element) {
       var values: string[] = [""]
       var epgCategories = SERVER["settings"]["epgCategories"]
       var categories = epgCategories.split("|")
-      
+
       for (i=0; i <= categories.length; i++) {
         var cat: string = categories[i]
         if (cat) {
@@ -981,13 +1044,13 @@ function openPopUp(dataType, element) {
       }
 
       var select = content.createSelect(text, values, data[dbKey], dbKey)
-      select.setAttribute("onchange", "javascript: this.className = 'changed'")
+      addRuntimeEventListener(select, "change", (event: Event) => { (event.currentTarget as HTMLElement).className = "changed" })
       content.appendRow("{{.mapping.epgCategory.title}}", select)
 
       // M3U Gruppentitel
       var dbKey: string = "x-group-title"
       var input = content.createInput("text", dbKey, data[dbKey])
-      input.setAttribute("onchange", "javascript: this.className = 'changed'")
+      addRuntimeEventListener(input, "change", (event: Event) => { (event.currentTarget as HTMLElement).className = "changed" })
       content.appendRow("{{.mapping.m3uGroupTitle.title}}", input)
 
       if (data["group-title"] != undefined) {
@@ -1025,12 +1088,12 @@ function openPopUp(dataType, element) {
       xmlTvIdDatalist.setAttribute('id', 'xmltv-id-picker-datalist');
       // sortSelect(xmlTvIdDatalist); // TODO: Better sort before adding
       content.appendRow('{{.mapping.xmltvChannel.title}}', xmlTvIdContainer);
-      
+
       // Extra PPV Data
       if(currentXmlTvId == "PPV") {
         var dbKey: string = "x-ppv-extra"
         var input = content.createInput("text", dbKey, data[dbKey])
-        input.setAttribute("onchange", "javascript: this.className = 'changed'")
+        addRuntimeEventListener(input, "change", (event: Event) => { (event.currentTarget as HTMLElement).className = "changed" })
         input.setAttribute("id", "ppv-extra")
         content.appendRow("{{.mapping.ppvextra.title}}", input)
       }
@@ -1080,7 +1143,7 @@ function openPopUp(dataType, element) {
       })
       xmlTvBackup3IdDatalist.setAttribute('id', 'm3u-id-picker-datalist');
       content.appendRow("{{.mapping.backupChannel3.title}}", xmlTvBackup3IdContainer)
-      
+
       // Interaktion
       content.createInteraction()
 
@@ -1090,12 +1153,12 @@ function openPopUp(dataType, element) {
 
       // Logo hochladen
       var input = content.createInput("button", "cancel", "{{.button.uploadLogo}}")
-      input.setAttribute("onclick", 'javascript: uploadLogo();')
+      addRuntimeEventListener(input, "click", () => uploadLogo())
       content.addInteraction(input)
 
       // Abbrechen
       var input = content.createInput("button", "cancel", "{{.button.cancel}}")
-      input.setAttribute("onclick", 'javascript: showElement("popup", false);')
+      addRuntimeEventListener(input, "click", () => showElement("popup", false))
       content.addInteraction(input)
 
       // Fertig
@@ -1294,11 +1357,11 @@ class XMLTVFile {
     var active_list = new Array()
 
     if (active == true) {
-      for (let i = 0; i < actives.length; i++) {        
+      for (let i = 0; i < actives.length; i++) {
         var names_split = SERVER["data"]["StreamPreviewUI"]["activeStreams"][actives[i]].split("[");
         displayName = names_split[0].trim();
-        
-        if (displayName != "") { 
+
+        if (displayName != "") {
           var object = {"value": displayName, "display": displayName}
           active_list.push(object)
         }
@@ -1310,7 +1373,7 @@ class XMLTVFile {
           } else {
             displayName = "-"
           }
-  
+
         text[i] = displayName + " (" + values[i] + ")";
       }
     }
@@ -1424,9 +1487,9 @@ function checkPPV(title, element) {
     input.setAttribute("type", "text")
     input.setAttribute("name", dbKey)
     // input.setAttribute("value", value)
-    input.setAttribute("onchange", "javascript: this.className = 'changed'")
+    addRuntimeEventListener(input, "change", (event: Event) => { (event.currentTarget as HTMLElement).className = "changed" })
     input.setAttribute("id", "ppv-extra")
-    
+
     var tr = document.createElement("TR")
 
     // Bezeichnung
@@ -1547,8 +1610,10 @@ function savePopupData(dataType: string, id: string, remove: Boolean, option: nu
   console.log("Save popup data")
   var div = document.getElementById("popup-custom")
 
-  var inputs = div.getElementsByTagName("TABLE")[0].getElementsByTagName("INPUT");
-  var selects = div.getElementsByTagName("TABLE")[0].getElementsByTagName("SELECT");
+  var sourceForm = dataType == "m3u" || dataType == "hdhr" || dataType == "xmltv"
+  var fields = sourceForm ? div : div.getElementsByTagName("TABLE")[0]
+  var inputs = fields.getElementsByTagName("INPUT");
+  var selects = fields.getElementsByTagName("SELECT");
 
   var input = new Object();
   var confirmMsg: string

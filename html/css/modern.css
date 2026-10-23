@@ -1,0 +1,225 @@
+/* Bootstrap's theme-aware tokens are the single palette for all workspaces. */
+:root {
+  --tf-signal-black: var(--bs-bg-body);
+  --tf-console-graphite: var(--bs-bg-1);
+  --tf-panel-steel: var(--bs-border-color);
+  --tf-cyan: light-dark(#006c80, #59dce9);
+  --tf-on-air-green: light-dark(#127044, #64d99b);
+  --tf-warning-amber: light-dark(#865500, #f0c269);
+  --tf-fault-red: light-dark(#b42335, #ff8894);
+  --tf-text: var(--bs-fg-body);
+  --tf-text-muted: var(--bs-fg-2);
+}
+html, body { background: var(--bs-bg-body); color: var(--bs-fg-body); font-size: 15px; }
+body { font-family: var(--bs-body-font-family); line-height: 1.5; }
+*, h1, h2, h3, h4, h5 { letter-spacing: normal; }
+button, input, select, textarea { font: inherit; }
+:is(button, input[type=button], input[type=submit]) { cursor: pointer; }
+:is(input, select, textarea):not([type=checkbox]):not([type=radio]) { color: var(--bs-fg-body); background-color: var(--bs-bg-body); border-color: var(--bs-border-color); border-radius: var(--bs-radius-5); }
+input[type=checkbox], input[type=radio] { appearance: auto; accent-color: var(--tf-cyan); }
+pre { color: var(--bs-fg-2); }
+a { color: var(--tf-cyan); }
+.tf-theme-control { max-width: 11rem; min-height: 2.75rem; font-size: .85rem; }
+.tf-sidebar-header { flex-wrap: wrap; }
+.tf-app .tf-sidebar { background: var(--bs-bg-1); }
+.tf-app .tf-navigation { position: static; margin: 0; width: 100%; max-height: none; border: 0; border-radius: 0; }
+.tf-app .tf-navigation-drawer[open] { display: flex; }
+.tf-loading { position: fixed; z-index: 2000; inset-block-start: 1rem; inset-inline-end: 1rem; padding: 1rem 2rem; border-radius: 1rem; color: var(--bs-fg-body); background: var(--bs-bg-1); box-shadow: var(--bs-box-shadow); border: 1px solid var(--tf-cyan); }
+.dialog { color: var(--bs-fg-body); background: var(--bs-bg-1); }
+.dialog-content, .tf-dialog-content { background: inherit; color: inherit; }
+#popup .dialog-content { padding: 0; }
+#popup .dialog-header, #popup .dialog-footer { display: flex; flex-wrap: wrap; gap: .75rem; padding: 1.25rem; }
+#popup .dialog-body { padding: 1.25rem; overflow: auto; }
+#popup :is(input,select,button) { min-height: 2.75rem; }
+.tf-app .tf-mapping { container-type: inline-size; padding-bottom: 6rem; }
+.tf-app .tf-mapping-header h1 { font-size: clamp(1.8rem, 2.4vw, 2.6rem); font-weight: 750; }
+.tf-app .tf-mapping-header { padding-block: .5rem 1.25rem; }
+.tf-app .tf-mapping-filters { border-radius: 1rem; padding: 1.25rem; }
+.tf-mapping-filter-chips { display: flex; gap: .5rem; flex-wrap: wrap; margin-block: 1rem; }
+.tf-app .tf-mapping-save-bar { backdrop-filter: blur(16px); background: color-mix(in oklch, var(--bs-bg-1) 94%, transparent); border: 1px solid var(--tf-cyan); border-radius: 1rem; box-shadow: var(--bs-box-shadow-lg); }
+.tf-mapping-editor { --bs-drawer-width: min(44rem, 100vw); color: var(--bs-fg-body); background: var(--bs-bg-1); padding: 0; }
+.tf-mapping-editor .tf-mapping-editor-panel { width: 100%; max-width: none; min-height: 100%; padding: 1.5rem; border: 0; background: var(--bs-bg-1); color: var(--bs-fg-body); }
+.tf-mapping-editor-fields { gap: 1rem; }
+.tf-mapping-editor-field { color: var(--bs-fg-2); }
+.tf-mapping-editor-field :is(input,select,button) { min-height: 2.75rem; }
+.tf-mapping-editor-actions { position: sticky; bottom: -1.5rem; padding-block: 1rem; background: var(--bs-bg-1); border-top: 1px solid var(--bs-border-color); }
+.tf-mapping-editor :is(input,select,button) { max-width: 100%; }
+.tf-mapping-editor .menu { max-height: min(24rem, 55vh); overflow: auto; }
+.tf-mapping-editor .combobox-toggle { width: 100%; text-align: start; }
+.tf-mapping-editor .menu-item { min-height: 2.75rem; white-space: normal; }
+.tf-mapping-guard.dialog { inset: 0; padding: 1.5rem; max-width: min(32rem, 95vw); }
+:focus-visible { outline: 3px solid var(--tf-cyan); outline-offset: 3px; }
+@media (min-width: 768px) {
+  .tf-app .tf-navigation { display: flex; }
+  .tf-app .tf-nav-toggle { display: none; }
+}
+@media (width < 768px) {
+  .tf-app { grid-template-columns: minmax(0, 1fr); }
+  .tf-app .tf-sidebar { height: auto; position: sticky; padding: .5rem 1rem; }
+  .tf-app .tf-sidebar-toggle { display: none; }
+  .tf-app .tf-nav-toggle { display: inline-flex; min-height: 44px; }
+  .tf-app .tf-navigation-drawer { position: fixed; width: min(20rem, 90vw); padding: 1rem; height: 100dvh; background: var(--bs-bg-1); }
+  .tf-app .tf-navigation-drawer:not([open]) { display: none; }
+  .tf-app .tf-sidebar-header { flex-wrap: nowrap; }
+  .tf-app #logo { width: 7rem; }
+  .tf-app .tf-theme-control { max-width: 9rem; }
+}
+@container (max-width: 45rem) {
+  .tf-mapping-filters { grid-template-columns: minmax(0, 1fr); }
+  .tf-mapping-header { flex-direction: column; align-items: stretch; }
+}
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto; transition-duration: 0s; animation-duration: 0s; } }
+
+/* At the native responsive Drawer breakpoint, the editor occupies a real
+   master/detail grid slot. It disappears completely when no selection is open. */
+@media (min-width: 1536px) {
+  .tf-app:has(#mapping-editor) { grid-template-columns: var(--tf-sidebar-width) minmax(0, 1fr) minmax(24rem, 34rem); }
+  .tf-app > #mapping-editor { position: sticky; top: 0; height: 100dvh; min-width: 0; max-width: none; margin: 0; overflow: auto; border: 0; border-left: 1px solid var(--bs-border-color); border-radius: 0; }
+}
+
+.tf-app .tf-navigation-drawer { border: 0; padding: 0; background: var(--bs-bg-1); color: var(--bs-fg-body); }
+/* Bootstrap's container-based stacked rows keep actions on screen, including
+   when the desktop master/detail panel narrows the Mapping workspace. */
+@container (width < 1024px) {
+  .tf-app .tf-mapping-table { min-width: 0; }
+  .tf-app .tf-mapping-table tbody { display: block; }
+  .tf-app .tf-mapping-table td { width: auto; max-width: none; border: 0; overflow-wrap: anywhere; }
+  .tf-app .tf-mapping-table td[data-cell="Name"] { font-size: 1.1rem; font-weight: 700; }
+  .tf-app .tf-mapping-table td[data-cell="Actions"] button { width: 100%; }
+}
+
+@media (min-width: 768px) {
+  .tf-app.tf-sidebar-collapsed .tf-theme-control { width: 100%; min-width: 0; padding-inline: .2rem; font-size: .75rem; }
+}
+@media (min-width: 768px) and (max-width: 1200px) {
+  .tf-app .tf-navigation-item, .tf-app .tf-sidebar-toggle { min-height: 44px; min-inline-size: 44px; }
+}
+@media (min-width: 1536px) {
+  .tf-app.tf-sidebar-collapsed:has(#mapping-editor) { grid-template-columns: var(--tf-sidebar-rail-width) minmax(0, 1fr) minmax(24rem, 34rem); }
+}
+@media (width < 1200px) {
+  .tf-app .tf-theme-control, .tf-app .tf-mapping :is(button, input, select), .tf-mapping-editor :is(button, input, select) { min-height: 44px; min-inline-size: 44px; }
+}
+.tf-mapping-select-results { display: inline-flex; align-items: center; gap: .5rem; margin-inline-start: 1rem; }
+.tf-mapping-select-results input { accent-color: var(--tf-cyan); }
+
+/* Form explanations are prose, independent of the legacy dialog renderer.
+   Preserve intentional line breaks without preformatted type or spacing. */
+.tf-field-help {
+  margin: 0;
+  color: var(--tf-text-muted);
+  font: inherit;
+  font-weight: 400;
+  line-height: 1.5;
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+}
+/* Six pixels of outer focus indicator must fit between adjacent dialog rows. */
+#popup table { border-collapse: separate; border-spacing: 0 .5rem; }
+:is(input, select, textarea, .combobox-toggle):focus-visible {
+  position: relative;
+  z-index: 1;
+}
+/* Monospace denotes literal machine input/output, never surrounding prose.
+   Select by stable field names: legacy change tracking replaces className. */
+:is(code, kbd, samp, .tf-technical-value),
+input:is([name="file.source"], [name="http_proxy.ip"], [name="http_proxy.port"],
+  [name="http_headers.origin"], [name="http_headers.referer"],
+  [name="backup.path"], [name="temp.path"], [name="ffmpeg.path"], [name="ffmpeg.options"],
+  [name="vlc.path"], [name="vlc.options"], [name="user.agent"], [name="udpxy"],
+  [name="bindIpAddress"], [name="httpThreadfinDomain"], [name="httpsThreadfinDomain"],
+  [name="epgCategories"], [name="epgCategoriesColors"], [name="tvg-logo"]) {
+  font-family: var(--bs-font-mono);
+  font-weight: 400;
+  letter-spacing: normal;
+}
+
+.tf-mapping-editor-field :is(input, select, .combobox-toggle) { font-weight: 400; }
+
+/* Native field groups shared by source dialogs and Settings. */
+.tf-form-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1.5rem;
+  min-inline-size: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.tf-form-field { min-inline-size: 0; align-content: start; }
+.tf-form-field > label { margin: 0; color: var(--tf-text); font-weight: 650; line-height: 1.5; }
+.tf-form-field > :is(input, select, textarea) {
+  min-height: 44px;
+  min-inline-size: 0;
+  width: 100%;
+  margin: 0;
+  border: 1px solid var(--bs-border-color);
+  padding: .625rem .75rem;
+  font-size: 1rem;
+  font-weight: 400;
+  scroll-margin-block: 5rem 8rem;
+}
+.tf-form-field:has(> .check) { grid-template-columns: 44px minmax(0, 1fr); align-items: start; }
+.tf-form-field:has(> .check) > label { grid-column: 2; grid-row: 1; align-self: center; cursor: pointer; }
+.tf-form-field > .check { grid-column: 1; grid-row: 1; width: 44px; height: 44px; padding: .5rem; background-image: none; }
+.tf-form-field > .check::before { content: none; }
+.tf-form-field :is(.tf-field-help, .tf-source-field-help) { padding: 0; font-size: .9rem; line-height: 1.5; }
+.tf-form-field :is(.tf-field-error, .tf-source-field-error) { margin: 0; padding: 0; color: var(--tf-fault-red); font-size: .9rem; }
+.tf-form-field [aria-invalid="true"] { border-color: var(--tf-fault-red); }
+.tf-form-field:has([name="file.source"], [name="ffmpeg.path"], [name="ffmpeg.options"], [name="vlc.path"], [name="vlc.options"], [name="backup.path"], [name="temp.path"], [name="epgCategories"], [name="epgCategoriesColors"], .tf-settings-epg-preview) { grid-column: 1 / -1; }
+.tf-form-advanced { min-inline-size: 0; border-block-start: 1px solid var(--bs-border-color); padding-block-start: .75rem; }
+.tf-form-advanced > summary { min-height: 44px; padding-block: .5rem; color: var(--tf-text); cursor: pointer; font-weight: 650; }
+.tf-form-advanced[open] > summary { margin-bottom: 1rem; }
+.tf-source-popup { display: grid; gap: 1.25rem; container-type: inline-size; }
+.tf-source-popup h3 { margin: 0; }
+.tf-source-popup #popup-interaction {
+  position: sticky;
+  bottom: -1.25rem;
+  z-index: 3;
+  display: flex;
+  flex-wrap: wrap;
+  gap: .75rem;
+  width: 100%;
+  margin: 0;
+  padding: 1rem 0;
+  background: var(--bs-bg-1);
+  border-block-start: 1px solid var(--bs-border-color);
+}
+.tf-source-popup #popup-interaction input { flex: 1 1 auto; width: auto; min-width: 0; margin: 0; padding: .625rem .875rem; }
+.tf-source-popup input[name="save"] { color: var(--bs-bg-body); background: var(--tf-cyan); font-weight: 650; }
+.tf-source-popup input[name="delete"] { color: var(--tf-fault-red); border: 1px solid currentColor; }
+#popup:has(.tf-source-popup) :is(.dialog-content, .tf-dialog-content) { display: flex; flex-direction: column; min-height: 0; max-height: inherit; }
+#popup:has(.tf-source-popup) .dialog-content { max-height: calc(100dvh - 3.5rem); }
+#popup:has(.tf-source-popup) .dialog-body { min-height: 0; scroll-padding-block: 1rem 6rem; }
+#popup:has(.tf-source-popup) :is(.dialog-header, .dialog-footer):empty { display: none; }
+.tf-settings-panel { container-type: inline-size; }
+.tf-settings-save-bar {
+  position: sticky;
+  bottom: 1rem;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 1rem;
+  padding: 1rem;
+  background: var(--bs-bg-1);
+  border: 1px solid var(--bs-border-color);
+  border-radius: .75rem;
+  box-shadow: var(--bs-box-shadow);
+}
+.tf-settings-save-bar p { margin: 0; padding: 0; }
+.tf-settings-save-bar [data-state="error"] { color: var(--tf-fault-red); }
+.tf-settings-save-bar [data-state="success"] { color: var(--tf-on-air-green); }
+.tf-settings-save-bar button { min-height: 44px; margin-inline-start: auto; }
+@container (width < 40rem) {
+  .tf-form-fields { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* Settings are a form workspace; the legacy table scroll container would
+   otherwise capture sticky positioning below the actual viewport. */
+.tf-app #content:has(> .tf-settings) { overflow: visible; }
+/* Keep primary actions and source fields at the project touch target in every
+   viewport; legacy rem-based ID rules would otherwise shrink them below 44px. */
+#popup .tf-source-popup :is(input, select, button),
+.tf-app .tf-settings-save-bar button { min-height: 44px; }

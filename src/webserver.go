@@ -736,7 +736,7 @@ func Web(w http.ResponseWriter, r *http.Request) {
 	var lang = make(map[string]interface{})
 	var err error
 
-	var requestFile = strings.Replace(r.URL.Path, "/web", "html", -1)
+	var requestFile = "html" + strings.TrimPrefix(r.URL.Path, "/web")
 	var content, contentType, file string
 
 	var language LanguageUI
@@ -1434,21 +1434,22 @@ func resetStreamingURLCache(filename string) error {
 func getContentType(filename string) (contentType string) {
 
 	mimeTypes := map[string]string{
-		".html": "text/html",
-		".css":  "text/css",
-		".js":   "application/javascript",
-		".png":  "image/png",
-		".jpg":  "image/jpeg",
-		".jpeg": "image/jpeg",
-		".gif":  "image/gif",
-		".svg":  "image/svg+xml",
-		".ico":  "image/x-icon",
-		".webp": "image/webp",
-		".mp4":  "video/mp4",
-		".webm": "video/webm",
-		".ogg":  "video/ogg",
-		".mp3":  "audio/mp3",
-		".wav":  "audio/wav",
+		".html":  "text/html",
+		".css":   "text/css",
+		".js":    "application/javascript",
+		".png":   "image/png",
+		".jpg":   "image/jpeg",
+		".jpeg":  "image/jpeg",
+		".gif":   "image/gif",
+		".svg":   "image/svg+xml",
+		".ico":   "image/x-icon",
+		".webp":  "image/webp",
+		".mp4":   "video/mp4",
+		".webm":  "video/webm",
+		".ogg":   "video/ogg",
+		".mp3":   "audio/mp3",
+		".wav":   "audio/wav",
+		".woff2": "font/woff2",
 	}
 
 	// Extract the file extension and normalize it to lowercase

@@ -216,7 +216,7 @@ func TestUIMappingNavigationGuardGeneratedFixture(t *testing.T) {
 }
 
 func TestUIMappingGeneratedDOMAccessibilityAndEditor(t *testing.T) {
-	output := runMappingNodeFixture(t, "mapping-dom", mappingDOMNodeScript, "mapping_state_ts.js", "mapping_ts.js", "navigation_ts.js")
+	output := runMappingNodeFixture(t, "mapping-dom", mappingDOMNodeScript, "mapping_state_ts.js", "mapping_ts.js", "navigation_ts.js", "network_ts.js")
 	var got struct {
 		PageText                 string `json:"pageText"`
 		EditorText               string `json:"editorText"`
@@ -249,8 +249,8 @@ func TestUIMappingGeneratedDOMAccessibilityAndEditor(t *testing.T) {
 		PendingMutationsDisabled bool   `json:"pendingMutationsDisabled"`
 		PendingEditorBlocked     bool   `json:"pendingEditorBlocked"`
 		InitialEditorFocus       string `json:"initialEditorFocus"`
-		TabTrapped               bool   `json:"tabTrapped"`
-		ShiftTabTrapped          bool   `json:"shiftTabTrapped"`
+		NativeDrawer             bool   `json:"nativeDrawer"`
+		NativeDialogElement      bool   `json:"shiftNativeDrawer"`
 		EditorEscapeClosed       bool   `json:"editorEscapeClosed"`
 		EditorInvokerRestored    bool   `json:"editorInvokerRestored"`
 		EditorEscapeDraft        string `json:"editorEscapeDraft"`
@@ -299,7 +299,7 @@ func TestUIMappingGeneratedDOMAccessibilityAndEditor(t *testing.T) {
 	if !got.PendingMutationsDisabled || !got.PendingEditorBlocked {
 		t.Fatalf("Mapping pending mutation surfaces were not locked = %+v", got)
 	}
-	if got.InitialEditorFocus != "x-active" || !got.TabTrapped || !got.ShiftTabTrapped || !got.EditorEscapeClosed || !got.EditorInvokerRestored || got.EditorEscapeDraft != "Valid" || !got.GuardEscapeClosed || got.GuardEscapeContinued != 0 {
+	if got.InitialEditorFocus != "x-active" || !got.NativeDrawer || !got.NativeDialogElement || !got.EditorEscapeClosed || !got.EditorInvokerRestored || got.EditorEscapeDraft != "Valid" || !got.GuardEscapeClosed || got.GuardEscapeContinued != 0 {
 		t.Fatalf("Mapping dialog keyboard contract = %+v", got)
 	}
 	if got.InitialSort != "ascending" || got.ToggledSort != "descending" {
@@ -366,22 +366,12 @@ func TestUIMappingResponseEvidenceJSON(t *testing.T) {
 }
 
 func TestUIMappingAssetsAndEmbedParity(t *testing.T) {
-	index, err := os.ReadFile(filepath.Join("..", "html", "index.html"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	indexText := string(index)
-	stateAt := strings.Index(indexText, `src="js/mapping_state_ts.js"`)
-	pageAt := strings.Index(indexText, `src="js/mapping_ts.js"`)
-	navigationAt := strings.Index(indexText, `src="js/navigation_ts.js"`)
-	if stateAt < 0 || pageAt <= stateAt || navigationAt <= pageAt {
-		t.Fatalf("Mapping scripts are absent or ordered incorrectly: state=%d page=%d navigation=%d", stateAt, pageAt, navigationAt)
-	}
+	assertUIBundleControllers(t, "index.html", "app", "mapping_state", "mapping", "navigation")
 	styles, err := os.ReadFile(filepath.Join("..", "html", "css", "app-shell.css"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, selector := range []string{".tf-app .tf-mapping", ".tf-app .tf-mapping-save-bar", ".tf-app .tf-mapping-editor", "@media (max-width: 52rem)"} {
+	for _, selector := range []string{".tf-app .tf-mapping", ".tf-app .tf-mapping-save-bar", ".tf-mapping-editor-panel", "@media (max-width: 52rem)"} {
 		if !strings.Contains(string(styles), selector) {
 			t.Errorf("Mapping stylesheet missing %q", selector)
 		}
@@ -508,7 +498,29 @@ context.currentDestination = "mapping"; history.state = {threadfinDestination: "
 process.stdout.write(JSON.stringify({guarded, shows, pushes, replacements}));
 `
 
-const mappingDOMNodeScript = `
+const mappingNativeComponentsNodeScript = `
+// The fixture owns domain behavior; actual native focus trapping and animations
+// are exercised by the Bootstrap browser acceptance rather than reimplemented here.
+class NativeOverlay {
+  constructor(element) { this.element = element; element.nativeComponent = this.constructor.name; element.component = this; }
+  show() { this.element.open = true; return {then(callback) { callback(); }}; }
+  dispose() { this.element.open = false; }
+  static getInstance(element) { return element ? element.component : null; }
+}
+class Dialog extends NativeOverlay {}
+class Drawer extends NativeOverlay {}
+class Combobox {
+  constructor(toggle) { this.toggle = toggle; const input = document.createElement("input"); input.type = "hidden"; input.name = "x-mapping"; const option = toggle.parentElement.querySelectorAll(".menu-item").find(item => item.className.includes("selected")); input.value = option ? option.getAttribute("data-bs-value") : ""; toggle.parentElement.appendChild(input); this.input = input; }
+  dispose() { if (this.input.parentElement) this.input.parentElement.removeChild(this.input); }
+}
+class Chips {
+  constructor(region) { this.region = region; const input = document.createElement("input"); region.appendChild(input); }
+  dispose() {}
+  getValues() { return this.region.querySelectorAll(".chip").map(item => item.getAttribute("data-bs-chip-value")); }
+}
+`
+
+const mappingDOMNodeScript = mappingNativeComponentsNodeScript + `
 const fs = require("fs"), vm = require("vm");
 let document;
 class Element {
@@ -548,35 +560,108 @@ document = {body, activeElement: null, createElement(tag) { return new Element(t
 const sent = [], windowEvents = {}; class CaptureServer { constructor(cmd) { this.cmd = cmd; } request(data) { sent.push({cmd: this.cmd, data: JSON.parse(JSON.stringify(data || {}))}); } }
 const history = {state: null, pushes: [], replacements: [], pushState(state, _unused, hash) { this.state = state; this.pushes.push(hash); }, replaceState(state, _unused, hash) { this.state = state; this.replacements.push(hash); }};
 class ShowContent { constructor(index) { this.index = index; } show() {} }
-const context = {console: {log() {}, warn() {}}, document, window: {history, location: {hash: ""}, addEventListener(name, listener) { windowEvents[name] = listener; }, setTimeout(listener) { listener(); }}, Server: CaptureServer, HTMLInputElement: Element, HTMLSelectElement: Element, ShowContent, menuItems: Array.from({length: 8}, (_, index) => ({value: ["Playlist", "XMLTV", "Filter", "Mapping", "Users", "Settings", "Log", "Logout"][index], initializeTableHeader() {}})), renderOverview() {}, renderConnections() {}, renderActivity() {}, enableGroupSelection() {}, SERVER: {settings: {"authentication.web": true, files: {m3u: {M1: {name: "Playlist One"}}, xmltv: {X1: {name: "Guide One"}}}}, xepg: {xmltvMap: {"X1.xml": {"guide-1": {"display-name": "Guide"}}}, epgMapping: {
+const context = {console: {log() {}, warn() {}}, document, Dialog, Drawer, Combobox, Chips, window: {matchMedia() { return {matches: false, addEventListener() {}, removeEventListener() {}}; }, history, location: {hash: ""}, addEventListener(name, listener) { windowEvents[name] = listener; }, setTimeout(listener) { listener(); }}, Server: CaptureServer, HTMLInputElement: Element, HTMLSelectElement: Element, ShowContent, menuItems: Array.from({length: 8}, (_, index) => ({value: ["Playlist", "XMLTV", "Filter", "Mapping", "Users", "Settings", "Log", "Logout"][index], initializeTableHeader() {}})), renderOverview() {}, renderConnections() {}, renderActivity() {}, enableGroupSelection() {}, SERVER: {settings: {"authentication.web": true, files: {m3u: {M1: {name: "Playlist One"}}, xmltv: {X1: {name: "Guide One"}}}}, xepg: {xmltvMap: {"X1.xml": {"guide-1": {"display-name": "Guide"}}, "X2.xml": {"other-guide": {"display-name": "Other Guide"}}}, epgMapping: {
   valid: {"x-channelID": "1", "x-active": true, "x-name": "Valid", "_file.m3u.id": "M1", "x-group-title": "General", "x-xmltv-file": "X1.xml", "x-mapping": "guide-1", "tvg-name": "Valid", url: "http://127.0.0.1/stream"},
   missing: {"x-channelID": "2", "x-active": true, "x-name": "Missing", "_file.m3u.id": "M1", "x-group-title": "General", "x-xmltv-file": "-", "x-mapping": "-", "tvg-name": "Missing"},
   hidden: {"x-channelID": "3", "x-active": true, "x-name": "Hidden", "x-hide-channel": true, "_file.m3u.id": "M1", "x-group-title": "General", "x-xmltv-file": "X1.xml", "x-mapping": "guide-1", "tvg-name": "Hidden"}
 }}}, currentDestination: "mapping"};
 vm.createContext(context); vm.runInContext(fs.readFileSync(process.argv[2], "utf8"), context); vm.runInContext(fs.readFileSync(process.argv[3], "utf8"), context); vm.runInContext(fs.readFileSync(process.argv[4], "utf8"), context);
-function key(target, value, shiftKey) { const event = {key: value, shiftKey: !!shiftKey, prevented: false, preventDefault() { this.prevented = true; }, stopPropagation() {}}; if (target.listeners.keydown) target.listeners.keydown(event); return event; }
+function key(target, value, shiftKey) { const event = {key: value, shiftKey: !!shiftKey, prevented: false, preventDefault() { this.prevented = true; }, stopPropagation() {}}; if (value === "Escape" && target.component) { const hidden = target.nativeComponent === "Drawer" ? "hidden.bs.drawer" : "hidden.bs.dialog"; if (target.listeners[hidden]) target.listeners[hidden](); } else if (target.listeners.keydown) target.listeners.keydown(event); return event; }
 context.SERVER.settings.epgSource = "PMS"; context.renderMappingPage(host); const pmsText = text(host); const pmsSettings = all(host).find(item => item.tagName === "BUTTON" && item.textContent === "Open EPG Source settings"); if (pmsSettings) pmsSettings.listeners.click(); const pmsSettingsHash = history.pushes[history.pushes.length - 1] || ""; context.currentDestination = "mapping"; context.SERVER.settings.epgSource = "XEPG";
 context.renderMappingPage(host); const pageText = text(host); const selectAll = all(host).find(item => item.getAttribute("aria-label") === "Select all visible channels"); const live = all(host).find(item => item.className === "tf-mapping-counts"); const backupLists = all(host).filter(item => item.id === "mapping-backup-options").length;
 let sortButton = all(host).find(item => item.tagName === "BUTTON" && item.textContent === "Channel"), initialSort = sortButton.parentElement.getAttribute("aria-sort"); sortButton.listeners.click(); sortButton = all(host).find(item => item.tagName === "BUTTON" && item.textContent === "Channel"); const toggledSort = sortButton.parentElement.getAttribute("aria-sort");
 let typing = all(host).find(item => item.getAttribute("aria-label") === "Search mapping"); typing.focus(); typing.value = "h"; typing.setSelectionRange(1, 1); typing.listeners.input(); typing = document.activeElement; if (document.contains(typing) && typing.listeners.input) { typing.value += "i"; typing.setSelectionRange(2, 2); typing.listeners.input(); } const typedSearch = context.mappingCurrentQuery.search, searchFocused = document.contains(document.activeElement) && document.activeElement.getAttribute("data-mapping-focus") === "filter-search", searchCaret = document.activeElement.selectionStart;
-context.mappingCurrentQuery.search = ""; context.mappingCurrentQuery.segment = "active"; context.mappingWorkspaceState.segment = "active"; context.renderMappingPage(host); let playlistFilter = all(host).find(item => item.getAttribute("data-mapping-focus") === "filter-playlist"); playlistFilter.focus(); playlistFilter.value = "M1"; playlistFilter.listeners.change(); const filterFocused = document.contains(document.activeElement) && document.activeElement.getAttribute("data-mapping-focus") === "filter-playlist"; let visibleSelector = all(host).find(item => item.getAttribute("data-mapping-focus") === "select-all-visible"); visibleSelector.focus(); visibleSelector.checked = true; visibleSelector.listeners.change(); const selectAllFocused = document.contains(document.activeElement) && document.activeElement.getAttribute("data-mapping-focus") === "select-all-visible"; context.mappingWorkspaceState.selected.clear(); context.renderMappingPage(host); let rowControl = all(host).find(item => item.getAttribute("data-mapping-focus") === "row-valid"); rowControl.focus(); rowControl.checked = true; rowControl.listeners.click({shiftKey: false}); const firstKeyboardSelected = context.mappingWorkspaceState.selected.has("valid"); rowControl = document.activeElement; if (document.contains(rowControl) && rowControl.listeners.click) { rowControl.checked = false; rowControl.listeners.click({shiftKey: false}); } const keyboardSelected = firstKeyboardSelected && !context.mappingWorkspaceState.selected.has("valid"), keyboardFocused = document.contains(document.activeElement) && document.activeElement.getAttribute("data-mapping-focus") === "row-valid";
+context.mappingCurrentQuery.search = ""; context.mappingCurrentQuery.segment = "active"; context.mappingWorkspaceState.segment = "active"; context.renderMappingPage(host); let playlistFilter = all(host).find(item => item.getAttribute("data-mapping-focus") === "filter-playlist"); playlistFilter.focus(); playlistFilter.value = "M1"; playlistFilter.listeners.change(); const filterFocused = document.contains(document.activeElement) && document.activeElement.getAttribute("data-mapping-focus") === "filter-playlist"; let chipsRegion = document.getElementById("mapping-filter-chips"), playlistChip = all(chipsRegion).find(item => item.getAttribute("data-bs-chip-value") === "playlist"); if (!playlistChip) throw new Error("Active playlist filter chip missing"); chipsRegion.removeChild(playlistChip); chipsRegion.listeners["change.bs.chips"](); if (context.mappingCurrentQuery.playlist !== "") throw new Error("Removing filter chip did not clear query"); context.mappingCurrentQuery.playlist = "M1"; context.renderMappingPage(host); let visibleSelector = all(host).find(item => item.getAttribute("data-mapping-focus") === "select-all-visible"); visibleSelector.focus(); visibleSelector.checked = true; visibleSelector.listeners.change(); const selectAllFocused = document.contains(document.activeElement) && document.activeElement.getAttribute("data-mapping-focus") === "select-all-visible"; context.mappingWorkspaceState.selected.clear(); context.renderMappingPage(host); let rowControl = all(host).find(item => item.getAttribute("data-mapping-focus") === "row-valid"); rowControl.focus(); rowControl.checked = true; rowControl.listeners.click({shiftKey: false}); const firstKeyboardSelected = context.mappingWorkspaceState.selected.has("valid"); rowControl = document.activeElement; if (document.contains(rowControl) && rowControl.listeners.click) { rowControl.checked = false; rowControl.listeners.click({shiftKey: false}); } const keyboardSelected = firstKeyboardSelected && !context.mappingWorkspaceState.selected.has("valid"), keyboardFocused = document.contains(document.activeElement) && document.activeElement.getAttribute("data-mapping-focus") === "row-valid";
 const invoker = all(host).find(item => item.getAttribute("data-mapping-edit") === "valid"); context.openMappingEditor(["valid"], invoker); let editor = document.getElementById("mapping-editor"), editorText = text(editor), advanced = all(editor).find(item => item.className === "tf-mapping-editor-advanced"), advancedInitially = advanced.open; const initialEditorFocus = document.activeElement.name;
-let fieldSearch = all(editor).find(item => item.getAttribute("aria-label") === "Search editor fields"), apply = all(editor).find(item => item.id === "mapping-apply"); apply.focus(); const tabEvent = key(editor, "Tab", false), tabTrapped = tabEvent.prevented && document.activeElement === fieldSearch; const shiftTabEvent = key(editor, "Tab", true), shiftTabTrapped = shiftTabEvent.prevented && document.activeElement === apply;
+let fieldSearch = all(editor).find(item => item.getAttribute("aria-label") === "Search editor fields"), apply = all(editor).find(item => item.id === "mapping-apply"); apply.focus(); const nativeDrawer = editor.nativeComponent === "Drawer", shiftNativeDrawer = editor.tagName === "DIALOG";
+let epgOptions = all(editor).filter(item => item.className.split(" ").includes("menu-item")).map(item => item.getAttribute("data-bs-value"));
+if (!epgOptions.includes("guide-1") || epgOptions.includes("other-guide") || epgOptions.includes("PPV")) throw new Error("EPG choices leaked across XMLTV sources");
+let sourceChoice = all(editor).find(item => item.name === "x-xmltv-file"); sourceChoice.value = "X2.xml"; sourceChoice.listeners.change();
+if (all(editor).find(item => item.name === "x-mapping").value !== "-" || !all(editor).some(item => item.getAttribute("data-bs-value") === "other-guide")) throw new Error("Source change retained invalid EPG choice");
+sourceChoice.value = "Threadfin Dummy"; sourceChoice.listeners.change();
+if (!all(editor).some(item => item.getAttribute("data-bs-value") === "PPV")) throw new Error("Dummy EPG programs missing");
+sourceChoice.value = "X1.xml"; sourceChoice.listeners.change();
 let name = all(editor).find(item => item.name === "x-name"); name.value = "Unapplied"; name.setAttribute("data-changed", "true"); key(editor, "Escape", false); const editorEscapeClosed = !document.getElementById("mapping-editor"), editorInvokerRestored = document.activeElement === invoker, editorEscapeDraft = context.mappingWorkspaceState.draft.valid["x-name"];
 context.openMappingEditor(["valid"], invoker); editor = document.getElementById("mapping-editor"); advanced = all(editor).find(item => item.className === "tf-mapping-editor-advanced"); fieldSearch = all(editor).find(item => item.getAttribute("aria-label") === "Search editor fields"); fieldSearch.value = "backup"; fieldSearch.listeners.input(); const advancedSearch = advanced.open;
 name = all(editor).find(item => item.name === "x-name"); name.value = "Keyboard renamed"; name.setAttribute("data-changed", "true"); const form = all(editor).find(item => item.tagName === "FORM"); context.applyMappingEditor(["valid"], form); const save = document.getElementById("mapping-save");
 const unload = {returnValue: "unset", prevented: 0, preventDefault() { this.prevented++; }}; windowEvents.beforeunload(unload);
-context.renderNavigation(); const sidebar = all(mainMenu).find(item => item.getAttribute("data-destination") === "settings"); sidebar.focus(); sidebar.listeners.click(); let guard = context.mappingGuardDialog; all(guard).find(item => item.getAttribute("data-mapping-guard") === "stay").listeners.click(); const sidebarReturnFocus = document.activeElement.getAttribute("data-destination") || document.activeElement.id; const stayContinued = 0;
+context.renderNavigation(); const sidebar = all(mainMenu).find(item => item.getAttribute("data-destination") === "settings"); sidebar.focus(); sidebar.listeners.click(); let guard = context.mappingGuardDialog; if (guard.tagName !== "DIALOG" || guard.nativeComponent !== "Dialog") throw new Error("Navigation guard must use native Bootstrap Dialog"); all(guard).find(item => item.getAttribute("data-mapping-guard") === "stay").listeners.click(); const sidebarReturnFocus = document.activeElement.getAttribute("data-destination") || document.activeElement.id; const stayContinued = 0;
 let discardContinued = 0; context.mappingRequestNavigation(() => discardContinued++, undefined); guard = context.mappingGuardDialog; all(guard).find(item => item.getAttribute("data-mapping-guard") === "discard").listeners.click();
 context.mappingApplyChannelPatch(context.mappingWorkspaceState, ["valid"], {"x-name": "Saved guard"}); context.renderMappingPage(host); let saveContinued = 0; context.mappingRequestNavigation(() => saveContinued++, undefined); guard = context.mappingGuardDialog; const pendingSave = all(guard).find(item => item.getAttribute("data-mapping-guard") === "save"), pendingDiscard = all(guard).find(item => item.getAttribute("data-mapping-guard") === "discard"), pendingStay = all(guard).find(item => item.getAttribute("data-mapping-guard") === "stay"); pendingSave.listeners.click(); const pendingSaveDisabled = pendingSave.disabled, pendingDiscardDisabled = pendingDiscard.disabled, pendingStayEnabled = !pendingStay.disabled, pendingMutationsDisabled = all(body).filter(item => item.getAttribute("data-mapping-mutation") !== undefined).every(item => item.disabled); context.openMappingEditor(["valid"]); const pendingEditorBlocked = !document.getElementById("mapping-editor"); pendingStay.listeners.click(); const pendingStayClosed = !context.mappingGuardDialog, pendingReturnFocus = document.activeElement.id, pendingSaveAvoided = pendingSaveDisabled && document.activeElement !== document.getElementById("mapping-save"); const request = sent.pop(); const response = JSON.parse(JSON.stringify(context.SERVER)); response.status = true; response.mappingSaveResult = "outputsRebuilt"; response.xepg.epgMapping = request.data.epgMapping; context.completeMappingRequest("saveEpgMapping", request.data, response);
 context.mappingApplyChannelPatch(context.mappingWorkspaceState, ["valid"], {"x-name": "Ambiguous guard"}); context.renderMappingPage(host); context.mappingRequestNavigation(() => saveContinued++, undefined); guard = context.mappingGuardDialog; all(guard).find(item => item.getAttribute("data-mapping-guard") === "save").listeners.click(); const ambiguousRequest = sent.pop(); context.completeMappingRequest("saveEpgMapping", ambiguousRequest.data, {status: false, err: "transport"}, "transport"); sent.pop(); context.completeMappingRequest("getServerConfig", {}, {status: false, err: "refetch failed"}); const ambiguousStay = all(guard).find(item => item.getAttribute("data-mapping-guard") === "stay"); ambiguousStay.listeners.click(); const ambiguousStayClosed = !context.mappingGuardDialog, ambiguousReturnFocus = document.activeElement.id;
 const removedInvoker = new Element("button"); removedInvoker.id = "removed-invoker"; app.appendChild(removedInvoker); removedInvoker.focus(); context.mappingRequestNavigation(() => saveContinued++, removedInvoker); guard = context.mappingGuardDialog; app.removeChild(removedInvoker); all(guard).find(item => item.getAttribute("data-mapping-guard") === "stay").listeners.click(); const removedReturnFocus = document.activeElement.id;
 sidebar.focus(); context.openDestination("settings", true); guard = context.mappingGuardDialog; all(guard).find(item => item.getAttribute("data-mapping-guard") === "stay").listeners.click(); const programmaticReturnFocus = document.activeElement.id;
 sidebar.focus(); history.state = {threadfinDestination: "settings"}; context.restoreDestinationFromHistory(); guard = context.mappingGuardDialog; key(guard, "Escape", false); const guardEscapeClosed = !context.mappingGuardDialog, historyReturnFocus = document.activeElement.id, guardEscapeContinued = 0;
-process.stdout.write(JSON.stringify({pageText, editorText, selectAllLabel: selectAll.getAttribute("aria-label"), editorRole: editor.getAttribute("role"), editorLabelledBy: editor.getAttribute("aria-labelledby"), advancedInitially, advancedSearch, backupLists, saveFocus: save.focusCount, draftName: "Keyboard renamed", liveStatus: live.getAttribute("aria-live"), unloadPrevented: unload.prevented, unloadReturnValue: unload.returnValue, stayContinued, discardContinued, saveContinued, pendingSaveDisabled, pendingDiscardDisabled, pendingStayEnabled, pendingStayClosed, ambiguousStayClosed, typedSearch, searchFocused, searchCaret, filterFocused, selectAllFocused, keyboardSelected, keyboardFocused, pendingMutationsDisabled, pendingEditorBlocked, initialEditorFocus, tabTrapped, shiftTabTrapped, editorEscapeClosed, editorInvokerRestored, editorEscapeDraft, guardEscapeClosed, guardEscapeContinued, initialSort, toggledSort, sidebarReturnFocus, pendingReturnFocus, pendingSaveAvoided, ambiguousReturnFocus, removedReturnFocus, programmaticReturnFocus, historyReturnFocus, pmsText, pmsSettingsHash}));
+// Native backdrop dismissal has the same domain meaning as Stay, including
+// cancellation of the post-save navigation when persistence is still pending.
+context.initializeMappingWorkspace(context.SERVER,true);
+context.mappingApplyChannelPatch(context.mappingWorkspaceState,["valid"],{"x-name":"Backdrop draft"});
+let backdropContinued = 0; context.mappingRequestNavigation(() => backdropContinued++);
+guard = context.mappingGuardDialog; all(guard).find(item => item.getAttribute("data-mapping-guard") === "save").listeners.click();
+const backdropRequest = sent.pop(); guard.listeners["hidden.bs.dialog"]();
+const backdropResponse = JSON.parse(JSON.stringify(context.SERVER)); backdropResponse.status = true; backdropResponse.mappingSaveResult = "outputsRebuilt"; backdropResponse.xepg.epgMapping = backdropRequest.data.epgMapping;
+context.completeMappingRequest("saveEpgMapping",backdropRequest.data,backdropResponse);
+if (backdropContinued !== 0 || context.mappingGuardDialog) throw new Error("Backdrop dismissal resumed canceled post-save navigation");
+// Editing unrelated metadata must preserve unavailable assignments visibly.
+for (const source of ["X1.xml","missing-guide.xml"]) {
+ context.initializeMappingWorkspace(context.SERVER,true);
+ context.mappingWorkspaceState.draft.valid["x-xmltv-file"] = source;
+ context.mappingWorkspaceState.draft.valid["x-mapping"] = "unavailable-channel";
+ context.openMappingEditor(["valid"]); const unavailableEditor = document.getElementById("mapping-editor");
+ const selectedGuide = all(unavailableEditor).find(item => item.name === "x-mapping");
+ if (selectedGuide.value !== "unavailable-channel" || !text(unavailableEditor).includes("unavailable")) throw new Error("Unavailable EPG assignment silently cleared on opening editor");
+ const renamed = all(unavailableEditor).find(item => item.name === "x-name"); renamed.value = "Metadata only"; renamed.setAttribute("data-changed","true");
+ context.applyMappingEditor(["valid"],all(unavailableEditor).find(item => item.tagName === "FORM"));
+ const retained = context.mappingWorkspaceState.draft.valid;
+ if (retained["x-mapping"] !== "unavailable-channel" || retained["x-xmltv-file"] !== source || retained["x-active"] !== true) throw new Error("Unrelated editor change erased unavailable assignment or deactivated channel");
+}
+// Exercise the actual FIFO transport callback, Mapping completion and render
+// together. SERVER still contains the pre-save snapshot when completion starts.
+const integrationSockets = [], integrationTimers = [];
+class IntegrationWebSocket {
+ constructor() {this.readyState = IntegrationWebSocket.CONNECTING; this.sent = []; integrationSockets.push(this);}
+ send(value) {this.sent.push(JSON.parse(value));}
+ open() {this.readyState = IntegrationWebSocket.OPEN; this.onopen({});}
+ respond(response) {response.requestId = this.sent[this.sent.length - 1].requestId; this.onmessage({data:JSON.stringify(response)});}
+ close() {this.readyState = IntegrationWebSocket.CLOSED;}
+}
+IntegrationWebSocket.CONNECTING = 0; IntegrationWebSocket.OPEN = 1; IntegrationWebSocket.CLOSED = 3;
+context.WebSocket = IntegrationWebSocket; context.UNDO = {}; context.WS_AVAILABLE = false; context.SERVER_CONNECTION = false;
+context.setTimeout = function(callback,delay) {const timer = {callback,delay}; integrationTimers.push(timer); return timer;}; context.clearTimeout = function() {};
+context.window.location = {protocol:"http:",hostname:"127.0.0.1",port:"34400"}; context.location = {reload() {}};
+context.alert = function() {}; context.showElement = function() {}; context.createLayout = function() {};
+vm.runInContext(fs.readFileSync(process.argv[5],"utf8"),context);
+for (const outcome of ["outputsRebuilt","outputRebuildRequested","rebuildFailed","notPersisted"]) {
+ const before = JSON.parse(JSON.stringify(context.SERVER));
+ before.xepg.epgMapping.valid["x-name"] = "Original"; before.xepg.epgMapping.valid["x-mapping"] = "-"; before.xepg.epgMapping.valid["x-active"] = false;
+ context.SERVER = before; context.initializeMappingWorkspace(before,true); context.renderMappingPage(host);
+ context.mappingApplyChannelPatch(context.mappingWorkspaceState,["valid"],{"x-name":"Saved without reload","x-mapping":"guide-1","x-active":true});
+ context.saveMappingDraft(); const socket = integrationSockets[0]; if (socket.readyState === IntegrationWebSocket.CONNECTING) socket.open();
+ const submitted = socket.sent[socket.sent.length - 1].epgMapping;
+ const response = JSON.parse(JSON.stringify(before)); response.status = outcome !== "rebuildFailed" && outcome !== "notPersisted"; response.mappingSaveResult = outcome; response.err = "fixture rebuild failed";
+ response.xepg.epgMapping = outcome === "notPersisted" ? before.xepg.epgMapping : submitted;
+ socket.respond(response);
+ const final = context.mappingWorkspaceState;
+ if (final.draft.valid["x-name"] !== "Saved without reload" || final.draft.valid["x-mapping"] !== "guide-1" || final.draft.valid["x-active"] !== true) throw new Error("Mapping save response rendered stale SERVER snapshot: " + outcome);
+ if (outcome !== "notPersisted" && (context.mappingDirtyIDs(final).length !== 0 || !final.feedback.includes("Mapping saved"))) throw new Error("Persisted mapping feedback or clean state lost: " + outcome);
+ if (outcome === "notPersisted" && context.mappingDirtyIDs(final).length !== 1) throw new Error("Failed save lost mapping draft");
+ if (outcome === "outputsRebuilt" && !text(host).includes("outputs rebuilt")) throw new Error("Actual Mapping render lost confirmed rebuild feedback");
+}
+// A transport-ambiguous save uses the same publication ordering when the
+// authoritative refetch confirms persistence; it must not restore the old draft.
+const beforeRefetch = JSON.parse(JSON.stringify(context.SERVER)); beforeRefetch.xepg.epgMapping.valid["x-name"] = "Before refetch";
+context.SERVER = beforeRefetch; context.initializeMappingWorkspace(beforeRefetch,true);
+context.mappingApplyChannelPatch(context.mappingWorkspaceState,["valid"],{"x-name":"Confirmed by refetch"}); context.saveMappingDraft();
+const uncertainSubmitted = integrationSockets[0].sent[integrationSockets[0].sent.length - 1].epgMapping;
+integrationSockets[0].onerror({});
+const reconnect = integrationTimers.filter(timer => timer.delay === 250).pop(); reconnect.callback(); integrationSockets[1].open();
+const refetched = JSON.parse(JSON.stringify(beforeRefetch)); refetched.status = true; refetched.xepg.epgMapping = uncertainSubmitted;
+integrationSockets[1].respond(refetched);
+if (context.mappingWorkspaceState.draft.valid["x-name"] !== "Confirmed by refetch" || context.mappingDirtyIDs(context.mappingWorkspaceState).length !== 0 || !text(host).includes("Authoritative mapping reloaded")) throw new Error("Authoritative save refetch rendered stale mapping snapshot");
+process.stdout.write(JSON.stringify({pageText, editorText, selectAllLabel: selectAll.getAttribute("aria-label"), editorRole: editor.getAttribute("role"), editorLabelledBy: editor.getAttribute("aria-labelledby"), advancedInitially, advancedSearch, backupLists, saveFocus: save.focusCount, draftName: "Keyboard renamed", liveStatus: live.getAttribute("aria-live"), unloadPrevented: unload.prevented, unloadReturnValue: unload.returnValue, stayContinued, discardContinued, saveContinued, pendingSaveDisabled, pendingDiscardDisabled, pendingStayEnabled, pendingStayClosed, ambiguousStayClosed, typedSearch, searchFocused, searchCaret, filterFocused, selectAllFocused, keyboardSelected, keyboardFocused, pendingMutationsDisabled, pendingEditorBlocked, initialEditorFocus, nativeDrawer, shiftNativeDrawer, editorEscapeClosed, editorInvokerRestored, editorEscapeDraft, guardEscapeClosed, guardEscapeContinued, initialSort, toggledSort, sidebarReturnFocus, pendingReturnFocus, pendingSaveAvoided, ambiguousReturnFocus, removedReturnFocus, programmaticReturnFocus, historyReturnFocus, pmsText, pmsSettingsHash}));
 `
 
-const mappingLargeRendererNodeScript = `
+const mappingLargeRendererNodeScript = mappingNativeComponentsNodeScript + `
 const fs = require("fs"), vm = require("vm"); let document;
 class Element {
   constructor(tag) { this.tagName = String(tag).toUpperCase(); this.children = []; this.parentElement = null; this.attributes = {}; this.className = ""; this.textContent = ""; this.hidden = false; this.value = ""; this.name = ""; this.type = ""; this.checked = false; this.disabled = false; this.open = false; this.listeners = {}; this.selectionStart = 0; this.selectionEnd = 0; }
@@ -592,7 +677,7 @@ function matches(item, selector) { if (selector === ".tf-app") return item.class
 const body = new Element("body"), app = new Element("div"), host = new Element("section"); app.className = "tf-app"; host.id = "content"; app.appendChild(host); body.appendChild(app);
 document = {body, activeElement: null, createElement(tag) { return new Element(tag); }, createTextNode(value) { const item = new Element("span"); item.textContent = value; return item; }, getElementById(id) { return walk(body).find(item => item.id === id) || null; }, querySelector(selector) { return matches(app, selector) ? app : app.querySelector(selector); }, querySelectorAll(selector) { return walk(body).filter(item => matches(item, selector)); }, contains(item) { return body.contains(item); }, addEventListener() {}};
 const epgMapping = {}; for (let i = 0; i < 5000; i++) epgMapping["id-" + i] = {"x-channelID": String(i + 1), "x-active": true, "x-name": "Channel " + i, "tvg-name": "Backup " + i, "_file.m3u.id": "M1", "x-group-title": "General", "x-xmltv-file": "X1.xml", "x-mapping": "guide"};
-const context = {console: {log() {}, warn() {}}, document, window: {addEventListener() {}}, HTMLInputElement: Element, HTMLSelectElement: Element, Server: class { request() {} }, SERVER: {settings: {files: {}}, xepg: {epgMapping, xmltvMap: {"X1.xml": {guide: {}}}}}, currentDestination: "mapping"}; vm.createContext(context); vm.runInContext(fs.readFileSync(process.argv[2], "utf8"), context); vm.runInContext(fs.readFileSync(process.argv[3], "utf8"), context);
+const context = {console: {log() {}, warn() {}}, document, Dialog, Drawer, Combobox, Chips, window: {matchMedia() { return {matches: false, addEventListener() {}, removeEventListener() {}}; }, addEventListener() {}}, HTMLInputElement: Element, HTMLSelectElement: Element, Server: class { request() {} }, SERVER: {settings: {files: {}}, xepg: {epgMapping, xmltvMap: {"X1.xml": {guide: {}}}}}, currentDestination: "mapping"}; vm.createContext(context); vm.runInContext(fs.readFileSync(process.argv[2], "utf8"), context); vm.runInContext(fs.readFileSync(process.argv[3], "utf8"), context);
 const started = Date.now(); context.renderMappingPage(host); const elapsedMs = Date.now() - started; const rendered = walk(host), rows = rendered.filter(item => item.getAttribute("data-mapping-id") !== undefined).length, backupLists = rendered.filter(item => item.id === "mapping-backup-options").length; context.openMappingEditor(["id-4999"]); const editor = document.getElementById("mapping-editor"), editorOpen = !!editor, editorUsable = !!editor && !!editor.querySelector('[name="x-name"]') && !!document.getElementById("mapping-apply") && editor.contains(document.activeElement); process.stdout.write(JSON.stringify({rows, backupLists, editorOpen, editorUsable, elapsedMs}));
 `
 

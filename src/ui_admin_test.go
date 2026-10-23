@@ -217,6 +217,30 @@ func TestUIAdminSettingsGeneratedCategoriesTypesAndPreview(t *testing.T) {
 	}
 }
 
+func TestUIAdminSettingsValidationRejectsLossyNumericAndInvalidScheduleInput(t *testing.T) {
+	output := runUIAdminNodeFixture(t, "settings-validation", `
+const fs = require("fs"), vm = require("vm");
+const context = {}; vm.createContext(context);
+vm.runInContext(fs.readFileSync(process.argv[2], "utf8"), context);
+const cases = [["update", "2460", false], ["update", "120", false], ["update", "0000, 2359,,1200", true], ["update", "", true], ["httpsPort", "8443junk", false], ["httpsPort", "1.5", false], ["httpsPort", "", false], ["httpsPort", "8443", true], ["httpsPort", "1e3", true], ["buffer.timeout", "1.5", true], ["buffer.timeout", "NaN", false]];
+const scientific = context.serializeSettingsChanges([{tagName:"INPUT", type:"number", name:"httpsPort", value:"1e3", className:"form-control changed"}]);
+if (scientific.httpsPort !== 1000) throw Error("Native numeric exponent was truncated during serialization");
+process.stdout.write(JSON.stringify(cases.map(([name,value,valid]) => ({name,value,valid,accepted:context.settingsInputError(name,value)===""}))));
+`, "settings_page_ts.js")
+	var cases []struct {
+		Name, Value     string
+		Valid, Accepted bool
+	}
+	if err := json.Unmarshal(output, &cases); err != nil {
+		t.Fatal(err)
+	}
+	for _, item := range cases {
+		if item.Valid != item.Accepted {
+			t.Errorf("%s=%q accepted=%t, want %t", item.Name, item.Value, item.Accepted, item.Valid)
+		}
+	}
+}
+
 func TestUIAdminSettingsGeneratedTabsSupportKeyboardActivationAndFocus(t *testing.T) {
 	output := runUIAdminNodeFixture(t, "settings-tabs", settingsTabsNodeScript, "settings_page_ts.js")
 	var got []struct {
@@ -562,10 +586,10 @@ func TestUIAdminAuthenticationPagesExposeLabelsAutocompleteAndNativeSubmit(t *te
 			}
 			html := string(content)
 			for _, contract := range append([]string{
-				`class="tf-auth-page"`, `id="authentication" action="" method="post" onsubmit="return login(event);"`,
+				`class="tf-auth-page"`, `id="authentication" action="" method="post"`,
 				`<label for="username">`, `id="username" type="text" name="username" autocomplete="username"`,
 				`autofocus required`, `<label for="password">`, `id="password" type="password" name="password" autocomplete="` + test.password + `"`,
-				`id="submit" type="submit"`, `id="err"`, `aria-live="polite"`, `href="css/app-shell.css"`,
+				`id="submit" type="submit"`, `id="err"`, `aria-live="polite"`, `href="css/app.css"`,
 			}, test.wantExtra...) {
 				if !strings.Contains(html, contract) {
 					t.Errorf("authentication page is missing behavior contract %q", contract)
@@ -574,6 +598,47 @@ func TestUIAdminAuthenticationPagesExposeLabelsAutocompleteAndNativeSubmit(t *te
 		})
 	}
 }
+
+func TestUIAdminAuthenticationBundlePreservesNativeSubmitValidation(t *testing.T) {
+	output := runUIAdminNodeFixture(t, "authentication-bundled-submit", authenticationBundledSubmitNodeScript, "auth.js")
+	var got struct {
+		MissingPrevented  bool   `json:"missingPrevented"`
+		MismatchPrevented bool   `json:"mismatchPrevented"`
+		ValidPrevented    bool   `json:"validPrevented"`
+		LoginPrevented    bool   `json:"loginPrevented"`
+		MismatchFocus     string `json:"mismatchFocus"`
+		MissingFocus      string `json:"missingFocus"`
+	}
+	if err := json.Unmarshal(output, &got); err != nil {
+		t.Fatalf("decode bundled authentication submit: %v\n%s", err, output)
+	}
+	if !got.MissingPrevented || !got.MismatchPrevented || got.ValidPrevented || got.LoginPrevented || got.MismatchFocus != "password" || got.MissingFocus != "username" {
+		t.Fatalf("bundled native submit validation = %+v", got)
+	}
+}
+
+const authenticationBundledSubmitNodeScript = `
+const fs = require("fs"), vm = require("vm");
+let focused = "";
+class Element extends EventTarget {
+ constructor(id, value = "") { super(); this.id = id; this.value = value; this.style = {}; this.attributes = {}; }
+ setAttribute(key,value) { this.attributes[key] = value; }
+ focus() { focused = this.id; }
+ append() {}
+ add() {}
+}
+const elements = Object.fromEntries(["authentication","username","password","confirm","err"].map(id => [id,new Element(id)]));
+const document = {documentElement: {dataset: {}}, createElement() {return new Element("");}, querySelector() {return new Element("");}, getElementById(id) {return elements[id] || null;}};
+const context = {document, matchMedia() {return {matches:false,addEventListener() {}};},localStorage: {getItem() {return null;}, setItem() {}},Option: class {constructor(label,value) {this.label = label; this.value = value;}}};
+vm.createContext(context); vm.runInContext(fs.readFileSync(process.argv[2],"utf8"),context);
+function submit() {const event = new Event("submit",{cancelable:true}); elements.authentication.dispatchEvent(event); return event.defaultPrevented;}
+const missingPrevented = submit(), missingFocus = focused;
+elements.username.value = "fixture-user"; elements.password.value = "fixture-password"; elements.confirm.value = "different";
+const mismatchPrevented = submit(), mismatchFocus = focused;
+elements.confirm.value = elements.password.value; const validPrevented = submit();
+delete elements.confirm; const loginPrevented = submit();
+process.stdout.write(JSON.stringify({missingPrevented,mismatchPrevented,validPrevented,loginPrevented,mismatchFocus,missingFocus}));
+`
 
 func TestUIAdminAuthenticationPOSTUsesHttpOnlyBrowserSession(t *testing.T) {
 	restorePersistentState(t)
@@ -747,15 +812,7 @@ func TestUIAdminScopedAssetsLanguageAndEmbeddingParity(t *testing.T) {
 		t.Fatalf("English CONFIG permission copy = %#v, want explicit private-LAN source-fetch authority", configLanguage)
 	}
 
-	indexBytes, err := os.ReadFile(filepath.Join("..", "html", "index.html"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, script := range []string{"settings_page_ts.js", "users_page_ts.js", "log_page_ts.js"} {
-		if !strings.Contains(string(indexBytes), `src="js/`+script+`"`) {
-			t.Errorf("index does not load %s", script)
-		}
-	}
+	assertUIBundleControllers(t, "index.html", "app", "users_page", "settings_page", "log_page")
 	for _, generated := range []string{"authentication_ts.js", "base_ts.js"} {
 		content, err := os.ReadFile(filepath.Join("..", "html", "js", generated))
 		if err != nil {
@@ -935,10 +992,10 @@ const settingsLabelsNodeScript = `
 const fs = require("fs");
 const vm = require("vm");
 class Label { constructor(text) { this.id = ""; this.textContent = text; } }
-class Row { constructor(label) { this.label = label; } querySelector(selector) { return selector === "td:first-child" ? this.label : null; } }
+class Row { constructor(label) { this.label = label; } querySelector(selector) { return selector === "label" ? this.label : null; } }
 class Control {
   constructor(name, type, label) { this.name = name; this.type = type; this.id = ""; this.attributes = {}; this.row = new Row(label); }
-  closest(selector) { return selector === "tr" ? this.row : null; }
+  closest(selector) { return selector === ".tf-form-field" ? this.row : null; }
   setAttribute(name, value) { this.attributes[name] = String(value); }
   getAttribute(name) { return this.attributes[name] || ""; }
 }
@@ -1004,7 +1061,7 @@ const context = {
     log(...values) { if (values.some(value => String(value).includes(marker))) leaked = true; },
     warn(...values) { if (values.some(value => String(value).includes(marker))) leaked = true; }
   },
-  bootstrap: {Modal: function() { this.show = function() {}; this.hide = function() {}; }, Tooltip: function() {}},
+  Dialog: function() { this.show = function() {}; this.hide = function() {}; }, Tooltip: function() {},
   ClipboardJS,
   MainMenuItem,
   SettingsCategoryItem,
@@ -1015,7 +1072,7 @@ const context = {
   setTimeout,
   clearTimeout
 };
-context.bootstrap.Tooltip.getInstance = function() { return {setContent() {}}; };
+context.Tooltip.getInstance = function() { return {setContent() {}}; };
 vm.createContext(context);
 vm.runInContext(fs.readFileSync(process.argv[2], "utf8"), context);
 context.backup();
@@ -1123,7 +1180,7 @@ const context = {
   document, window: {}, console: {log() {}, warn() {}}, SERVER: {}, UNDO: {}, BULK_EDIT: false,
   getLocalData(type, id) { return type === "users" && id === "regular" ? {...user} : {}; },
   enhanceSourcePopup() {}, enhanceFilterPopup() {}, showPopUpElement() {}, showElement() {},
-  bootstrap: {Modal: function() {}, Tooltip: function() {}}, ClipboardJS: function() {}, confirm() { return true; }
+  Dialog: function() { this.show = function() {}; this.hide = function() {}; }, Tooltip: function() {}, ClipboardJS: function() {}, confirm() { return true; }
 };
 vm.createContext(context);
 vm.runInContext(fs.readFileSync(process.argv[2], "utf8"), context);

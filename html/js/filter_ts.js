@@ -236,7 +236,7 @@ function openFilterPopup(dataType, element, invoker) {
     var modal = document.getElementById("popup");
     if (modal && !filterPopupFocusListenerAttached) {
         filterPopupFocusListenerAttached = true;
-        modal.addEventListener("hidden.bs.modal", function () {
+        modal.addEventListener("hidden.bs.dialog", function () {
             var target;
             if (filterFocusAfterDeletion) {
                 target = filterDeletionFallback || filterPopupReplacement("add-group") || document.getElementById("filter-heading");

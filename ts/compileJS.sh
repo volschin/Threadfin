@@ -1,3 +1,4 @@
 #!/bin/bash
 
-tsc *.ts --outDir ../html/js/
+cd "$(dirname "$0")/.." || exit 1
+npm run build

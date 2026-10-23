@@ -414,6 +414,7 @@ class Element {
     return true;
   }
   getElementsByClassName(name) { return walk(this).filter(item => item !== this && item.className.split(/\s+/).includes(name)); }
+  querySelector(selector) { return this.querySelectorAll(selector)[0] || null; }
   querySelectorAll(selector) {
     const names = selector.split(",").map(value => value.trim().toUpperCase());
     return walk(this).filter(item => item !== this && names.includes(item.tagName));
@@ -682,7 +683,7 @@ const renderedProbeRows = document.getElementById("probeDetails").children.filte
 
 vm.runInContext('globalThis.popupFixture = new PopupContent(); popupFixture.createHeadline(globalThis.payload); popupFixture.description(globalThis.payload); popupFixture.description(globalThis.payload + "<br>tail"); globalThis.titleFixture = popupFixture.createTitle(globalThis.payload)', runtimeContext);
 const headline = popup.children.find(child => child.tagName == "H3");
-const descriptions = walk(popup).filter(child => child.tagName == "PRE");
+const descriptions = walk(popup).filter(child => child.className == "tf-field-help");
 const description = descriptions[0];
 const descriptionBR = descriptions[1];
 const title = runtimeContext.titleFixture;
@@ -692,7 +693,7 @@ const mappingInvoker = append(document.body, "button", mappingID);
 runtimeContext.mappingInvoker = mappingInvoker;
 runtimeContext.payload = payload;
 vm.runInContext('openPopUp("mapping", mappingInvoker)', runtimeContext);
-const mappingDetailElement = walk(popup).find(child => child.tagName == "PRE" && walk(child, []).some(item => item.className == "text-danger"));
+const mappingDetailElement = walk(popup).find(child => child.className == "tf-technical-value" && walk(child, []).some(item => item.className == "text-danger"));
 const mappingDetail = mappingDetailElement ? mappingDetailElement.textContent : "";
 const activeControl = document.getElementById("active");
 const logoControl = document.getElementById("update-icon");

@@ -329,7 +329,7 @@ function openSourcePopup(dataType: string, element: any, invoker: HTMLElement): 
   }
   if (modal && !sourcePopupFocusListenerAttached) {
     sourcePopupFocusListenerAttached = true
-    modal.addEventListener("hidden.bs.modal", function () {
+    modal.addEventListener("hidden.bs.dialog", function () {
       var focusTarget = sourcePopupInvoker && document.contains(sourcePopupInvoker) ? sourcePopupInvoker : sourcePopupReplacement(sourcePopupFocusKey)
       if (focusTarget) {
         focusTarget.focus()
@@ -340,7 +340,7 @@ function openSourcePopup(dataType: string, element: any, invoker: HTMLElement): 
   }
   if (modal && !sourcePopupShownListenerAttached) {
     sourcePopupShownListenerAttached = true
-    modal.addEventListener("shown.bs.modal", function () {
+    modal.addEventListener("shown.bs.dialog", function () {
       focusSourcePopupFirstControl()
     })
   }
@@ -359,7 +359,7 @@ function focusSourcePopupFirstControl(): void {
 }
 
 function focusRenderedSourcePopup(modal: HTMLElement): void {
-  if (modal && modal.classList.contains("show")) {
+  if (modal && (modal as HTMLDialogElement).open) {
     window.setTimeout(focusSourcePopupFirstControl, 0)
   }
 }
@@ -405,8 +405,8 @@ function enhanceSourcePopup(dataType: string): void {
   }
   var fields = popup.querySelectorAll("input, select")
   Array.prototype.forEach.call(fields, function (field: HTMLElement) {
-    var row = field.closest("tr")
-    var title = row ? row.querySelector("td:first-child") : undefined
+    var row = field.closest(".tf-form-field")
+    var title = row ? row.querySelector("label") : undefined
     if (title && title.textContent) {
       field.setAttribute("aria-label", title.textContent.replace(/:\s*$/, ""))
     }
@@ -417,7 +417,7 @@ function enhanceSourcePopup(dataType: string): void {
     help.id = "source-location-help"
     help.className = "tf-source-field-help"
     help.textContent = dataType == "hdhr" ? "{{.sources.forms.hdhrHelp}}" : "{{.sources.forms.locationHelp}}"
-    sourceInput.setAttribute("aria-describedby", help.id + " source-file-source-error")
+    sourceInput.setAttribute("aria-describedby", help.id)
     sourceInput.parentElement.appendChild(help)
   }
   ;["name", "file.source"].forEach(fieldName => {
@@ -426,6 +426,7 @@ function enhanceSourcePopup(dataType: string): void {
       return
     }
     field.setAttribute("aria-required", "true")
+    field.setAttribute("aria-describedby", [field.getAttribute("aria-describedby"), "source-" + fieldName.replace(".", "-") + "-error"].filter(Boolean).join(" "))
     var error = document.createElement("p")
     error.id = "source-" + fieldName.replace(".", "-") + "-error"
     error.className = "tf-source-field-error"

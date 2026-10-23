@@ -152,10 +152,12 @@ go build threadfin.go
 
 4. Update web files (optional)
 
+The UI build uses the tsrs compiler version pinned in `package-lock.json`.
 If TypeScript files were changed, run:
 
 ```sh
-tsc -p ./ts/tsconfig.json
+npm ci
+npm run build
 ```
 
 Then, to embed updated JavaScript files into the source code (src/webUI.go), run it in development mode at least once:

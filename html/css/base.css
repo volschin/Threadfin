@@ -1,10 +1,4 @@
-* {
-  -webkit-appearance: none;
-  -moz-appearance: none;
-  -ms-appearance: none;
-  font-family: "Arial", sans-serif;
-  letter-spacing: 2px;
-}
+* { box-sizing: border-box; }
 
 /*
 ::-webkit-scrollbar { 
@@ -92,7 +86,7 @@ pre {
   color: #ddd;
   letter-spacing: 1px;
   white-space: pre-wrap;
-  font-family: monospace;
+  font-family: var(--bs-font-mono);
   font-size: 12px;
   font-style: normal;
   font-variant: normal;
