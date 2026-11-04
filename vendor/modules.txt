@@ -9,8 +9,8 @@ github.com/gorilla/websocket
 # github.com/hashicorp/go-version v1.9.0
 ## explicit
 github.com/hashicorp/go-version
-# github.com/koron/go-ssdp v0.9.1
-## explicit; go 1.25.0
+# github.com/koron/go-ssdp v0.9.2
+## explicit; go 1.26.0
 github.com/koron/go-ssdp
 github.com/koron/go-ssdp/internal/multicast
 github.com/koron/go-ssdp/internal/ssdplog
@@ -18,7 +18,7 @@ github.com/koron/go-ssdp/internal/ssdplog
 ## explicit; go 1.26.0
 golang.org/x/crypto/argon2
 golang.org/x/crypto/blake2b
-# golang.org/x/net v0.60.0
+# golang.org/x/net v0.61.0
 ## explicit; go 1.26.0
 golang.org/x/net/bpf
 golang.org/x/net/internal/iana
